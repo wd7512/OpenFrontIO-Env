@@ -9,17 +9,17 @@
     "crossref": {
       "type": "local",
       "command": ["npx", "-y", "@cyanheads/crossref-mcp-server"],
-      "enabled": false
+      "enabled": true
     },
     "openalex": {
       "type": "local",
       "command": ["npx", "-y", "openalex-research-mcp"],
-      "enabled": false
+      "enabled": true
     },
     "pubmed": {
       "type": "local",
       "command": ["npx", "-y", "@cyanheads/pubmed-mcp-server"],
-      "enabled": false
+      "enabled": true
     }
   },
   "agent": {
