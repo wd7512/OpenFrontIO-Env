@@ -1,94 +1,82 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode-go/mimo-v2.5",
+  "model": "opencode/big-pickle",
   "instructions": ["AGENTS.md"],
   "skills": {
     "paths": [".opencode/skills"]
   },
-  "plugin": ["./.opencode/plugins/write-size-guard.ts"],
+  "mcp": {
+    "crossref": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/crossref-mcp-server"],
+      "enabled": false
+    },
+    "openalex": {
+      "type": "local",
+      "command": ["npx", "-y", "openalex-research-mcp"],
+      "enabled": false
+    },
+    "pubmed": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/pubmed-mcp-server"],
+      "enabled": false
+    }
+  },
   "agent": {
     "python-engineer": {
-      "description": "Implements small, well-tested Python changes using uv, ruff, ty, and pytest.",
-      "mode": "subagent"
+      "description": "Implements small, well-tested Python changes using TDD, uv, ruff, ty, and pytest.",
+      "mode": "subagent",
+      "model": "opencode-go/mimo-v2.5"
+    },
+    "scout": {
+      "description": "Read-only agent for external docs, dependency research, and codebase reconnaissance.",
+      "mode": "subagent",
+      "model": "opencode-go/mimo-v2.5"
+    },
+    "explore": {
+      "description": "Explores codebase structure, finds relevant files, and provides context for implementation tasks.",
+      "mode": "subagent",
+      "model": "opencode-go/mimo-v2.5"
     }
   },
   "command": {
     "check": {
-      "description": "Run format, lint, type, test, and build checks",
-      "template": "Run the project checks and report failures clearly: `uv run ruff format --check`, `uv run ruff check`, `uv run ty check`, `uv run pytest`, and `uv build`."
-    },
-    "grill-me": {
-      "description": "Stress-test a plan or design",
-      "template": "Use the grill-me skill to stress-test this plan or design: $ARGUMENTS"
+      "description": "Run format, lint, type, and test checks",
+      "template": "Run: `uv run ruff format --check`, `uv run ruff check`, `uv run ty check src/*`, and `uv run pytest`."
     }
   },
   "permission": {
     "read": "allow",
     "edit": "allow",
     "bash": {
-      "uv run *": "allow",
-      "uv sync *": "allow",
-      "uv build *": "allow",
+      "uv *": "allow",
       "git status": "allow",
       "git fetch *": "allow",
       "git log *": "allow",
       "git diff *": "allow",
       "git show *": "allow",
-      "git rev-parse *": "allow",
       "git branch --show-current": "allow",
       "git branch -a": "allow",
       "git add *": "allow",
       "git commit *": "allow",
-      "ls *": "allow",
-      "cat *": "allow",
-      "find *": "allow",
-      "grep *": "allow",
-      "head *": "allow",
-      "tail *": "allow",
-      "wc *": "allow",
-      "pwd": "allow",
-      "tree *": "allow",
-      "file *": "allow",
-      "which *": "allow",
-      "mkdir *": "allow",
-      "touch *": "allow",
-      "cp *": "allow",
-      "mv *": "allow",
-      "echo *": "allow",
-      "gh auth status": "allow",
-      "gh issue view *": "allow",
-      "gh pr view *": "allow",
-      "gh pr list *": "allow",
-      "gh issue list *": "allow",
       "git push *": "allow",
-      "gh pr create *": "allow",
       "git checkout *": "allow",
       "git worktree *": "allow",
-
-      "git remote *": "ask",
-      "gh pr merge *": "ask",
-      "gh pr close *": "ask",
-      "gh issue create *": "ask",
-      "gh issue close *": "ask",
-      "gh issue edit *": "ask",
-      "rm *": "ask",
-      "rmdir *": "ask",
-      "curl *": "ask",
-      "wget *": "ask",
-      "ssh *": "ask",
-      "scp *": "ask",
-      "rsync *": "ask",
-      "git reset *": "ask",
-      "git rebase *": "ask",
-      "git clean *": "ask",
-      "git stash *": "ask",
-      "git branch -d *": "ask",
-      "git branch -D *": "ask",
-
+      "ls *": "allow",
+      "find *": "allow",
+      "gh auth status": "allow",
+      "gh pr view *": "allow",
+      "gh pr list *": "allow",
+      "gh pr create *": "allow",
+      "gh issue *": "allow",
       "gh repo *": "deny",
-      "chmod *": "deny",
-      "chown *": "deny",
-      "sudo *": "deny"
+      "sudo *": "deny",
+      "curl *": "deny",
+      "wget *": "deny"
+    },
+    "external_directory": {
+      "/private/tmp/**": "allow",
+      "/tmp/**": "allow"
     },
     "skill": "allow"
   },
