@@ -52,7 +52,38 @@ The server translates calls to Civ VI and returns structured observations throug
 
 ---
 
-## 3. Key Results & Findings
+## 3. Companion Repository: civ6-mcp
+
+**Repo:** [github.com/lmwilki/civ6-mcp](https://github.com/lmwilki/civ6-mcp) (MIT, Liam Wilkinson 2026)
+
+**Architecture:**
+```
+Any MCP Client → stdio (JSON-RPC) → CivBench MCP Server (Python) → TCP :4318 → FireTuner → Civ VI
+       ↑                                                                     │
+       └─────── Structured text via Narration Layer (29 functions) ◄─────────┘
+```
+
+**76 MCP tools** across 13 categories: Units (list/move/attack/fortify/found/build/promote/upgrade), Cities (inspect/production/purchase/focus), Map (terrain/resources/fog/settle advice), Research (tech/civic trees), Diplomacy (relationships/modifiers/alliances), Trade (routes/destinations), Government (policy cards/eras), Governors (appoint/assign/promote), Religion (pantheons/beliefs/spread), Great People (recruit/patronize/reject), World Congress (resolutions/favor), Victory (all conditions), Game lifecycle (save/load/launch/restart/kill).
+
+**Key repo contents:**
+- `evals/` — CivBench evaluation harness with 3 scenario saves (Ground Control, Snowflake, Cry Havoc)
+- `docs/devlog/` — 12 game playthroughs (Poland, Rome, Macedonia, Byzantium, India, Portugal, Scythia, England, Mali, Korea)
+- `docs/paper/` — scenario specs
+- `docs/agent-essays/` — "The Hallucination of Competence" and agent-vs-agent analysis
+- `web/` — Full Next.js dashboard (Convex backend) with map visualization, leaderboards, ELO ratings, diary viewer
+- `AGENTS.md` — Detailed playbook (turn loop, diary protocol, strategic checkpoints)
+
+**Playbook (from AGENTS.md):**
+- Turn loop: overview → units → map → move → cities → districts → production → strategic checkpoints → end_turn
+- Five-field diary (required, non-empty): tactical, strategic, tooling, planning, hypothesis
+- Empire warnings auto-run on end_turn (loyalty, trade routes, gold, military, scoreboard)
+- Information scarcity principle: "You only know what you explicitly query"
+
+**Client configs included:** Claude Code (`.mcp.json`), Claude Desktop, Codex (`.codex/config.toml`), Gemini CLI (`.gemini/settings.json`), generic stdio
+
+---
+
+## 4. Key Results & Findings
 
 **Aggregate outcomes are insufficient.** Only 3 victories in 23 runs (all Technology on Ground Control); Fisher's exact p=0.488, normalised score H=1.90 (p=0.594). ICC shows only exploration@T100 discriminates (0.717); outcome measures compress behavioural variance.
 
@@ -76,7 +107,7 @@ The server translates calls to Civ VI and returns structured observations throug
 
 ---
 
-## 4. Limitations
+## 5. Limitations
 
 - **Sample size/power:** 23 runs across 4 families, descriptive not statistically significant; Kimi has 1 run
 - **Playbook confound:** shared guidance ⇒ deviations under instruction, not absence of capability; playbook-free baseline not viable (only 21% of pre-harness runs completed)
@@ -87,7 +118,7 @@ The server translates calls to Civ VI and returns structured observations throug
 
 ---
 
-## 5. Cross-References to Cited Works
+## 6. Cross-References to Cited Works
 
 **Civ-based environments:**
 - **CivRealm** (Qi et al., ICLR 2024 Spotlight) — FreeCiv engine, Gymnasium API; square grid, unit stacking, no districts/World Congress. CivBench contrasts: MCP interface, narration-layer controlled observability, richer Civ VI mechanics
@@ -104,7 +135,7 @@ The server translates calls to Civ VI and returns structured observations throug
 
 ---
 
-## 6. Design Implications & Future Work
+## 7. Design Implications & Future Work
 
 1. **Monitoring global state needs explicit mechanisms** — enforced query schedules, prioritised monitoring tools, or interfaces surfacing critical signals
 2. **Persistent commitment tracking needed** — structured memory, task queues, or commitment enforcement
@@ -114,8 +145,12 @@ Open questions: does structured reflection (diary) help or hurt? Ablations shoul
 
 ---
 
-## 7. Summary
+## 8. Summary
 
 CivBench fills a gap in evaluating long-horizon, tool-mediated agent behaviour via production-style MCP. Rather than ranking models, it introduces PMR and RAG@10, which reveal consistent failures: agents **systematically under-monitor critical state** and **fail to execute their own stated plans** — despite tool access and explicit guidance. Environment, logs, metrics, and analysis pipeline are fully open-source, providing a foundation for studying agent reliability in long-horizon tool-mediated settings.
+
+---
+
+*Compiled 2026-09-08. Paper read via arXiv PDF; repo details via GitHub MCP (crossref/openalex/pubmed) and API. Cross-references verified against Semantic Scholar, Google Scholar, and ICLR/OpenReview.*
 
 
