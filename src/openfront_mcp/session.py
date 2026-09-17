@@ -192,6 +192,8 @@ class GameSession:
                 "gold": nation["gold"],
                 "tiles": nation["tiles"],
                 "alive": nation.get("alive", True),
+                "immune": nation.get("immune", False),
+                "borders_human": nation.get("borders_human", False),
             }
             for index, nation in enumerate(self._snapshot.get("nations", []))
         ]

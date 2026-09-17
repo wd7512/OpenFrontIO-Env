@@ -56,6 +56,8 @@ interface NationState {
   gold: string;
   tiles: number;
   alive: boolean;
+  immune: boolean;
+  borders_human: boolean;
 }
 
 interface AttackState {
@@ -342,6 +344,8 @@ class EngineSession {
           gold: nation.gold().toString(),
           tiles: nation.numTilesOwned(),
           alive: nation.isAlive(),
+          immune: nation.isImmune(),
+          borders_human: player.sharesBorderWith(nation),
         };
       }),
       human: {

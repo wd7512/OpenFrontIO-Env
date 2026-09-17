@@ -92,6 +92,8 @@ def test_1v1_lifecycle_through_tools() -> None:
                 "gold",
                 "tiles",
                 "alive",
+                "immune",
+                "borders_human",
             }
 
             is_err, text = await _call(session, "close_game", {})

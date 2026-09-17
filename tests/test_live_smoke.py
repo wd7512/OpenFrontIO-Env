@@ -94,6 +94,46 @@ def test_run_auto_cache_missing_means_none(tmp_path):
     assert kwargs["models_cache_source"] is None
 
 
+def _tool_event(tool: str, result: dict) -> str:
+    return json.dumps(
+        {
+            "type": "tool_use",
+            "timestamp": 1000,
+            "part": {
+                "tool": tool,
+                "state": {"output": json.dumps({"result": json.dumps(result)})},
+            },
+        }
+    )
+
+
+def test_summarise_captures_winner_from_overviews():
+    from openfront_mcp.live_smoke import _summarise_events
+
+    stdout = "\n".join(
+        [
+            _tool_event("game_start_1v1_game", {"tick": 3, "winner": None}),
+            _tool_event("game_end_decision", {"decision": 1, "tick": 53}),
+            _tool_event(
+                "game_get_overview", {"tick": 53, "winner": "Deeply Confused Bugs"}
+            ),
+        ]
+    )
+    assert _summarise_events(stdout)["winner"] == "Deeply Confused Bugs"
+
+
+def test_summarise_winner_is_null_when_never_declared():
+    from openfront_mcp.live_smoke import _summarise_events
+
+    stdout = "\n".join(
+        [
+            _tool_event("game_start_1v1_game", {"tick": 3, "winner": None}),
+            _tool_event("game_get_overview", {"tick": 53, "winner": None}),
+        ]
+    )
+    assert _summarise_events(stdout)["winner"] is None
+
+
 def test_build_match_prompt_orders_the_match_steps():
     from openfront_mcp.live_smoke import build_match_prompt
 
@@ -112,6 +152,17 @@ def test_build_match_prompt_orders_the_match_steps():
     assert prompt.index("game_order_attack") < prompt.index(
         "game_end_decision (decision=1)"
     )
+
+
+def test_build_campaign_prompt_has_two_phases_and_cap():
+    from openfront_mcp.live_smoke import build_campaign_prompt
+
+    prompt = build_campaign_prompt(45)
+    assert "PHASE 1" in prompt
+    assert "PHASE 2" in prompt
+    assert "nation-1" in prompt
+    assert "45" in prompt
+    assert "stalled" in prompt
 
 
 def test_run_rejects_bad_scenario_and_bounds(tmp_path):

@@ -91,10 +91,40 @@ def build_match_prompt(max_decisions: int = 6) -> str:
     return "\n".join(lines)
 
 
+def build_campaign_prompt(max_decisions: int = 45) -> str:
+    lines = [
+        "Play one full 1v1 campaign (your human vs one nation) using only game "
+        "MCP tools. Two phases, triggered by what you observe:",
+        "PHASE 1 — EXPAND: while your tile count is still growing between "
+        "decisions, call game_order_attack (target exactly 'expand', troops a "
+        "positive integer never more than half your current troops), then "
+        "game_end_decision with the next decision integer.",
+        "PHASE 2 — ATTACK: only when BOTH hold: (a) your tiles have stalled "
+        "across two consecutive overviews (expansion exhausted, fronts met), "
+        "AND (b) a nation shows borders_human true AND immune false in "
+        "get_overview. Then switch the order to game_order_attack with target "
+        "exactly 'nation-1' and half your troops, then game_end_decision as "
+        "before. Repeat every decision. Border contact alone is NOT enough — "
+        "attacking early with small waves bleeds your troops while the nation "
+        "outgrows you. Never order nation-1 while it is immune or does not "
+        "border you — the order fizzles.",
+        "Start with game_start_1v1_game (no arguments) and one "
+        "game_get_overview. Check game_get_overview whenever you need the "
+        "state. End with game_get_overview and game_close_game. "
+        f"Play at most {max_decisions} decisions, then stop even if no winner.",
+        "Then stop. Report tiles and troops per phase, when contact happened, "
+        "whether your nation attacks landed, and the winner if declared.",
+    ]
+    return "\n".join(lines)
+
+
 def _summarise_events(stdout: str) -> dict[str, Any]:
     tool_calls = 0
     decisions: list[int] = []
     ticks: list[int] = []
+    winner: str | None = None
+    human: dict[str, Any] | None = None
+    nations: list[dict[str, Any]] | None = None
     tokens: dict[str, Any] | None = None
     cost: float | None = None
     start_ms: float | None = None
@@ -142,6 +172,37 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
                     decisions.append(parsed["decision"])
                 if isinstance(parsed.get("tick"), int):
                     ticks.append(parsed["tick"])
+            if (
+                part["tool"]
+                in (
+                    "game_start_1v1_game",
+                    "game_start_smoke_game",
+                    "game_get_overview",
+                    "game_order_attack",
+                )
+                and parsed
+            ):
+                seen = parsed.get("winner")
+                if isinstance(seen, str) and seen:
+                    winner = seen
+                human_raw = parsed.get("human")
+                if isinstance(human_raw, dict):
+                    human = {
+                        k: human_raw[k]
+                        for k in ("tiles", "troops")
+                        if isinstance(human_raw.get(k), int)
+                    } or None
+                nations_raw = parsed.get("nations")
+                if isinstance(nations_raw, list):
+                    nations = [
+                        {
+                            k: n[k]
+                            for k in ("name", "tiles", "troops", "alive")
+                            if k in n
+                        }
+                        for n in nations_raw
+                        if isinstance(n, dict)
+                    ] or None
         if etype == "step_finish":
             tokens_raw: Any = part.get("tokens")
             if isinstance(tokens_raw, dict):
@@ -153,7 +214,12 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
         "tool_calls": tool_calls,
         "decisions": decisions,
         "ticks": ticks,
+        "winner": winner,
     }
+    if human is not None:
+        summary["final_human"] = human
+    if nations is not None:
+        summary["final_nations"] = nations
     if tokens is not None:
         summary["tokens"] = tokens
     summary["cost"] = cost
@@ -196,12 +262,14 @@ def run(
     model = (settings.get("OPENFRONT_MODEL") or "").strip()
     if not model:
         raise ValueError("OPENFRONT_MODEL is required in the env file")
-    if scenario not in ("smoke", "1v1"):
-        raise ValueError(f"scenario must be 'smoke' or '1v1', got {scenario!r}")
+    if scenario not in ("smoke", "1v1", "campaign"):
+        raise ValueError(
+            f"scenario must be 'smoke', '1v1' or 'campaign', got {scenario!r}"
+        )
     if isinstance(max_decisions, bool) or not isinstance(max_decisions, int):
         raise ValueError("max_decisions must be an integer")
-    if not 1 <= max_decisions <= 20:
-        raise ValueError("max_decisions must be in [1, 20]")
+    if not 1 <= max_decisions <= 60:
+        raise ValueError("max_decisions must be in [1, 60]")
     key_env = KEY_ENV_BY_PROVIDER.get(provider, "OPENROUTER_API_KEY")
     api_key = (settings.get(key_env) or "").strip()
     if not api_key:
@@ -223,7 +291,9 @@ def run(
         environment={},
     )
     prompt = (
-        build_match_prompt(max_decisions)
+        build_campaign_prompt(max_decisions)
+        if scenario == "campaign"
+        else build_match_prompt(max_decisions)
         if scenario == "1v1"
         else build_smoke_prompt(max_decisions)
     )

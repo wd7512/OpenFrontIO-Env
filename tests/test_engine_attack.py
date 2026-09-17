@@ -24,6 +24,42 @@ def test_expand_conquers_neutral_land():
         assert after["human"]["tiles"] > 52
 
 
+def test_nation_projection_exposes_immune_and_border_flags():
+    with EngineWorker() as engine:
+        started = engine.start(nations=1, difficulty="easy")
+        nation = started["nations"][0]
+        assert nation["immune"] is True
+        assert nation["borders_human"] is False
+        grown = engine.advance(60)  # past the 50-tick nation spawn immunity
+        assert grown["nations"][0]["immune"] is False
+
+
+def test_winning_recipe_expand_to_contact_then_strike():
+    """The campaign playbook, pinned at engine level: half-troop expands
+    until tiles stall (contact), then half-troop nation strikes until the
+    production win check fires. Union Alpha executed exactly this live and
+    won at tick 503; the script must reproduce it deterministically."""
+    with EngineWorker() as engine:
+        state = engine.start(nations=1, difficulty="easy")
+        human_name = state["human"]["name"]
+        previous_tiles = 0
+        for _ in range(15):
+            troops = max(1000, state["human"]["troops"] // 2)
+            engine.attack(target="expand", troops=troops)
+            state = engine.advance(50)
+            if state["human"]["tiles"] <= previous_tiles:
+                break
+            previous_tiles = state["human"]["tiles"]
+        assert state["human"]["tiles"] > 3000  # contact, fronts met
+        for _ in range(10):
+            troops = max(1000, state["human"]["troops"] // 2)
+            engine.attack(target="nation-1", troops=troops)
+            state = engine.advance(50)
+            if state["winner"] is not None:
+                break
+        assert state["winner"] == human_name
+
+
 def test_nation_attack_without_border_fizzles_by_design_but_engine_survives():
     with EngineWorker() as engine:
         engine.start(nations=1, difficulty="easy")
