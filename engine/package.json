@@ -1,0 +1,22 @@
+{
+  "name": "openfront-engine-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistent JSONL worker over the pinned OpenFrontIO production core (no vendor edits).",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node dist/worker.mjs"
+  },
+  "dependencies": {
+    "dompurify": "3.4.15",
+    "intl-messageformat": "11.2.3",
+    "jose": "6.2.3",
+    "nanoid": "5.1.16",
+    "zod": "4.4.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "tsx": "4.22.4"
+  }
+}

@@ -1,9 +1,9 @@
 """OpenFront MCP scaffold — tool-mediated agent benchmark for OpenFront.io.
 
 Mirrors the civ6-mcp shape (server + narration + evals) against the vendored
-upstream core. See docs/openfront-framework.md. FastMCP wiring lands in step 2,
-once the `mcp` dependency decision is made; until then tools are plain
-functions in openfront_mcp.server.TOOLS.
+upstream core. See docs/openfront-framework.md. Tools are plain functions in
+openfront_mcp.server.TOOLS and are registered on a real FastMCP stdio server
+named "openfront-mcp".
 """
 
 from __future__ import annotations

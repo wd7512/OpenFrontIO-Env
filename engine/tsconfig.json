@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "resources/*": ["../vendor/OpenFrontIO/resources/*"]
+    },
+    "resolveJsonModule": true,
+    "useDefineForClassFields": false,
+    "experimentalDecorators": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": false,
+    "skipLibCheck": true,
+    "types": ["node"]
+  }
+}

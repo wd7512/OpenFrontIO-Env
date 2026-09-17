@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "scenario": "plains-human-smoke",
+  "controller": "scripted",
+  "max_decisions": 3
+}
