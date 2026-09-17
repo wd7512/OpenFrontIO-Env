@@ -53,7 +53,9 @@ def test_start_returns_plains_fixture_with_spawned_human() -> None:
     assert snapshot["tick"] == EXPECTED_START_TICK
 
     human = _human(snapshot)
-    assert human["id"] == "engine-smoke-human"
+    # Drawn from the seeded RNG at boot (GameRunner order: humans first), so
+    # stable per game id — and the id tapes replay in the real client.
+    assert human["id"] == "945a9tlw"
     assert human["name"] == "Smoke"
     assert human["spawnTile"] == EXPECTED_SPAWN
     assert human["tiles"] > 0

@@ -53,7 +53,7 @@ async def _call(session: ClientSession, name: str, args: dict) -> tuple[bool, st
 def test_full_match_reaches_a_declared_winner() -> None:
     async def scenario() -> None:
         async with _client() as session:
-            is_err, text = await _call(session, "start_1v1_game", {})
+            is_err, text = await _call(session, "start_1v1_game", {"map": "plains"})
             assert is_err is False, text
             started = json.loads(text)
             nation_name = started["nations"][0]["name"]

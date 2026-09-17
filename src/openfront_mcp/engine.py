@@ -27,9 +27,20 @@ DEFAULT_ENGINE_DIR = REPO_ROOT / "engine"
 PLAINS_MAP_DIR = (
     REPO_ROOT / "vendor" / "OpenFrontIO" / "tests" / "testdata" / "maps" / "plains"
 )
+BRITANNIA_MAP_DIR = (
+    REPO_ROOT / "vendor" / "OpenFrontIO" / "resources" / "maps" / "britannia"
+)
+MAPS = {"plains": PLAINS_MAP_DIR, "britannia": BRITANNIA_MAP_DIR}
+WORLD_MAP_DIR = REPO_ROOT / "vendor" / "OpenFrontIO" / "resources" / "maps" / "world"
+MAPS["world"] = WORLD_MAP_DIR
+EUROPE_MAP_DIR = REPO_ROOT / "vendor" / "OpenFrontIO" / "resources" / "maps" / "europe"
+MAPS["europe"] = EUROPE_MAP_DIR
+MAP_NAMES = tuple(MAPS)
 DEFAULT_TIMEOUT_SECONDS = 60.0
-MAX_NATIONS = 16
+MAX_NATIONS = 100
+MAX_TRIBES = 500
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
+MAP_SIZES = ("full", "compact")
 
 
 class EngineError(RuntimeError):
@@ -64,12 +75,25 @@ class EngineWorker:
         self.close()
         return False
 
-    def start(self, nations: object = 0, difficulty: object = "easy") -> dict[str, Any]:
+    def start(
+        self,
+        nations: object = 0,
+        difficulty: object = "easy",
+        map_size: object = "full",
+        spawn: object = (50, 50),
+        tribes: object = 0,
+    ) -> dict[str, Any]:
         """Boot the fixture and return the initial snapshot.
 
         ``nations`` spawns that many procedurally generated nation opponents
         through the production nation path; ``difficulty`` drives their
-        production AI cadence.
+        production AI cadence. ``map_size`` is ``"full"`` (fixture bins) or
+        ``"compact"`` (production online small: map4x, halved nation spawns).
+        ``spawn`` is an ``(x, y)`` tile or ``None`` for seeded random land
+        (required on real maps, where no fixed coordinate is safe).
+        ``tribes`` spawns that many production neutral tribes
+        (GameRunner.init order: nations, tribes from the bots count, win
+        check) — solo default online is 400.
         """
         if isinstance(nations, bool) or not isinstance(nations, int):
             raise EngineError(f"nations must be an integer, got {nations!r}")
@@ -80,12 +104,43 @@ class EngineWorker:
                 f"difficulty must be one of {', '.join(DIFFICULTIES)}, "
                 f"got {difficulty!r}"
             )
+        if not isinstance(map_size, str) or map_size not in MAP_SIZES:
+            raise EngineError(
+                f"map_size must be one of {', '.join(MAP_SIZES)}, got {map_size!r}"
+            )
+        if isinstance(tribes, bool) or not isinstance(tribes, int):
+            raise EngineError(f"tribes must be an integer, got {tribes!r}")
+        if not 0 <= tribes <= MAX_TRIBES:
+            raise EngineError(f"tribes must be in [0, {MAX_TRIBES}], got {tribes!r}")
+        if spawn is not None:
+            if not isinstance(spawn, (tuple, list)) or len(spawn) != 2:
+                raise EngineError(
+                    f"spawn must be an (x, y) integer pair or None, got {spawn!r}"
+                )
+            x_raw, y_raw = spawn[0], spawn[1]
+            if (
+                not isinstance(x_raw, int)
+                or isinstance(x_raw, bool)
+                or not isinstance(y_raw, int)
+                or isinstance(y_raw, bool)
+            ):
+                raise EngineError(
+                    f"spawn must be an (x, y) integer pair or None, got {spawn!r}"
+                )
+            spawn_x: int | None = x_raw
+            spawn_y: int | None = y_raw
+        else:
+            spawn_x, spawn_y = None, None
         return self._request(
             {
                 "cmd": "start",
                 "mapDir": str(self._map_dir),
+                "spawnX": spawn_x,
+                "spawnY": spawn_y,
                 "nations": nations,
                 "difficulty": difficulty,
+                "mapSize": map_size,
+                "tribes": tribes,
             }
         )
 
@@ -105,6 +160,95 @@ class EngineWorker:
         index and troop count happens worker-side against live game state.
         """
         return self._request({"cmd": "attack", "target": target, "troops": troops})
+
+    def cancel_attack(self, attack_id: object) -> dict[str, Any]:
+        """Retreat an outgoing attack by its id (production cancel_attack
+        intent -> RetreatExecution); validated worker-side against the live
+        outgoing attack list."""
+        return self._request({"cmd": "cancel_attack", "attackID": attack_id})
+
+    def boat_attack(self, x: object, y: object, troops: object) -> dict[str, Any]:
+        """Launch a boat attack at tile (``x``, ``y``) with ``troops``
+        (production boat intent -> TransportShipExecution); destination
+        bounds are validated worker-side, the engine validates the tile."""
+        return self._request({"cmd": "boat", "x": x, "y": y, "troops": troops})
+
+    def cancel_boat(self, unit_id: object) -> dict[str, Any]:
+        """Recall a transport ship by its id (production cancel_boat intent
+        -> BoatRetreatExecution); validated worker-side against live boats."""
+        return self._request({"cmd": "cancel_boat", "unitID": unit_id})
+
+    def build_unit(self, unit: object, x: object, y: object) -> dict[str, Any]:
+        """Build ``unit`` (build-menu kebab name) at tile (``x``, ``y``)
+        (production build_unit intent -> ConstructionExecution); the menu
+        allowlist and bounds are validated worker-side, the engine validates
+        costs and tiles."""
+        return self._request({"cmd": "build", "unit": unit, "x": x, "y": y})
+
+    def upgrade_unit(self, unit_id: object) -> dict[str, Any]:
+        """Upgrade a human unit by its id (production upgrade_structure
+        intent); validated worker-side against live human units."""
+        return self._request({"cmd": "upgrade", "unitID": unit_id})
+
+    def delete_unit(self, unit_id: object) -> dict[str, Any]:
+        """Delete a human unit by its id (production delete_unit intent);
+        validated worker-side against live human units."""
+        return self._request({"cmd": "delete_unit", "unitID": unit_id})
+
+    def alliance_request(self, target: object) -> dict[str, Any]:
+        """Request an alliance with ``target`` (``"nation-N"``/``"tribe-N"``)."""
+        return self._request({"cmd": "alliance_request", "target": target})
+
+    def alliance_reject(self, requestor: object) -> dict[str, Any]:
+        """Reject an incoming alliance request from ``requestor``."""
+        return self._request({"cmd": "alliance_reject", "target": requestor})
+
+    def alliance_extend(self, target: object) -> dict[str, Any]:
+        """Extend the alliance with ``target`` (``"nation-N"``/``"tribe-N"``)."""
+        return self._request({"cmd": "alliance_extend", "target": target})
+
+    def break_alliance(self, target: object) -> dict[str, Any]:
+        """Break the alliance with ``target`` (``"nation-N"``/``"tribe-N"``)."""
+        return self._request({"cmd": "break_alliance", "target": target})
+
+    def embargo(self, target: object, action: object) -> dict[str, Any]:
+        """Start or stop an embargo on ``target`` (``action`` start|stop)."""
+        return self._request({"cmd": "embargo", "target": target, "action": action})
+
+    def donate_gold(self, target: object, amount: object) -> dict[str, Any]:
+        """Donate ``amount`` gold to ``target``."""
+        return self._request({"cmd": "donate_gold", "target": target, "amount": amount})
+
+    def donate_troops(self, target: object, amount: object) -> dict[str, Any]:
+        """Donate ``amount`` troops to ``target``."""
+        return self._request(
+            {"cmd": "donate_troops", "target": target, "amount": amount}
+        )
+
+    def move_warship(self, unit_id: object, x: object, y: object) -> dict[str, Any]:
+        """Retarget a warship to patrol tile (``x``, ``y``) (production
+        move_warship intent -> MoveWarshipExecution); validated worker-side
+        against live human warships and tile bounds."""
+        return self._request({"cmd": "move_warship", "unitID": unit_id, "x": x, "y": y})
+
+    def grid(self, step: object = 12) -> dict[str, Any]:
+        """Return a read-only downsampled ownership grid (no game mutation).
+
+        ``step`` samples every Nth tile (worker validates >= 4). Result has
+        tick/step/cols/rows, RLE ``cells``, a ``legend`` (char -> class or
+        nation id) and the ordered ``nations`` list.
+        """
+        return self._request({"cmd": "grid", "step": step})
+
+    def save_record(self) -> dict[str, Any]:
+        """Return the replay tape and write record.json when configured.
+
+        The tape holds every executed game tick with its stamped human
+        intents (production turn shape); the worker writes the file itself
+        when ``OPENFRONT_RECORD_DIR`` is set, otherwise it is a pure
+        in-memory return.
+        """
+        return self._request({"cmd": "save_record"})
 
     def close(self) -> None:
         """Send ``close`` and reap the worker, never raising on teardown."""

@@ -91,6 +91,52 @@ def build_match_prompt(max_decisions: int = 6) -> str:
     return "\n".join(lines)
 
 
+def build_solo_prompt(max_decisions: int = 20, difficulty: str = "easy") -> str:
+    lines = [
+        "Play one default solo game (your human vs 400 tribes and 52 nations "
+        f"on full Europe, bots at {difficulty} difficulty) using only game "
+        "MCP tools. Phases, triggered by what you observe:",
+        "PHASE 1 — EXPAND: while your tile count is still growing between "
+        "decisions, call game_order_attack (target exactly 'expand', troops a "
+        "positive integer never more than half your current troops), then "
+        "game_end_decision with the next decision integer.",
+        "TRIBES: tribes (tribe-1 .. tribe-400 in get_overview tribes_list) "
+        "are attackable with game_order_attack once one shows "
+        "borders_human true — they never have immunity, and clearing them "
+        "is safe expansion. Prefer tribes over nations while tiles grow. "
+        "tribes_list shows only bordering tribes (the only attackable "
+        "ones); the tribes count tracks the rest.",
+        "PHASE 2 — ATTACK NATIONS: only when BOTH hold: (a) your tiles have "
+        "stalled across two consecutive overviews (expansion exhausted, "
+        "fronts met), AND (b) a nation shows borders_human true AND immune "
+        "false in get_overview. Then ONE decisive strike: game_order_attack "
+        "with that nation's id and most of your troops (up to three "
+        "quarters), not repeated small waves — repeated half-troop waves "
+        "bleed out while nations outproduce you. Then game_end_decision as "
+        "before.",
+        "BUILD: when gold exceeds 150000, buy game_order_build unit "
+        "'defense-post' at your spawn tile (x, y from get_overview human "
+        "spawn). Cities at 125000+ if richer. Check get_overview units to "
+        "confirm. Upgrade the city once with game_order_upgrade_unit when "
+        "gold allows.",
+        "DIPLOMACY (optional): game_order_embargo can pressure a bordering "
+        "nation (action start/stop). Alliance requests and donations exist "
+        "but nations rarely answer — do not rely on them.",
+        "Cancel a mistargeted attack with game_order_cancel_attack (id from "
+        "attacks). Boats and warships need shore + water you cannot see — "
+        "skip them unless adjacent water is obvious from your growth.",
+        "Start with game_start_solo_game with difficulty "
+        f'"{difficulty}" (no other arguments) and one game_get_overview. '
+        "Check game_get_overview whenever you need the "
+        "state. End with game_get_overview and game_close_game. "
+        f"Play at most {max_decisions} decisions, then stop even if no winner.",
+        "Then stop. Report tiles and troops per phase, tribe kills, when "
+        "contact happened, whether nation attacks landed, what you built, "
+        "and the winner if declared.",
+    ]
+    return "\n".join(lines)
+
+
 def build_campaign_prompt(max_decisions: int = 45) -> str:
     lines = [
         "Play one full 1v1 campaign (your human vs one nation) using only game "
@@ -249,11 +295,13 @@ def run(
     models_cache_source: Path | str | None = None,
     scenario: str = "smoke",
     max_decisions: int = 3,
+    difficulty: str = "easy",
 ) -> dict[str, Any]:
     """Run one bounded live session. Key check happens before any launch.
 
     ``scenario`` is ``"smoke"`` (single human) or ``"1v1"`` (human vs one
-    nation); ``max_decisions`` counts the 50-tick advances.
+    nation); ``max_decisions`` counts the 50-tick advances. ``difficulty``
+    applies to the solo scenario (nation bot strength).
     """
     settings = load_settings(env_file)
     provider = (
@@ -262,14 +310,19 @@ def run(
     model = (settings.get("OPENFRONT_MODEL") or "").strip()
     if not model:
         raise ValueError("OPENFRONT_MODEL is required in the env file")
-    if scenario not in ("smoke", "1v1", "campaign"):
+    if scenario not in ("smoke", "1v1", "campaign", "solo"):
         raise ValueError(
-            f"scenario must be 'smoke', '1v1' or 'campaign', got {scenario!r}"
+            f"scenario must be 'smoke', '1v1', 'campaign' or 'solo', got {scenario!r}"
         )
     if isinstance(max_decisions, bool) or not isinstance(max_decisions, int):
         raise ValueError("max_decisions must be an integer")
     if not 1 <= max_decisions <= 60:
         raise ValueError("max_decisions must be in [1, 60]")
+    if difficulty not in ("easy", "medium", "hard", "impossible"):
+        raise ValueError(
+            "difficulty must be one of easy, medium, hard, impossible, "
+            f"got {difficulty!r}"
+        )
     key_env = KEY_ENV_BY_PROVIDER.get(provider, "OPENROUTER_API_KEY")
     api_key = (settings.get(key_env) or "").strip()
     if not api_key:
@@ -288,10 +341,18 @@ def run(
         name="game",
         command=(python_bin, str(wrapper)),
         cwd=str(REPO_ROOT),
-        environment={},
+        # Grid frames land here (one JSON line per decision) for timelapse
+        # rendering; the wrapper only scrubs credential keys, so this passes
+        # through, and it is never shown to the agent.
+        environment={
+            "OPENFRONT_GRID_DIR": str(out),
+            "OPENFRONT_RECORD_DIR": str(out),
+        },
     )
     prompt = (
-        build_campaign_prompt(max_decisions)
+        build_solo_prompt(max_decisions, difficulty)
+        if scenario == "solo"
+        else build_campaign_prompt(max_decisions)
         if scenario == "campaign"
         else build_match_prompt(max_decisions)
         if scenario == "1v1"

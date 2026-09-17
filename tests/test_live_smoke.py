@@ -165,6 +165,33 @@ def test_build_campaign_prompt_has_two_phases_and_cap():
     assert "stalled" in prompt
 
 
+def test_build_solo_prompt_names_solo_game_and_cap():
+    from openfront_mcp.live_smoke import build_solo_prompt
+
+    prompt = build_solo_prompt(20)
+    assert "game_start_solo_game" in prompt
+    assert "400 tribes" in prompt
+    assert "52 nations" in prompt
+    assert "20" in prompt
+    assert "tribe-1" in prompt
+    assert "game_order_build" in prompt
+    assert "game_order_cancel_attack" in prompt
+    assert '"easy"' in prompt
+
+
+def test_build_solo_prompt_impossible_names_difficulty():
+    from openfront_mcp.live_smoke import build_solo_prompt
+
+    assert '"impossible"' in build_solo_prompt(40, "impossible")
+
+
+def test_run_rejects_bad_difficulty(tmp_path):
+    from openfront_mcp.live_smoke import run
+
+    with pytest.raises(ValueError, match="difficulty must be one of"):
+        run(".env.local", tmp_path / "x", 10, scenario="solo", difficulty="brutal")
+
+
 def test_run_rejects_bad_scenario_and_bounds(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text(

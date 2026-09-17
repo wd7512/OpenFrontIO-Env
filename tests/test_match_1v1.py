@@ -44,7 +44,7 @@ async def _client():
 def test_1v1_lifecycle_through_tools() -> None:
     async def scenario() -> None:
         async with _client() as session:
-            is_err, text = await _call(session, "start_1v1_game", {})
+            is_err, text = await _call(session, "start_1v1_game", {"map": "plains"})
             assert is_err is False, text
             started = json.loads(text)
             assert started["scenario"] == "plains-1v1-nation"
@@ -81,6 +81,13 @@ def test_1v1_lifecycle_through_tools() -> None:
                 "next_decision",
                 "in_spawn_phase",
                 "winner",
+                "tribes",
+                "tribes_list",
+                "boats",
+                "units",
+                "alliances",
+                "alliance_requests",
+                "embargoes",
                 "human",
                 "nations",
                 "attacks",
@@ -106,12 +113,55 @@ def test_1v1_lifecycle_through_tools() -> None:
 def test_1v1_rejects_bad_params_and_survives() -> None:
     async def scenario() -> None:
         async with _client() as session:
-            for bad in ({"nations": 0}, {"nations": 5}, {"difficulty": "brutal"}):
+            for bad in (
+                {"nations": 0},
+                {"nations": 101},
+                {"difficulty": "brutal"},
+                {"map": "atlantis"},
+            ):
                 is_err, _ = await _call(session, "start_1v1_game", bad)
                 assert is_err is True, bad
             is_err, text = await _call(session, "start_1v1_game", {"nations": 1})
             assert is_err is False, text
             assert len(json.loads(text)["nations"]) == 1
+
+    asyncio.run(scenario())
+
+
+def test_britannia_solo_default_through_tools() -> None:
+    async def scenario() -> None:
+        async with _client() as session:
+            is_err, text = await _call(session, "start_1v1_game", {})
+            assert is_err is False, text
+            started = json.loads(text)
+            assert started["scenario"] == "britannia-solo-nations"
+            assert started["human"]["tiles"] > 0
+            assert len(started["nations"]) == 1
+            nation = started["nations"][0]
+            assert set(nation) == {
+                "id",
+                "name",
+                "troops",
+                "gold",
+                "tiles",
+                "alive",
+                "immune",
+                "borders_human",
+            }
+            home_tiles = started["human"]["tiles"]
+
+            is_err, text = await _call(
+                session, "order_attack", {"target": "expand", "troops": 5000}
+            )
+            assert is_err is False, text
+            is_err, text = await _call(session, "end_decision", {"decision": 1})
+            assert is_err is False, text
+            is_err, text = await _call(session, "get_overview", {})
+            assert is_err is False, text
+            assert json.loads(text)["human"]["tiles"] > home_tiles
+
+            is_err, _ = await _call(session, "close_game", {})
+            assert is_err is False
 
     asyncio.run(scenario())
 
@@ -147,7 +197,12 @@ def test_order_attack_expand_then_observe_through_tools() -> None:
             is_err, text = await _call(session, "get_overview", {})
             assert is_err is False, text
             overview = json.loads(text)
-            assert set(overview["attacks"][0]) == {"target", "troops", "retreating"}
+            assert set(overview["attacks"][0]) == {
+                "id",
+                "target",
+                "troops",
+                "retreating",
+            }
             assert overview["human"]["tiles"] > home_tiles
 
             is_err, text = await _call(session, "close_game", {})

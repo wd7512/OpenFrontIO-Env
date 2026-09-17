@@ -226,6 +226,13 @@ def test_overview_is_controlled_human_state_not_engine_internals() -> None:
                 "next_decision",
                 "in_spawn_phase",
                 "winner",
+                "tribes",
+                "tribes_list",
+                "boats",
+                "units",
+                "alliances",
+                "alliance_requests",
+                "embargoes",
                 "human",
                 "nations",
                 "attacks",
@@ -233,6 +240,7 @@ def test_overview_is_controlled_human_state_not_engine_internals() -> None:
             assert start["human"] == expected_human
             assert start["nations"] == []
             assert start["attacks"] == []
+            assert start["tribes"] == 0
             assert start["winner"] is None
 
             is_err, ov_text = await _call(session, "get_overview", {})
