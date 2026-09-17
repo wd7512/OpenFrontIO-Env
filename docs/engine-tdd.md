@@ -124,3 +124,27 @@ This is one human with no opponents, actions or victory check. It is not a
 complete game, an MCP gameplay integration test, or an LLM evaluation.
 Transport failure recovery, installed-package asset discovery and full
 benchmark initialization still require follow-up tests and implementation.
+
+## 1v1 slice (human vs generated nation)
+
+`tests/test_engine_1v1.py` (8 tests) landed first and failed as expected
+(`TypeError: EngineWorker.start() got an unexpected keyword argument
+'nations'` — the wrapper had no nation support). Implementation:
+
+- `engine/worker.ts`: `start` accepts `nations` (integer 0–16) and
+  `difficulty`; builds opponents with the production
+  `createNationsForGame` (procedural names on the nation-less plains
+  fixture, random placement via `SpawnExecution`); runs the production
+  `NationExecution` AI plus `WinCheckExecution`; drives the loop until the
+  spawn phase ends *and* every nation has landed; snapshots add `nations`
+  (id/name/troops/gold/tiles/alive) and `winner`.
+- `src/openfront_mcp/engine.py`: `start(nations=0, difficulty="easy")`
+  with client-side validation; defaults preserve the smoke behavior.
+
+GREEN: `uv run pytest tests/test_engine_1v1.py -q` → 8 passed; full suite
+90 passed; ruff/ty clean.
+
+Real 1v1 (`nations=1`, easy): both spawn 52 tiles; the nation ("Deeply
+Confused Bugs") expands to ~10k tiles while the passive human sits at 52;
+production `WinCheckExecution` declares the nation winner around tick 753.
+Deterministic across fresh processes.

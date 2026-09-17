@@ -20,7 +20,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from pydantic import StrictInt
 
 from openfront_mcp import scenarios as _scenarios
-from openfront_mcp.session import GameSession, SessionError
+from openfront_mcp.session import MAX_TOOL_NATIONS, GameSession, SessionError
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +71,20 @@ async def start_smoke_game(ctx: Context) -> str:
 
 
 @mcp.tool()
+async def start_1v1_game(
+    ctx: Context, nations: StrictInt = 1, difficulty: str = "easy"
+) -> str:
+    """Start a 1v1 match: one human vs nation opponents on the plains map (1-4 nations, easy/medium/hard/impossible)."""
+    if isinstance(nations, bool) or not 1 <= nations <= MAX_TOOL_NATIONS:
+        raise SessionError(
+            f"nations must be an integer in [1, {MAX_TOOL_NATIONS}] for a match"
+        )
+    return json.dumps(
+        await asyncio.to_thread(_session_of(ctx).start, nations, difficulty)
+    )
+
+
+@mcp.tool()
 async def get_overview(ctx: Context) -> str:
     """Current controlled human state; a pure query that never advances the simulation."""
     return json.dumps(await asyncio.to_thread(_session_of(ctx).overview))
@@ -80,6 +94,16 @@ async def get_overview(ctx: Context) -> str:
 async def end_decision(decision: StrictInt, ctx: Context) -> str:
     """Advance exactly 50 sim ticks for one decision. Pass the exact next expected decision integer; non-integers and stale values are rejected."""
     return json.dumps(await asyncio.to_thread(_session_of(ctx).end_decision, decision))
+
+
+@mcp.tool()
+async def order_attack(
+    ctx: Context, target: str = "expand", troops: StrictInt = 1000
+) -> str:
+    """Order the human to expand or attack: target "expand" (adjacent neutral land) or "nation-N", with a positive integer troop count. Production rules (immunity, shared border) decide whether the order lands; the result reports live attacks."""
+    return json.dumps(
+        await asyncio.to_thread(_session_of(ctx).order_attack, target, troops)
+    )
 
 
 @mcp.tool()
@@ -99,8 +123,10 @@ def main() -> None:
             list(TOOLS)
             + [
                 "start_smoke_game",
+                "start_1v1_game",
                 "get_overview",
                 "end_decision",
+                "order_attack",
                 "close_game",
             ]
         ),

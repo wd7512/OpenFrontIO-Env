@@ -1,0 +1,65 @@
+"""Real-engine orders: expand (vs TerraNullius) and attack (vs nations).
+
+No mocks: orders go through Executor.createExec (the same path live turns
+take) into AttackExecution, and are observed via player.outgoingAttacks().
+
+Production facts these tests pin:
+- expand conquers adjacent neutral land, so human tiles grow;
+- a nation attack with no shared border fizzles by design (AttackExecution
+  retreats when refreshToConquer finds nothing) — the order is accepted and
+  the engine stays healthy, but no attack persists;
+- an attack ordered during nation spawn immunity (50 ticks) also fizzles at
+  init (canAttackPlayer), so live orders belong after tick 50.
+"""
+
+from openfront_mcp.engine import EngineWorker
+
+
+def test_expand_conquers_neutral_land():
+    with EngineWorker() as engine:
+        started = engine.start(nations=1, difficulty="easy")
+        assert started["human"]["tiles"] == 52
+        engine.attack(target="expand", troops=5000)
+        after = engine.advance(50)
+        assert after["human"]["tiles"] > 52
+
+
+def test_nation_attack_without_border_fizzles_by_design_but_engine_survives():
+    with EngineWorker() as engine:
+        engine.start(nations=1, difficulty="easy")
+        engine.advance(60)  # past nation spawn immunity
+        engine.attack(target="nation-1", troops=1000)
+        after = engine.advance(10)
+        # No shared border this early: production retreats the attack.
+        assert after["attacks"] == []
+        # Engine healthy: both sides alive, game advancing.
+        assert after["tick"] > 60
+        assert after["nations"][0]["alive"] is True
+
+
+def test_attack_rejects_bad_target_and_survives():
+    with EngineWorker() as engine:
+        engine.start(nations=1, difficulty="easy")
+        for bad in ("nation-2", "nation-0", "human-1", "nope", "", 1, None, True):
+            try:
+                engine.attack(target=bad, troops=1000)  # type: ignore[arg-type]
+            except Exception:
+                pass
+            else:
+                raise AssertionError(f"attack accepted bad target {bad!r}")
+        assert engine.query()["attacks"] == []
+        engine.attack(target="expand", troops=1000)
+        assert len(engine.advance(5)["attacks"]) == 1
+
+
+def test_attack_rejects_bad_troops_and_survives():
+    with EngineWorker() as engine:
+        engine.start(nations=1, difficulty="easy")
+        for bad in (0, -5, "many", None, True):
+            try:
+                engine.attack(target="expand", troops=bad)  # type: ignore[arg-type]
+            except Exception:
+                pass
+            else:
+                raise AssertionError(f"attack accepted bad troops {bad!r}")
+        assert engine.query()["attacks"] == []

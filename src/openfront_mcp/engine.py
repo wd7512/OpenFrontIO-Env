@@ -28,6 +28,8 @@ PLAINS_MAP_DIR = (
     REPO_ROOT / "vendor" / "OpenFrontIO" / "tests" / "testdata" / "maps" / "plains"
 )
 DEFAULT_TIMEOUT_SECONDS = 60.0
+MAX_NATIONS = 16
+DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 
 
 class EngineError(RuntimeError):
@@ -62,9 +64,30 @@ class EngineWorker:
         self.close()
         return False
 
-    def start(self) -> dict[str, Any]:
-        """Boot the fixture and return the initial snapshot."""
-        return self._request({"cmd": "start", "mapDir": str(self._map_dir)})
+    def start(self, nations: object = 0, difficulty: object = "easy") -> dict[str, Any]:
+        """Boot the fixture and return the initial snapshot.
+
+        ``nations`` spawns that many procedurally generated nation opponents
+        through the production nation path; ``difficulty`` drives their
+        production AI cadence.
+        """
+        if isinstance(nations, bool) or not isinstance(nations, int):
+            raise EngineError(f"nations must be an integer, got {nations!r}")
+        if not 0 <= nations <= MAX_NATIONS:
+            raise EngineError(f"nations must be in [0, {MAX_NATIONS}], got {nations!r}")
+        if not isinstance(difficulty, str) or difficulty not in DIFFICULTIES:
+            raise EngineError(
+                f"difficulty must be one of {', '.join(DIFFICULTIES)}, "
+                f"got {difficulty!r}"
+            )
+        return self._request(
+            {
+                "cmd": "start",
+                "mapDir": str(self._map_dir),
+                "nations": nations,
+                "difficulty": difficulty,
+            }
+        )
 
     def query(self) -> dict[str, Any]:
         """Return the current snapshot without advancing the game."""
@@ -73,6 +96,15 @@ class EngineWorker:
     def advance(self, ticks: object) -> dict[str, Any]:
         """Advance ``ticks`` production ticks and return the new snapshot."""
         return self._request({"cmd": "advance", "ticks": ticks})
+
+    def attack(self, target: object, troops: object) -> dict[str, Any]:
+        """Order the human to attack ``target`` (``"nation-N"``) with ``troops``.
+
+        The order goes through the production intent path
+        (Executor.createExec -> AttackExecution); validation of the target
+        index and troop count happens worker-side against live game state.
+        """
+        return self._request({"cmd": "attack", "target": target, "troops": troops})
 
     def close(self) -> None:
         """Send ``close`` and reap the worker, never raising on teardown."""

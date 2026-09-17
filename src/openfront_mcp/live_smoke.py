@@ -68,6 +68,29 @@ def build_smoke_prompt(max_decisions: int = 3) -> str:
     return "\n".join(lines)
 
 
+def build_match_prompt(max_decisions: int = 6) -> str:
+    steps = ["game_start_1v1_game", "game_get_overview"]
+    for n in range(1, max_decisions + 1):
+        steps += [
+            "game_order_attack (target=expand, troops=5000)",
+            f"game_end_decision (decision={n})",
+        ]
+    steps += ["game_get_overview", "game_close_game"]
+    lines = [
+        "Play one 1v1 match (your human vs one nation) to completion using only "
+        "game MCP tools. Each decision: FIRST order expansion with "
+        "game_order_attack (target must be exactly 'expand', troops a positive "
+        "integer you can afford — never more than half your current troops), "
+        "THEN advance 50 ticks with game_end_decision. get_overview shows both "
+        "sides, your live attacks, and the winner.",
+        "Do exactly these tool calls in order (start_1v1_game takes no arguments):",
+        *[f"- {s}" for s in steps],
+        "Then stop. Report each side's tiles and troops per decision, whether "
+        "your attacks landed, and the winner if one is declared.",
+    ]
+    return "\n".join(lines)
+
+
 def _summarise_events(stdout: str) -> dict[str, Any]:
     tool_calls = 0
     decisions: list[int] = []
@@ -158,8 +181,14 @@ def run(
     output: Path | str,
     timeout_s: float = 120.0,
     models_cache_source: Path | str | None = None,
+    scenario: str = "smoke",
+    max_decisions: int = 3,
 ) -> dict[str, Any]:
-    """Run one bounded live smoke session. Key check happens before any launch."""
+    """Run one bounded live session. Key check happens before any launch.
+
+    ``scenario`` is ``"smoke"`` (single human) or ``"1v1"`` (human vs one
+    nation); ``max_decisions`` counts the 50-tick advances.
+    """
     settings = load_settings(env_file)
     provider = (
         settings.get("OPENFRONT_PROVIDER") or DEFAULT_PROVIDER
@@ -167,6 +196,12 @@ def run(
     model = (settings.get("OPENFRONT_MODEL") or "").strip()
     if not model:
         raise ValueError("OPENFRONT_MODEL is required in the env file")
+    if scenario not in ("smoke", "1v1"):
+        raise ValueError(f"scenario must be 'smoke' or '1v1', got {scenario!r}")
+    if isinstance(max_decisions, bool) or not isinstance(max_decisions, int):
+        raise ValueError("max_decisions must be an integer")
+    if not 1 <= max_decisions <= 20:
+        raise ValueError("max_decisions must be in [1, 20]")
     key_env = KEY_ENV_BY_PROVIDER.get(provider, "OPENROUTER_API_KEY")
     api_key = (settings.get(key_env) or "").strip()
     if not api_key:
@@ -187,7 +222,11 @@ def run(
         cwd=str(REPO_ROOT),
         environment={},
     )
-    prompt = build_smoke_prompt(3)
+    prompt = (
+        build_match_prompt(max_decisions)
+        if scenario == "1v1"
+        else build_smoke_prompt(max_decisions)
+    )
     t0 = time.monotonic()
     # The agent's working directory must have no `.opencode`/`opencode.json`
     # ancestor (OpenCode discovers project plugins upward from cwd), so it
@@ -217,6 +256,8 @@ def run(
     payload: dict[str, Any] = {
         "model": model,
         "provider": provider,
+        "scenario": scenario,
+        "max_decisions": max_decisions,
         "agent_root": str(agent_root),
         "timeout_s": float(timeout_s),
         "duration_s": duration_s,

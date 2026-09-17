@@ -225,9 +225,15 @@ def test_overview_is_controlled_human_state_not_engine_internals() -> None:
                 "decision",
                 "next_decision",
                 "in_spawn_phase",
+                "winner",
                 "human",
+                "nations",
+                "attacks",
             }
             assert start["human"] == expected_human
+            assert start["nations"] == []
+            assert start["attacks"] == []
+            assert start["winner"] is None
 
             is_err, ov_text = await _call(session, "get_overview", {})
             assert is_err is False

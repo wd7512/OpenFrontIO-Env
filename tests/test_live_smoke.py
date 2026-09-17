@@ -94,6 +94,65 @@ def test_run_auto_cache_missing_means_none(tmp_path):
     assert kwargs["models_cache_source"] is None
 
 
+def test_build_match_prompt_orders_the_match_steps():
+    from openfront_mcp.live_smoke import build_match_prompt
+
+    prompt = build_match_prompt(2)
+    for call in (
+        "game_start_1v1_game",
+        "game_get_overview",
+        "game_order_attack (target=expand, troops=5000)",
+        "game_end_decision (decision=1)",
+        "game_end_decision (decision=2)",
+        "game_get_overview",
+        "game_close_game",
+    ):
+        assert call in prompt
+    assert "game_end_decision (decision=3)" not in prompt
+    assert prompt.index("game_order_attack") < prompt.index(
+        "game_end_decision (decision=1)"
+    )
+
+
+def test_run_rejects_bad_scenario_and_bounds(tmp_path):
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
+    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+        with pytest.raises(ValueError, match="scenario"):
+            run(env, tmp_path / "o1", 10, scenario="2v2")
+        with pytest.raises(ValueError, match="max_decisions"):
+            run(env, tmp_path / "o2", 10, scenario="1v1", max_decisions=0)
+        with pytest.raises(ValueError, match="max_decisions"):
+            run(env, tmp_path / "o3", 10, scenario="1v1", max_decisions=True)
+        launch.assert_not_called()
+
+
+def test_run_1v1_uses_match_prompt(tmp_path):
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
+    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+        launch.return_value = SimpleNamespace(
+            process=SimpleNamespace(
+                stdout="", stderr="", returncode=0, timed_out=False
+            ),
+            run=SimpleNamespace(),
+            config={},
+            resolved_config=None,
+        )
+        run(env, tmp_path / "output", 10, scenario="1v1", max_decisions=2)
+    _, kwargs = launch.call_args
+    assert "game_start_1v1_game" in kwargs["prompt"]
+    assert "game_start_smoke_game" not in kwargs["prompt"]
+
+
 def test_summarise_unwraps_nested_result_envelope():
     from openfront_mcp.live_smoke import _summarise_events
 

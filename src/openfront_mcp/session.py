@@ -15,11 +15,14 @@ from __future__ import annotations
 import threading
 from typing import Any, Callable
 
-from openfront_mcp.engine import EngineWorker
+from openfront_mcp.engine import DIFFICULTIES, EngineWorker
 
 SMOKE_SCENARIO = "plains-human-smoke"
 SMOKE_LABEL = "single-human-smoke"
+MATCH_SCENARIO = "plains-1v1-nation"
+MATCH_LABEL = "human-vs-nation"
 DECISION_TICKS = 50
+MAX_TOOL_NATIONS = 4
 
 
 class SessionError(RuntimeError):
@@ -39,20 +42,38 @@ class GameSession:
         self._decision = 0
         self._tick = 0
         self._closed = False
+        self._scenario = SMOKE_SCENARIO
+        self._label = SMOKE_LABEL
 
-    def start(self) -> dict[str, Any]:
-        """Spawn the engine worker and boot the smoke scenario."""
+    def start(self, nations: int = 0, difficulty: str = "easy") -> dict[str, Any]:
+        """Spawn the engine worker and boot the scenario.
+
+        ``nations=0`` is the single-human smoke game; ``nations>=1`` adds
+        that many production nation opponents (capped for tool play).
+        """
         with self._lock:
             self._require_open()
             if self._snapshot is not None:
                 raise SessionError(
-                    "game already started: start_smoke_game may be called once "
+                    "game already started: start tools may be called once "
                     "per server lifecycle"
+                )
+            if (
+                isinstance(nations, bool)
+                or not isinstance(nations, int)
+                or not 0 <= nations <= MAX_TOOL_NATIONS
+            ):
+                raise SessionError(
+                    f"nations must be an integer in [0, {MAX_TOOL_NATIONS}]"
+                )
+            if not isinstance(difficulty, str) or difficulty not in DIFFICULTIES:
+                raise SessionError(
+                    f"difficulty must be one of {', '.join(DIFFICULTIES)}"
                 )
             engine = self._engine_factory()
             engine.__enter__()
             try:
-                snapshot = engine.start()
+                snapshot = engine.start(nations=nations, difficulty=difficulty)
             except BaseException:
                 engine.close()
                 raise
@@ -60,6 +81,9 @@ class GameSession:
             self._snapshot = snapshot
             self._tick = int(snapshot["tick"])
             self._decision = 0
+            if nations > 0:
+                self._scenario = MATCH_SCENARIO
+                self._label = MATCH_LABEL
             return self._project("started")
 
     def overview(self) -> dict[str, Any]:
@@ -90,6 +114,40 @@ class GameSession:
             self._tick = int(snapshot["tick"])
             self._decision += 1
             return {"decision": self._decision, "tick": self._tick}
+
+    def order_attack(self, target: object, troops: object) -> dict[str, Any]:
+        """Order the human to expand or attack, then project the result.
+
+        ``target`` is ``"expand"`` (adjacent neutral land) or ``"nation-N"``;
+        ``troops`` is a positive integer. Bad values are rejected before
+        touching the engine; production rules (spawn immunity, shared
+        border) decide whether the order lands — the projection reports
+        what actually happened.
+        """
+        with self._lock:
+            self._require_running()
+            if not isinstance(target, str) or target not in self._valid_targets():
+                raise SessionError(
+                    'target must be "expand" or one of '
+                    f"{self._valid_targets()}, got {target!r}"
+                )
+            if isinstance(troops, bool) or not isinstance(troops, int) or troops <= 0:
+                raise SessionError(f"troops must be a positive integer, got {troops!r}")
+            assert self._engine is not None
+            try:
+                snapshot = self._engine.attack(target=target, troops=troops)
+            except Exception as exc:
+                raise SessionError(f"attack rejected by engine: {exc}") from exc
+            self._snapshot = snapshot
+            self._tick = int(snapshot["tick"])
+            return self._project("attack-ordered")
+
+    def _valid_targets(self) -> list[str]:
+        assert self._snapshot is not None
+        return ["expand"] + [
+            f"nation-{index + 1}"
+            for index, _ in enumerate(self._snapshot.get("nations", []))
+        ]
 
     def close(self) -> dict[str, Any]:
         """Close the running game and reap its engine worker."""
@@ -126,14 +184,34 @@ class GameSession:
     def _project(self, status: str) -> dict[str, Any]:
         assert self._snapshot is not None
         human = self._snapshot["human"]
+        nations = [
+            {
+                "id": f"nation-{index + 1}",
+                "name": nation["name"],
+                "troops": nation["troops"],
+                "gold": nation["gold"],
+                "tiles": nation["tiles"],
+                "alive": nation.get("alive", True),
+            }
+            for index, nation in enumerate(self._snapshot.get("nations", []))
+        ]
+        attacks = [
+            {
+                "target": attack["target"],
+                "troops": attack["troops"],
+                "retreating": attack.get("retreating", False),
+            }
+            for attack in self._snapshot.get("attacks", [])
+        ]
         return {
             "status": status,
-            "scenario": SMOKE_SCENARIO,
-            "label": SMOKE_LABEL,
+            "scenario": self._scenario,
+            "label": self._label,
             "tick": self._tick,
             "decision": self._decision,
             "next_decision": self._decision + 1,
             "in_spawn_phase": self._snapshot["inSpawnPhase"],
+            "winner": self._snapshot.get("winner"),
             "human": {
                 "id": "human-1",
                 "name": human["name"],
@@ -142,4 +220,6 @@ class GameSession:
                 "tiles": human["tiles"],
                 "spawn": human["spawnTile"],
             },
+            "nations": nations,
+            "attacks": attacks,
         }
