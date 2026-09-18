@@ -115,3 +115,18 @@ def test_check_repo_clean_fails_on_new_src_touch(tmp_path: Path) -> None:
     (tmp_path / "tracked.txt").write_text("coach was here")
     with pytest.raises(cy.CycleSafetyError, match="outside cycles/"):
         cy.check_repo_clean(tmp_path, baseline)
+
+
+def test_coach_only_rejects_missing_run_dir(tmp_path: Path) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="run dir not found"):
+        cy.coach_only(
+            cycles_root=tmp_path,
+            run_dir=tmp_path / "nope",
+            model="m",
+            provider="p",
+            key_env_var="K",
+            base_url=None,
+            api_key="k",
+        )

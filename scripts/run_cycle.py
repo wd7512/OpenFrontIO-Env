@@ -35,6 +35,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--difficulty", default="easy")
     parser.add_argument("--coach-timeout", type=float, default=900)
     parser.add_argument("--out-prefix", default=None)
+    parser.add_argument(
+        "--retro-only",
+        default=None,
+        help="run dir of a finished match; coach it into the next memory "
+        "version without playing (seeds memory-v1 from history)",
+    )
     args = parser.parse_args(argv)
 
     settings = load_settings(args.env_file)
@@ -47,6 +53,22 @@ def main(argv: list[str] | None = None) -> int:
     cache = _default_models_cache()
 
     root = Path(args.cycles_root)
+    if args.retro_only:
+        from openfront_mcp.cycle import coach_only
+
+        version = coach_only(
+            cycles_root=root,
+            run_dir=args.retro_only,
+            model=model,
+            provider=provider,
+            key_env_var=key_env,
+            base_url=PROVIDER_BASE_URLS.get(provider),
+            api_key=api_key,
+            coach_timeout_s=args.coach_timeout,
+            models_cache_source=cache,
+        )
+        print(f"memory-v{version}.md written")
+        return 0
     for _ in range(args.cycles):
         import time
 

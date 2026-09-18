@@ -235,6 +235,47 @@ def check_repo_clean(repo: Path | str, baseline: set[str] | None = None) -> None
         )
 
 
+def coach_only(
+    *,
+    cycles_root: Path | str,
+    run_dir: Path | str,
+    model: str,
+    provider: str,
+    key_env_var: str,
+    base_url: str | None,
+    api_key: str,
+    coach_timeout_s: float = 900,
+    models_cache_source: Path | str | None = None,
+) -> int:
+    """Coach one finished match into the next memory version. No play."""
+    root = Path(cycles_root)
+    store = MemoryStore(root / "memories")
+    out_dir = Path(str(run_dir))
+    if not out_dir.is_dir():
+        raise ValueError(f"run dir not found: {out_dir}")
+    baseline = _git_status_lines(REPO_ROOT)
+    coach_root = Path(tempfile.mkdtemp(prefix="openfront-coach-"))
+    staging = coach_root / "staging"
+    names = assemble_coach_bundle(
+        out_dir, [REPO_ROOT / s for s in COACH_SOURCES], staging
+    )
+    launched = launch_coach(
+        run_root=coach_root / "agent",
+        model=model,
+        provider=provider,
+        key_env_var=key_env_var,
+        base_url=base_url,
+        api_key=api_key,
+        prompt=build_coach_prompt(names, MEMORY_FILENAME),
+        timeout_s=coach_timeout_s,
+        bundle_files={name: staging / name for name in names},
+        models_cache_source=models_cache_source,
+    )
+    note = (launched.run.work_dir / MEMORY_FILENAME).read_text(encoding="utf-8")
+    check_repo_clean(REPO_ROOT, baseline)
+    return store.save(note)
+
+
 def run_cycle(
     *,
     cycles_root: Path | str,
@@ -260,27 +301,17 @@ def run_cycle(
     out_dir = Path(str(kwargs.get("output", "")))
     version: int | None = None
     if out_dir.is_dir():
-        baseline = _git_status_lines(REPO_ROOT)
-        coach_root = Path(tempfile.mkdtemp(prefix="openfront-coach-"))
-        staging = coach_root / "staging"
-        names = assemble_coach_bundle(
-            out_dir, [REPO_ROOT / s for s in COACH_SOURCES], staging
-        )
-        launched = launch_coach(
-            run_root=coach_root / "agent",
+        version = coach_only(
+            cycles_root=root,
+            run_dir=out_dir,
             model=model,
             provider=provider,
             key_env_var=key_env_var,
             base_url=base_url,
             api_key=api_key,
-            prompt=build_coach_prompt(names, MEMORY_FILENAME),
-            timeout_s=coach_timeout_s,
-            bundle_files={name: staging / name for name in names},
+            coach_timeout_s=coach_timeout_s,
             models_cache_source=models_cache_source,
         )
-        note = (launched.run.work_dir / MEMORY_FILENAME).read_text(encoding="utf-8")
-        check_repo_clean(REPO_ROOT, baseline)
-        version = store.save(note)
     row = {
         "cycle": (store._versions()[-1] if store._versions() else 0),
         "tiles": (summary.get("final_human") or {}).get("tiles"),
