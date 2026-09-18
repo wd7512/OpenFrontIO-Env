@@ -261,11 +261,10 @@ def run(
         name="game",
         command=(python_bin, str(wrapper)),
         cwd=str(REPO_ROOT),
-        # Grid frames land here (one JSON line per decision) for timelapse
-        # rendering; the wrapper only scrubs credential keys, so this passes
-        # through, and it is never shown to the agent.
+        # The replay tape lands here (record.json, written by the worker);
+        # the wrapper only scrubs credential keys, so this passes through,
+        # and it is never shown to the agent.
         environment={
-            "OPENFRONT_GRID_DIR": str(out),
             "OPENFRONT_RECORD_DIR": str(out),
         },
     )

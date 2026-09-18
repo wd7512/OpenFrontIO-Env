@@ -1,5 +1,10 @@
 # OpenFrontBench worklog
 
+## 2026-09-18 — GIF/PNG viewing path removed, replay index is the only viewer
+
+- Deleted `scripts/render_timelapse.py`, `scripts/serve_game.py`, `scripts/serve_archive.py` and their tests; stripped `_capture_grid()` + `OPENFRONT_GRID_DIR` (no new `grids.jsonl` written); dropped the `pillow` dependency.
+- `scripts/serve_replays.py` (click-a-card index over `raw/` tapes in the real client) is the only viewer; tape capture (`OPENFRONT_RECORD_DIR`, converter, replay tests) untouched. `serve-replay` skill rewritten around it.
+
 ## 2026-09-18 — dev-tools hygiene check + WORKLOG started
 
 - Ported `dev-tools check` from the custom-harbor harness as `openfront-harbor dev-tools check`: worklog format, duplicate test names, character encoding. Test-layout check deliberately not ported — `tests/` is a flat tree that does not mirror `src/`, so a mirror check needs a test-tree migration first.

@@ -12,7 +12,6 @@ hashes, asset paths or internal ids.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import threading
@@ -182,29 +181,8 @@ class GameSession:
             self._snapshot = snapshot
             self._tick = int(snapshot["tick"])
             self._decision += 1
-            self._capture_grid()
             self._capture_record()
             return {"decision": self._decision, "tick": self._tick}
-
-    def _capture_grid(self) -> None:
-        """Append one ownership-grid frame for timelapse rendering.
-
-        Only when ``OPENFRONT_GRID_DIR`` names an existing directory (set by
-        the live runner): one JSON line per decision, never surfaced to the
-        agent. Failures are swallowed — capture must never break a game.
-        """
-        grid_dir = os.environ.get("OPENFRONT_GRID_DIR", "")
-        if not grid_dir:
-            return
-        try:
-            assert self._engine is not None
-            frame = self._engine.grid()
-            frame["decision"] = self._decision
-            path = os.path.join(grid_dir, "grids.jsonl")
-            with open(path, "a", encoding="utf-8") as handle:
-                handle.write(json.dumps(frame) + "\n")
-        except Exception as exc:
-            log.debug("grid capture skipped: %s", exc)
 
     def _capture_record(self) -> None:
         """Persist the replay tape alongside grid frames.
