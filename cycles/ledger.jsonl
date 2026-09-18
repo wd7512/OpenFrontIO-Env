@@ -16,3 +16,4 @@
 {"cycle": 20, "tiles": 2320, "troops": 254578, "winner": null, "decisions": 54, "memory_version": 20, "model": "opencode-go/deepseek-v4.1-flash", "max_decisions": 200}
 {"cycle": 21, "tiles": 0, "troops": 15095, "winner": null, "decisions": 130, "memory_version": 21, "model": "opencode-go/deepseek-v4.1-flash", "max_decisions": 200}
 {"cycle": 22, "tiles": 0, "troops": 13130, "winner": null, "decisions": 99, "memory_version": 22, "model": "opencode-go/deepseek-v4.1-flash", "max_decisions": 200}
+{"cycle": 23, "tiles": 90338, "troops": 745067, "winner": null, "decisions": 200, "memory_version": 23, "model": "opencode-go/deepseek-v4.1-flash", "max_decisions": 200}
