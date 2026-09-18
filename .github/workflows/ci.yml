@@ -35,5 +35,12 @@ jobs:
         run: uv run ty check
       - name: Test
         run: uv run pytest
+      - name: Harbor + docker skeleton checks (guarded)
+        run: |
+          if [ -f scripts/build-openfront.sh ]; then bash scripts/build-openfront.sh --dry-run; fi
+          if [ -f pyproject.toml ] && grep -q openfront-harbor pyproject.toml; then uv run openfront-harbor preflight; fi
+      - name: Lit-review structure (guarded)
+        run: |
+          for t in tests/test_lit_review.py tests/test_lit_batch.py tests/test_lit_synthesis.py tests/test_lit_watch.py; do if [ -f "$t" ]; then uv run pytest "$t" -q; fi; done
       - name: Build
         run: uv build

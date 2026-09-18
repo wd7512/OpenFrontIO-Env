@@ -36,3 +36,11 @@ Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a requi
 - `.opencode/skills-available/brooks/` contains the full opt-in brooks-lint review suite.
 - `.opencode/plugins/write-size-guard.ts` prevents oversized generated writes.
 - `.opencode/plugins-available/` contains optional telemetry plugins that can be copied into `.opencode/plugins/` when desired.
+
+## Overhaul tracks
+
+- Python 3.12 + harbor==0.21.0 required (see pyproject when merged).
+- Docker base: `docker/openfront/Dockerfile`; check via `scripts/build-openfront.sh --dry-run`.
+- Harbor skeleton: `uv run openfront-harbor preflight/plan/reconcile/evidence --help`.
+- Lit-review: `docs/lit-review/README.md`; dry-run batch only, lit-watch scoped commits.
+- All overhaul paths are merge-guarded: skip cleanly when files are absent.
