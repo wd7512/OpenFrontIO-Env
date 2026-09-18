@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp.engine import EngineWorker, PLAINS_MAP_DIR
-from openfront_mcp.session import GameSession
+from openfrontbench.engine import EngineWorker, PLAINS_MAP_DIR
+from openfrontbench.session import GameSession
 
 
 def test_capture_writes_one_frame_per_decision(tmp_path, monkeypatch) -> None:

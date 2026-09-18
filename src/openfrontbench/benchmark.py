@@ -1,6 +1,6 @@
 """Keyless episode CLI over a real MCP stdio server.
 
-``python -m openfront_mcp.benchmark --config <json> --output <dir>`` runs an
+``python -m openfrontbench.benchmark --config <json> --output <dir>`` runs an
 episode (start, overview, decisions, overview, close) against the packaged
 MCP server over a real stdio transport, then writes ``result.json``,
 ``trace.jsonl`` and ``manifest.json`` atomically into a fresh output
@@ -9,7 +9,7 @@ and every tool request/result/error is traced in order with its decision
 id and simulation tick.
 
 Process lives here; domain specifics arrive via an ``EpisodeDriver`` (see
-``openfront_mcp.episodes``). The default driver is the pinned single-human
+``openfrontbench.episodes``). The default driver is the pinned single-human
 smoke episode (``episodes.smoke.SMOKE_DRIVER``) — the single worked example.
 """
 
@@ -31,9 +31,9 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
-from openfront_mcp.episodes import EpisodeDriver
-from openfront_mcp.episodes.smoke import SMOKE_DRIVER
-from openfront_mcp.paths import REPO_ROOT
+from openfrontbench.episodes import EpisodeDriver
+from openfrontbench.episodes.smoke import SMOKE_DRIVER
+from openfrontbench.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
 CONFIG_KEYS = frozenset({"version", "scenario", "controller", "max_decisions"})
@@ -476,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     parser = argparse.ArgumentParser(
-        prog="python -m openfront_mcp.benchmark",
+        prog="python -m openfrontbench.benchmark",
         description="Run a keyless episode over real MCP stdio "
         "(default driver: smoke episode).",
     )

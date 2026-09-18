@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp.paths import REPO_ROOT
+from openfrontbench.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
 

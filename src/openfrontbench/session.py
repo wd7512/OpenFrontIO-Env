@@ -1,7 +1,7 @@
 """Server-side game session: one real engine worker per server lifespan.
 
 ``GameSession`` owns the boundary between the MCP tool layer and the real
-engine worker (``openfront_mcp.engine.EngineWorker``). One worker is created
+engine worker (``openfrontbench.engine.EngineWorker``). One worker is created
 per server lifespan and reaped when the lifespan closes; all public entry
 points are serialized through a lock because ``EngineWorker`` is strictly
 sequential.
@@ -18,7 +18,7 @@ import os
 import threading
 from typing import Any, Callable
 
-from openfront_mcp.engine import DIFFICULTIES, MAP_NAMES, MAPS, EngineWorker
+from openfrontbench.engine import DIFFICULTIES, MAP_NAMES, MAPS, EngineWorker
 
 log = logging.getLogger(__name__)
 

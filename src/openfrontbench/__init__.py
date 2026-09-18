@@ -2,7 +2,7 @@
 
 Mirrors the civ6-mcp shape (server + narration + evals) against the vendored
 upstream core. See docs/openfront-framework.md. Tools are plain functions in
-openfront_mcp.server.TOOLS and are registered on a real FastMCP stdio server
+openfrontbench.server.TOOLS and are registered on a real FastMCP stdio server
 named "openfront-mcp".
 """
 

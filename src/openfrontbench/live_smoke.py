@@ -10,13 +10,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp.opencode_launcher import (
+from openfrontbench.opencode_launcher import (
     McpServerSpec,
     PROVIDER_BASE_URLS,
     launch_playing_agent,
     redact,
 )
-from openfront_mcp.paths import REPO_ROOT
+from openfrontbench.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
 DEFAULT_PROVIDER = "openrouter"
@@ -256,7 +256,7 @@ def run(
     python_bin = sys.executable
     if not Path(python_bin).is_absolute():
         raise ValueError("python executable path is not absolute")
-    wrapper = REPO_ROOT / "src" / "openfront_mcp" / "mcp_scrub_wrapper.py"
+    wrapper = REPO_ROOT / "src" / "openfrontbench" / "mcp_scrub_wrapper.py"
     mcp = McpServerSpec(
         name="game",
         command=(python_bin, str(wrapper)),

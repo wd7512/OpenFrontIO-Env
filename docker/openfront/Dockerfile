@@ -5,7 +5,7 @@
 # local-only tags, no secrets baked in.
 #
 # The layout mirrors the repo root: the harness resolves paths from its own
-# location (src/openfront_mcp/paths.py), so WORKDIR /app must hold
+# location (src/openfrontbench/paths.py), so WORKDIR /app must hold
 # pyproject.toml, src/, engine/, vendor/ and examples/ side by side.
 #
 # Build with scripts/build-openfront.sh (local tags only, never pushed).
@@ -61,7 +61,7 @@ COPY docs/pins.md ./docs/pins.md
 
 # Build-time verification; any failure stops the build:
 # 1. the engine bundle was produced,
-# 2. the compiled-in vendor pin (src/openfront_mcp/pins.py) is recorded in
+# 2. the compiled-in vendor pin (src/openfrontbench/pins.py) is recorded in
 #    docs/pins.md,
 # 3. no secret files leaked into the image (only the explicit COPYs above
 #    run, so .env files can never arrive here; this guard says so plainly).
@@ -72,7 +72,7 @@ COPY docs/pins.md ./docs/pins.md
 # cross-checked in step 2 and re-checked against the context by
 # scripts/build-openfront.sh before the build starts.
 RUN test -f engine/dist/worker.mjs \
-    && PIN="$(uv run --no-sync python -c "from openfront_mcp.pins import VENDOR_PIN; print(VENDOR_PIN)")" \
+    && PIN="$(uv run --no-sync python -c "from openfrontbench.pins import VENDOR_PIN; print(VENDOR_PIN)")" \
     && grep -q -F "$PIN" docs/pins.md \
     && echo "vendor pin OK: $PIN" \
     && (test -e vendor/OpenFrontIO/.git || (git init -q vendor/OpenFrontIO && echo "$PIN" > vendor/OpenFrontIO/.git/HEAD)) \
@@ -82,4 +82,4 @@ RUN test -f engine/dist/worker.mjs \
 
 # No EXPOSE: the harness speaks MCP over stdio and serves no ports.
 # Boring default: show the keyless smoke CLI help (exits 0, needs nothing).
-CMD ["uv", "run", "--no-sync", "python", "-m", "openfront_mcp.benchmark", "--help"]
+CMD ["uv", "run", "--no-sync", "python", "-m", "openfrontbench.benchmark", "--help"]

@@ -5,7 +5,7 @@ Two real integration surfaces, no engine mocks:
 1. The four lifecycle tools (start_smoke_game / get_overview / end_decision /
    close_game) are driven over a real stdio MCP session against the packaged
    server, with a real pinned-engine worker behind the server lifespan.
-2. The keyless episode CLI (`python -m openfront_mcp.benchmark --config
+2. The keyless episode CLI (`python -m openfrontbench.benchmark --config
    examples/smoke.json --output <dir>`) drives that same MCP server over real
    stdio and writes result.json / trace.jsonl / manifest.json atomically into
    a fresh directory. No LLM, no API key, no engine import in the CLI: it
@@ -30,7 +30,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
-from openfront_mcp import benchmark
+from openfrontbench import benchmark
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_CONFIG = REPO_ROOT / "examples" / "smoke.json"
@@ -50,7 +50,7 @@ def _server_params() -> StdioServerParameters:
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if p)
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "openfront_mcp"],
+        args=["-m", "openfrontbench"],
         env=env,
         cwd=str(REPO_ROOT),
     )
@@ -367,7 +367,7 @@ def _cli(
         [
             sys.executable,
             "-m",
-            "openfront_mcp.benchmark",
+            "openfrontbench.benchmark",
             "--config",
             str(config),
             "--output",
@@ -696,7 +696,7 @@ def test_run_episode_exits_nonzero_on_vendor_pin_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "openfront_mcp.episodes.smoke._actual_vendor_pin", lambda: "0" * 40
+        "openfrontbench.episodes.smoke._actual_vendor_pin", lambda: "0" * 40
     )
     cfg = _tiny_smoke_config(tmp_path)
     output = tmp_path / "out"

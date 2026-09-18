@@ -14,7 +14,7 @@ _SCRUB_KEYS = (
 for _key in _SCRUB_KEYS:
     os.environ.pop(_key, None)
 
-from openfront_mcp.server import main  # noqa: E402
+from openfrontbench.server import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

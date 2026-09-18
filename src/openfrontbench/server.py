@@ -19,8 +19,8 @@ from typing import Any, AsyncIterator
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import StrictInt
 
-from openfront_mcp import pins as _pins
-from openfront_mcp.session import (
+from openfrontbench import pins as _pins
+from openfrontbench.session import (
     MAX_TOOL_NATIONS,
     MAX_TOOL_TRIBES,
     GameSession,

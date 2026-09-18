@@ -20,7 +20,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp.paths import REPO_ROOT
+from openfrontbench.paths import REPO_ROOT
 
 logger = logging.getLogger(__name__)
 DEFAULT_ENGINE_DIR = REPO_ROOT / "engine"

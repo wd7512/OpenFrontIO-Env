@@ -1,6 +1,6 @@
 """Real stdio MCP handshake/discovery against the packaged server.
 
-Spawn the openfront_mcp server as a subprocess over stdio, complete the
+Spawn the openfrontbench server as a subprocess over stdio, complete the
 MCP initialize handshake, and read back tools/list. This is the integration
 boundary the whole benchmark depends on: the agent client only ever talks
 to the engine through this transport.
@@ -22,7 +22,7 @@ def _server_params() -> StdioServerParameters:
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if p)
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "openfront_mcp"],
+        args=["-m", "openfrontbench"],
         env=env,
     )
 

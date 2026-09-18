@@ -77,7 +77,7 @@ fi
 
 # Cross-check the pin before building: the compiled-in pin, the checkout,
 # and docs/pins.md must all agree (the Dockerfile re-checks at build time).
-EXPECTED_PIN="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from openfront_mcp.pins import VENDOR_PIN; print(VENDOR_PIN)' "$REPO_ROOT/src")"
+EXPECTED_PIN="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from openfrontbench.pins import VENDOR_PIN; print(VENDOR_PIN)' "$REPO_ROOT/src")"
 ACTUAL_PIN="$(git -C "$REPO_ROOT/vendor/OpenFrontIO" rev-parse HEAD)"
 if [ "$EXPECTED_PIN" != "$ACTUAL_PIN" ]; then
   echo "FATAL: vendor pin mismatch: pins.py=$EXPECTED_PIN checkout=$ACTUAL_PIN" >&2

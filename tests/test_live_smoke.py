@@ -6,14 +6,14 @@ from unittest.mock import patch
 
 import pytest
 
-from openfront_mcp.live_smoke import load_settings, run
-from openfront_mcp.live_mcp import AuditedSession
+from openfrontbench.live_smoke import load_settings, run
+from openfrontbench.live_mcp import AuditedSession
 
 
 def test_missing_key_before_launch(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text("OPENFRONT_MODEL=openrouter/stealth/union-alpha\n")
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         with pytest.raises(ValueError, match="key"):
             run(env, tmp_path / "output", 10)
         launch.assert_not_called()
@@ -56,7 +56,7 @@ def test_run_forwards_models_cache_source(tmp_path):
     )
     cache = tmp_path / "models.json"
     cache.write_text("{}", encoding="utf-8")
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         launch.return_value = SimpleNamespace(
             process=SimpleNamespace(
                 stdout="", stderr="", returncode=0, timed_out=False
@@ -78,8 +78,8 @@ def test_run_auto_cache_missing_means_none(tmp_path):
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
     with (
-        patch("openfront_mcp.live_smoke.launch_playing_agent") as launch,
-        patch("openfront_mcp.live_smoke._default_models_cache", return_value=None),
+        patch("openfrontbench.live_smoke.launch_playing_agent") as launch,
+        patch("openfrontbench.live_smoke._default_models_cache", return_value=None),
     ):
         launch.return_value = SimpleNamespace(
             process=SimpleNamespace(
@@ -108,7 +108,7 @@ def _tool_event(tool: str, result: dict) -> str:
 
 
 def test_summarise_captures_winner_from_overviews():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     stdout = "\n".join(
         [
@@ -123,7 +123,7 @@ def test_summarise_captures_winner_from_overviews():
 
 
 def test_summarise_winner_is_null_when_never_declared():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     stdout = "\n".join(
         [
@@ -135,7 +135,7 @@ def test_summarise_winner_is_null_when_never_declared():
 
 
 def test_build_solo_prompt_names_solo_game_and_cap():
-    from openfront_mcp.live_smoke import build_solo_prompt
+    from openfrontbench.live_smoke import build_solo_prompt
 
     prompt = build_solo_prompt(20)
     assert "game_start_solo_game" in prompt
@@ -154,13 +154,13 @@ def test_build_solo_prompt_names_solo_game_and_cap():
 
 
 def test_build_solo_prompt_impossible_names_difficulty():
-    from openfront_mcp.live_smoke import build_solo_prompt
+    from openfrontbench.live_smoke import build_solo_prompt
 
     assert '"impossible"' in build_solo_prompt(40, "impossible")
 
 
 def test_prompts_live_in_md_files():
-    from openfront_mcp.live_smoke import PROMPTS_DIR, load_prompt
+    from openfrontbench.live_smoke import PROMPTS_DIR, load_prompt
 
     assert (PROMPTS_DIR / "solo.md").is_file()
     rendered = load_prompt("solo", difficulty="easy", max_decisions=20, memory_block="")
@@ -169,7 +169,7 @@ def test_prompts_live_in_md_files():
 
 
 def test_run_rejects_bad_difficulty(tmp_path):
-    from openfront_mcp.live_smoke import run
+    from openfrontbench.live_smoke import run
 
     env = tmp_path / ".env.local"
     env.write_text(
@@ -188,7 +188,7 @@ def test_run_rejects_bad_bounds(tmp_path):
         "OPENFRONT_PROVIDER=openrouter\n"
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         with pytest.raises(ValueError, match="max_decisions"):
             run(env, tmp_path / "o2", 10, max_decisions=0)
         with pytest.raises(ValueError, match="max_decisions"):
@@ -203,7 +203,7 @@ def test_run_solo_uses_solo_prompt(tmp_path):
         "OPENFRONT_PROVIDER=openrouter\n"
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         launch.return_value = SimpleNamespace(
             process=SimpleNamespace(
                 stdout="", stderr="", returncode=0, timed_out=False
@@ -218,7 +218,7 @@ def test_run_solo_uses_solo_prompt(tmp_path):
 
 
 def test_summarise_unwraps_nested_result_envelope():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     def tool_event(tool, payload, start, end):
         inner = json.dumps({"result": json.dumps(payload)})

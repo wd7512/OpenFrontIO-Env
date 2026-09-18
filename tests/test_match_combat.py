@@ -24,7 +24,7 @@ def _server_params() -> StdioServerParameters:
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if p)
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "openfront_mcp"],
+        args=["-m", "openfrontbench"],
         env=env,
     )
 
@@ -134,7 +134,7 @@ def test_boat_attack_validation() -> None:
 
 
 def test_tribes_projection_lists_only_bordering() -> None:
-    from openfront_mcp.session import GameSession
+    from openfrontbench.session import GameSession
 
     session = GameSession()
     session._scenario = "test"

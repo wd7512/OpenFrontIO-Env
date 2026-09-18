@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp import pins as _pins
-from openfront_mcp.engine import DEFAULT_ENGINE_DIR, PLAINS_MAP_DIR
-from openfront_mcp.paths import REPO_ROOT
-from openfront_mcp.session import SMOKE_SCENARIO
+from openfrontbench import pins as _pins
+from openfrontbench.engine import DEFAULT_ENGINE_DIR, PLAINS_MAP_DIR
+from openfrontbench.paths import REPO_ROOT
+from openfrontbench.session import SMOKE_SCENARIO
 
 ENGINE_BUNDLE_REL = "engine/dist/worker.mjs"
 MAP_ASSET_DIR = "vendor/OpenFrontIO/tests/testdata/maps/plains"
@@ -53,7 +53,7 @@ class SmokeDriver:
     controller: str = "scripted"
     allowed_scenarios: frozenset[str] = frozenset({SMOKE_SCENARIO})
     allowed_controllers: frozenset[str] = frozenset({"scripted"})
-    server_module: str = "openfront_mcp"
+    server_module: str = "openfrontbench"
     decision_tool: str = "end_decision"
     source: str = "scripted_not_llm"
     completion_reason: str = "scripted maximum decisions reached"

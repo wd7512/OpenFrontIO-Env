@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp.session import GameSession, SessionError
+from openfrontbench.session import GameSession, SessionError
 
 MAX_DECISIONS = 3
 

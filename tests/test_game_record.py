@@ -12,7 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from openfront_mcp.engine import EngineWorker, PLAINS_MAP_DIR
+from openfrontbench.engine import EngineWorker, PLAINS_MAP_DIR
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONVERTER = REPO_ROOT / "scripts" / "build_game_record.ts"

@@ -1,5 +1,5 @@
 [project]
-name = "python-template"
+name = "openfrontbench"
 version = "0.1.0"
 description = "OpenFrontBench: a keyless MCP benchmark harness over the pinned OpenFrontIO engine."
 readme = "README.md"

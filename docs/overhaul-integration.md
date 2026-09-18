@@ -25,7 +25,7 @@ mainline merge below. CI and agent wiring were merge-guarded
    harbor-skeleton → lit-review → integration wiring.
 2. `origin/main` merged into `research_overhaul`: main had pruned to the
    smoke gate + EU solo experiment (deleted `prompts/match.md`,
-   `prompts/campaign.md`, `prompts/smoke.md`, `src/openfront_mcp/scenarios.py`,
+   `prompts/campaign.md`, `prompts/smoke.md`, `src/openfrontbench/scenarios.py`,
    `list_scenarios`; renamed the playing agent Smoke → Agent). The only
    manual resolution was `tests/test_live_smoke.py` (main's solo-only
    `run()` signature + the branch's tmp-env hardening). Research

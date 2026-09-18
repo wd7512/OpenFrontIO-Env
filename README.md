@@ -20,7 +20,7 @@ in `docs/pins.md` and verified by the manifest at runtime.
 ## Smoke episode CLI (no LLM, no API key)
 
 ```bash
-uv run python -m openfront_mcp.benchmark --config examples/smoke.json --output <fresh-dir>
+uv run python -m openfrontbench.benchmark --config examples/smoke.json --output <fresh-dir>
 ```
 
 Exits 0 and writes three artifacts into `<fresh-dir>`:

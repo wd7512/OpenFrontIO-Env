@@ -10,7 +10,7 @@ option).
 
 from pathlib import Path
 
-from openfront_mcp.engine import EngineWorker
+from openfrontbench.engine import EngineWorker
 
 WORLD = (
     Path(__file__).resolve().parent.parent

@@ -17,8 +17,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from openfront_mcp import opencode_launcher as ol
-from openfront_mcp.paths import REPO_ROOT
+from openfrontbench import opencode_launcher as ol
+from openfrontbench.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 # would blow the token budget this cycle exists to control.
 COACH_SOURCES: tuple[str, ...] = (
     "engine/worker.ts",
-    "src/openfront_mcp/session.py",
+    "src/openfrontbench/session.py",
 )
 
 MEMORY_FILENAME = "memory.md"

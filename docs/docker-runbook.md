@@ -17,7 +17,7 @@ scripts/build-openfront.sh --dry-run   # print the docker commands only
 ```
 
 The tag defaults to the git short SHA, else `local`. The script first
-cross-checks the vendor pin (`src/openfront_mcp/pins.py` vs the
+cross-checks the vendor pin (`src/openfrontbench/pins.py` vs the
 `vendor/OpenFrontIO` checkout vs `docs/pins.md`, all must agree), then runs
 `docker buildx build --platform linux/amd64 --load`, and finally asserts
 `docker inspect {{.Architecture}}` reports `amd64`, failing otherwise.
@@ -25,7 +25,7 @@ cross-checks the vendor pin (`src/openfront_mcp/pins.py` vs the
 ## Smoke (keyless, inside the container)
 
 ```bash
-docker run --rm openfront-env:local uv run --no-sync python -m openfront_mcp.benchmark --config examples/smoke.json --output /tmp/smoke-out
+docker run --rm openfront-env:local uv run --no-sync python -m openfrontbench.benchmark --config examples/smoke.json --output /tmp/smoke-out
 ```
 
 `/tmp/smoke-out` is fresh on every container start, which the CLI requires
@@ -36,7 +36,7 @@ write under a fresh subdir:
 
 ```bash
 mkdir -p .smoke && docker run --rm -v "$PWD/.smoke:/out" openfront-env:local \
-  uv run --no-sync python -m openfront_mcp.benchmark --config examples/smoke.json --output /out/run1
+  uv run --no-sync python -m openfrontbench.benchmark --config examples/smoke.json --output /out/run1
 ```
 
 ## Arch notes

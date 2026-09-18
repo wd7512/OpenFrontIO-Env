@@ -10,7 +10,7 @@ PubMed out of scope). See `seed.bib` for citations.*
 
 **OpenFrontBench** is a keyless MCP benchmark harness over the pinned real
 OpenFrontIO engine (`vendor/OpenFrontIO` @ `v0.33.14`, see `docs/pins.md`).
-Stack: Python MCP server (FastMCP, `src/openfront_mcp/server.py`), persistent
+Stack: Python MCP server (FastMCP, `src/openfrontbench/server.py`), persistent
 Node/TS JSONL worker over production core (`engine/`), narration + telemetry
 in Python (`narrate.py`, `metrics.py`, `diary.py`).
 
@@ -23,7 +23,7 @@ Design constraints from `docs/openfrontbench-task-spec.md`:
   (engine/map/config/playbook hashes), full `trace.jsonl` + offline rescore.
 - Five-field diary + versioned playbook; isolated per-run OpenCode config;
   no shell/file/network tools for the playing agent beyond game MCP.
-- Behavioural metrics ported from CivBench (`src/openfront_mcp/metrics.py`,
+- Behavioural metrics ported from CivBench (`src/openfrontbench/metrics.py`,
   `evals/metrics.py`): **PMR** = monitoring/non-infra calls,
   **RAG@K** = (Y + 0.5P)/commitments over next-K decisions.
 - Current slice (`README.md`): `plains-human-smoke` only — one human, no

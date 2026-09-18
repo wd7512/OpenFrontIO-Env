@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from openfront_mcp import benchmark
-from openfront_mcp.episodes.smoke import SMOKE_DRIVER
+from openfrontbench import benchmark
+from openfrontbench.episodes.smoke import SMOKE_DRIVER
 
 
 @dataclass(frozen=True)
