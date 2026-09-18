@@ -58,17 +58,26 @@ def load_settings(env_file: Path | str) -> dict[str, str]:
     return parse_dotenv(path.read_text(encoding="utf-8"))
 
 
+PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+
+
+def load_prompt(name: str, **values: Any) -> str:
+    """Render a prompt template from ``prompts/<name>.md``.
+
+    Templates use ``str.format`` placeholders (``{steps}``,
+    ``{max_decisions}``, ``{difficulty}``, ``{memory_block}``). Literal
+    braces in prompt text must be doubled in the .md file.
+    """
+    template = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+    return template.format(**values).strip()
+
+
 def build_smoke_prompt(max_decisions: int = 3) -> str:
     steps = ["game_start_smoke_game", "game_get_overview"]
     steps += [f"game_end_decision (decision={n})" for n in range(1, max_decisions + 1)]
     steps += ["game_get_overview", "game_close_game"]
-    lines = [
-        "Play one single-human smoke scenario to completion using only game MCP tools.",
-        "Do exactly these tool calls in order:",
-        *[f"- {s}" for s in steps],
-        "Then stop. Report decisions and ticks briefly.",
-    ]
-    return "\n".join(lines)
+    rendered_steps = "\n".join(f"- {s}" for s in steps)
+    return load_prompt("smoke", steps=rendered_steps)
 
 
 def build_match_prompt(max_decisions: int = 6) -> str:
@@ -80,112 +89,30 @@ def build_match_prompt(max_decisions: int = 6) -> str:
             f"game_end_decision (decision={n})",
         ]
     steps += ["game_get_overview", "game_close_game"]
-    lines = [
-        "Play one 1v1 match (your human vs one nation) to completion using only "
-        "game MCP tools. Each decision, IN ORDER: FIRST game_get_overview to "
-        "see both sides (never order blind — a previous game was lost playing "
-        "100 decisions with 2 observations), THEN game_order_attack (target "
-        "must be exactly 'expand', troops HALF your current troops — scale up "
-        "as you grow, never a fixed small number), "
-        "THEN advance 50 ticks with game_end_decision. The overview also shows "
-        "your live attacks and the winner.",
-        "ATTACK THE NATION: once it borders you and is not immune, strike it "
-        "with game_order_attack using its nation id and most of your troops "
-        "(up to three quarters) instead of expanding that decision. Repeat "
-        "until it is eliminated — expanding forever while it outgrows you is "
-        "defeat. Keep playing until you WIN or DIE; ending early is failure. "
-        "Only call game_close_game after the winner is declared, then report.",
-        "Do exactly these tool calls in order (start_1v1_game takes no arguments):",
-        *[f"- {s}" for s in steps],
-        "Then stop. Report each side's tiles and troops per decision, whether "
-        "your attacks landed, and the winner if one is declared.",
-    ]
-    return "\n".join(lines)
+    rendered_steps = "\n".join(f"- {s}" for s in steps)
+    return load_prompt("match", steps=rendered_steps)
 
 
 def build_solo_prompt(
     max_decisions: int = 20, difficulty: str = "easy", memory: str | None = None
 ) -> str:
-    lines = [
-        "Play one default solo game (your human vs 400 tribes and 52 nations "
-        f"on full Europe, bots at {difficulty} difficulty) using only game "
-        "MCP tools. Phases, triggered by what you observe:",
-        "PHASE 1 — EXPAND: while your tile count is still growing between "
-        "decisions, call game_order_attack (target exactly 'expand', troops a "
-        "positive integer never more than half your current troops), then "
-        "game_end_decision with the next decision integer.",
-        "TRIBES: tribes (tribe-1 .. tribe-400 in get_overview tribes_list) "
-        "are attackable with game_order_attack once one shows "
-        "borders_human true — they never have immunity, and clearing them "
-        "is safe expansion. Prefer tribes over nations while tiles grow. "
-        "tribes_list shows only bordering tribes (the only attackable "
-        "ones); the tribes count tracks the rest.",
-        "PHASE 2 — ATTACK NATIONS: only when BOTH hold: (a) your tiles have "
-        "stalled across two consecutive overviews (expansion exhausted, "
-        "fronts met), AND (b) a nation shows borders_human true AND immune "
-        "false in get_overview. Then ONE decisive strike: game_order_attack "
-        "with that nation's id and most of your troops (up to three "
-        "quarters), not repeated small waves — repeated half-troop waves "
-        "bleed out while nations outproduce you. Then game_end_decision as "
-        "before.",
-        "BUILD: when gold exceeds 150000, buy game_order_build unit "
-        "'defense-post' at your spawn tile (x, y from get_overview human "
-        "spawn). Cities at 125000+ if richer. Check get_overview units to "
-        "confirm. Upgrade the city once with game_order_upgrade_unit when "
-        "gold allows.",
-        "DIPLOMACY (optional): game_order_embargo can pressure a bordering "
-        "nation (action start/stop). Alliance requests and donations exist "
-        "but nations rarely answer — do not rely on them.",
-        "Cancel a mistargeted attack with game_order_cancel_attack (id from "
-        "attacks). Boats and warships need shore + water you cannot see — "
-        "skip them unless adjacent water is obvious from your growth.",
-        "Start with game_start_solo_game with difficulty "
-        f'"{difficulty}" (no other arguments) and one game_get_overview. '
-        "Check game_get_overview whenever you need the "
-        "state. Keep playing until you WIN (winner is you) or DIE (you are "
-        "eliminated) — that is the only acceptable end. "
-        f"{max_decisions} is a hard ceiling, not a target: ending before a "
-        "win or elimination is failure. Only call game_close_game after a "
-        "win or elimination, then report.",
-        "Then stop. Report tiles and troops per phase, tribe kills, when "
-        "contact happened, whether nation attacks landed, what you built, "
-        "and the winner if declared.",
-    ]
     if memory and memory.strip():
-        lines.append(
+        memory_block = (
             "NOTES FROM A PREVIOUS MATCH (same format, learned the hard way — "
             "follow what worked, avoid what failed):\n" + memory.strip()
         )
-    return "\n".join(lines)
+    else:
+        memory_block = ""
+    return load_prompt(
+        "solo",
+        difficulty=difficulty,
+        max_decisions=max_decisions,
+        memory_block=memory_block,
+    )
 
 
 def build_campaign_prompt(max_decisions: int = 45) -> str:
-    lines = [
-        "Play one full 1v1 campaign (your human vs one nation) using only game "
-        "MCP tools. Two phases, triggered by what you observe:",
-        "PHASE 1 — EXPAND: while your tile count is still growing between "
-        "decisions, call game_order_attack (target exactly 'expand', troops a "
-        "positive integer never more than half your current troops), then "
-        "game_end_decision with the next decision integer.",
-        "PHASE 2 — ATTACK: only when BOTH hold: (a) your tiles have stalled "
-        "across two consecutive overviews (expansion exhausted, fronts met), "
-        "AND (b) a nation shows borders_human true AND immune false in "
-        "get_overview. Then switch the order to game_order_attack with target "
-        "exactly 'nation-1' and half your troops, then game_end_decision as "
-        "before. Repeat every decision. Border contact alone is NOT enough — "
-        "attacking early with small waves bleeds your troops while the nation "
-        "outgrows you. Never order nation-1 while it is immune or does not "
-        "border you — the order fizzles.",
-        "Start with game_start_1v1_game (no arguments) and one "
-        "game_get_overview. Check game_get_overview whenever you need the "
-        "state. End with game_get_overview and game_close_game. "
-        f"Play all {max_decisions} decisions unless a winner is declared sooner. "
-        "Never call game_close_game early: keep playing until the decision "
-        "count is reached or the game declares a winner.",
-        "Then stop. Report tiles and troops per phase, when contact happened, "
-        "whether your nation attacks landed, and the winner if declared.",
-    ]
-    return "\n".join(lines)
+    return load_prompt("campaign", max_decisions=max_decisions)
 
 
 def _summarise_events(stdout: str) -> dict[str, Any]:

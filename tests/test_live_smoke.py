@@ -194,6 +194,15 @@ def test_build_solo_prompt_impossible_names_difficulty():
     assert '"impossible"' in build_solo_prompt(40, "impossible")
 
 
+def test_prompts_live_in_md_files():
+    from openfront_mcp.live_smoke import PROMPTS_DIR, load_prompt
+
+    assert (PROMPTS_DIR / "solo.md").is_file()
+    rendered = load_prompt("solo", difficulty="easy", max_decisions=20, memory_block="")
+    assert "400 tribes" in rendered and "52 nations" in rendered
+    assert "{difficulty}" not in rendered and "{memory_block}" not in rendered
+
+
 def test_run_rejects_bad_difficulty(tmp_path):
     from openfront_mcp.live_smoke import run
 
