@@ -30,11 +30,11 @@
   },
   "agent": {
     "python-engineer": {
-      "description": "Implements small, well-tested Python changes using uv, ruff, ty, and pytest.",
+      "description": "Implements small, well-tested Python changes using TDD, SOLID, uv, ruff, ty, and pytest.",
       "mode": "subagent"
     },
     "research": {
-      "description": "Read-only research agent for academic docs via CrossRef, OpenAlex, and PubMed MCPs.",
+      "description": "Read-only research agent for academic docs and dependency research via CrossRef, OpenAlex, and PubMed MCPs.",
       "mode": "subagent",
       "model": "opencode-go/mimo-v2.5",
       "tools": {
