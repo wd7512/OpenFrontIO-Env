@@ -1,5 +1,0 @@
-{"id":1,"cmd":"start","mapDir":"../vendor/OpenFrontIO/tests/testdata/maps/plains","spawnX":50,"spawnY":50,"nations":0,"difficulty":"easy","mapSize":"full","tribes":0}
-{"id":2,"cmd":"advance","ticks":200}
-{"id":3,"cmd":"build","unit":"city","x":50,"y":50}
-{"id":4,"cmd":"advance","ticks":15}
-{"id":5,"cmd":"close"}

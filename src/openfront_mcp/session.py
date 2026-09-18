@@ -13,11 +13,14 @@ hashes, asset paths or internal ids.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 from typing import Any, Callable
 
 from openfront_mcp.engine import DIFFICULTIES, MAP_NAMES, MAPS, EngineWorker
+
+log = logging.getLogger(__name__)
 
 SMOKE_SCENARIO = "plains-human-smoke"
 SMOKE_LABEL = "single-human-smoke"
@@ -200,8 +203,8 @@ class GameSession:
             path = os.path.join(grid_dir, "grids.jsonl")
             with open(path, "a", encoding="utf-8") as handle:
                 handle.write(json.dumps(frame) + "\n")
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("grid capture skipped: %s", exc)
 
     def _capture_record(self) -> None:
         """Persist the replay tape alongside grid frames.
@@ -215,8 +218,8 @@ class GameSession:
         try:
             assert self._engine is not None
             self._engine.save_record()
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("record capture skipped: %s", exc)
 
     def order_attack(self, target: object, troops: object) -> dict[str, Any]:
         """Order the human to expand or attack, then project the result.

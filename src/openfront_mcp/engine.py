@@ -20,9 +20,9 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from openfront_mcp.paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+logger = logging.getLogger(__name__)
 DEFAULT_ENGINE_DIR = REPO_ROOT / "engine"
 PLAINS_MAP_DIR = (
     REPO_ROOT / "vendor" / "OpenFrontIO" / "tests" / "testdata" / "maps" / "plains"

@@ -16,10 +16,9 @@ from openfront_mcp.opencode_launcher import (
     launch_playing_agent,
     redact,
 )
+from openfront_mcp.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROVIDER = "openrouter"
 KEY_ENV_BY_PROVIDER = {
     "openrouter": "OPENROUTER_API_KEY",

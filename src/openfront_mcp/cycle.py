@@ -18,10 +18,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from openfront_mcp import opencode_launcher as ol
+from openfront_mcp.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
-
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Curated sources the coach may study. Small on purpose: the whole repo
 # would blow the token budget this cycle exists to control.

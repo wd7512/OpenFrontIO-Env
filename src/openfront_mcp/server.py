@@ -19,6 +19,7 @@ from typing import Any, AsyncIterator
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import StrictInt
 
+from openfront_mcp import pins as _pins
 from openfront_mcp import scenarios as _scenarios
 from openfront_mcp.session import (
     MAX_TOOL_NATIONS,
@@ -29,7 +30,7 @@ from openfront_mcp.session import (
 
 log = logging.getLogger(__name__)
 
-PIN = "v0.33.14 (577819ba0e1e13ecdbc8dede2ba33de542c88a67)"
+PIN = f"{_pins.VENDOR_TAG} ({_pins.VENDOR_PIN})"
 CORE_SCOPE = "src/core only; client/server untouched"
 
 

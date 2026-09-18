@@ -30,11 +30,10 @@ from mcp.types import TextContent
 
 from openfront_mcp import pins as _pins
 from openfront_mcp.engine import DEFAULT_ENGINE_DIR, PLAINS_MAP_DIR
+from openfront_mcp.paths import REPO_ROOT
 from openfront_mcp.session import SMOKE_SCENARIO
 
 log = logging.getLogger(__name__)
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_KEYS = frozenset({"version", "scenario", "controller", "max_decisions"})
 ALLOWED_SCENARIOS = frozenset({SMOKE_SCENARIO})
 ALLOWED_CONTROLLERS = frozenset({"scripted"})
