@@ -9,18 +9,15 @@
   "mcp": {
     "crossref": {
       "type": "local",
-      "command": ["npx", "-y", "@cyanheads/crossref-mcp-server"],
-      "enabled": false
+      "command": ["npx", "-y", "@cyanheads/crossref-mcp-server"]
     },
     "openalex": {
       "type": "local",
-      "command": ["npx", "-y", "openalex-research-mcp"],
-      "enabled": false
+      "command": ["npx", "-y", "openalex-research-mcp"]
     },
     "pubmed": {
       "type": "local",
-      "command": ["npx", "-y", "@cyanheads/pubmed-mcp-server"],
-      "enabled": false
+      "command": ["npx", "-y", "@cyanheads/pubmed-mcp-server"]
     }
   },
   "tools": {
