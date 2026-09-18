@@ -32,6 +32,7 @@ def _run(tmp_path: Path, name: str, game_id: str = "ENGINE01") -> Path:
             {
                 "model": "m",
                 "scenario": "solo",
+                "difficulty": "hard",
                 "summary": {
                     "decisions": [1, 2],
                     "ticks": [53, 103],
@@ -95,8 +96,15 @@ def test_index_links_every_game_to_client(tmp_path: Path) -> None:
         summaries[name]["game_id"] = gid
     index = mod.render_index(summaries, "http://localhost:9000").decode()
     assert "2 games" in index
+    assert "<td>hard</td>" in index
     for gid in ids.values():
         assert f"http://localhost:9000/w0/game/{gid}?spectate" in index
+
+
+def test_load_summary_reads_difficulty(tmp_path: Path) -> None:
+    mod = _mod()
+    run = _run(tmp_path, "a-run")
+    assert mod.load_summary(run)["difficulty"] == "hard"
 
 
 def test_archive_serves_records_and_404s(tmp_path: Path) -> None:

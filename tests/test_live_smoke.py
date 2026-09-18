@@ -70,6 +70,28 @@ def test_run_forwards_models_cache_source(tmp_path):
     assert kwargs["models_cache_source"] == cache
 
 
+def test_run_records_difficulty_in_payload(tmp_path):
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
+    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+        launch.return_value = SimpleNamespace(
+            process=SimpleNamespace(
+                stdout="", stderr="", returncode=0, timed_out=False
+            ),
+            run=SimpleNamespace(),
+            config={},
+            resolved_config=None,
+        )
+        run(env, tmp_path / "output", 10, difficulty="hard")
+    payload = json.loads((tmp_path / "output" / "live_result.json").read_text())
+    assert payload["difficulty"] == "hard"
+    assert payload["scenario"] == "solo"
+
+
 def test_run_auto_cache_missing_means_none(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text(

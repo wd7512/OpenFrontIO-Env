@@ -301,6 +301,7 @@ def run(
         "model": model,
         "provider": provider,
         "scenario": "solo",
+        "difficulty": difficulty,
         "max_decisions": max_decisions,
         "agent_root": str(agent_root),
         "timeout_s": float(timeout_s),

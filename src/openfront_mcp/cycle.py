@@ -215,23 +215,21 @@ def _git_status_lines(repo: Path | str) -> set[str]:
 
 
 def check_repo_clean(repo: Path | str, baseline: set[str] | None = None) -> None:
-    """Fail if the working tree gained changes outside ``cycles/``.
+    """Fail if the working tree gained ANY change during the coach window.
 
-    The coach works on copies in a temp dir, but its file tools accept
-    absolute paths — this is the backstop. ``baseline`` is the status
-    snapshot from before the coach ran, so pre-existing dirt is ignored;
-    only NEW entries outside ``cycles/`` fail the cycle loudly.
+    The coach works on copies in a temp dir and its file tools accept
+    absolute paths, so this is the backstop against it reaching into the
+    repo — including ``cycles/`` itself, where a stray write could silently
+    rewrite a memory file or the ledger. ``baseline`` is the status
+    snapshot from before the coach ran, so pre-existing dirt is ignored.
+    Safe to enforce strictly: ``coach_only`` saves the next memory version
+    only after this check passes, and play artifacts land in gitignored
+    ``raw/``, which never appears in ``git status``.
     """
     baseline = baseline or set()
-    bad = []
-    for line in _git_status_lines(repo) - baseline:
-        path = line[3:].strip().strip('"')
-        if not path.startswith("cycles/"):
-            bad.append(line)
+    bad = sorted(_git_status_lines(repo) - baseline)
     if bad:
-        raise CycleSafetyError(
-            "coach touched paths outside cycles/: " + "; ".join(bad[:5])
-        )
+        raise CycleSafetyError("coach touched the repository: " + "; ".join(bad[:5]))
 
 
 def coach_only(

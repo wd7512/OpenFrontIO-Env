@@ -89,6 +89,7 @@ def load_summary(run_dir: Path) -> dict[str, Any]:
     if isinstance(live, dict):
         summary["model"] = live.get("model")
         summary["scenario"] = live.get("scenario")
+        summary["difficulty"] = live.get("difficulty")
         summary["max_decisions"] = live.get("max_decisions")
         inner = live.get("summary", {})
         if isinstance(inner, dict):
@@ -219,6 +220,7 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
             f"<td>{html.escape(name)}</td>"
             f'<td><a href="{html.escape(link)}">{html.escape(str(s["game_id"]))} &#9654;</a></td>'
             f"{_cell(s.get('scenario'))}"
+            f"{_cell(s.get('difficulty'))}"
             f"{_cell(s.get('decisions'))}"
             f"<td>{ticks or '&mdash;'}</td>"
             f"{_cell(s.get('winner'))}"
@@ -239,7 +241,8 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
         '<p class="note">Links open the real client straight into the engine replay. '
         "Client must be running (<code>npm run start:client</code> in "
         "vendor/OpenFrontIO).</p>\n"
-        + "<table><tr><th>run</th><th>watch</th><th>scenario</th><th>decisions</th>\n"
+        + "<table><tr><th>run</th><th>watch</th><th>scenario</th><th>difficulty</th>\n"
+        "<th>decisions</th>"
         "<th>ticks</th><th>winner</th><th>tiles</th><th>troops</th><th>cost</th></tr>\n"
         + "".join(rows)
         + "\n</table></body></html>\n"

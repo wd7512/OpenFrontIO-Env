@@ -99,12 +99,24 @@ def _git_repo(path: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "init"], cwd=str(path), check=True)
 
 
-def test_check_repo_clean_ignores_baseline_and_cycles(tmp_path: Path) -> None:
+def test_check_repo_clean_ignores_baseline_only(tmp_path: Path) -> None:
     _git_repo(tmp_path)
     (tmp_path / "old-dirt.txt").write_text("pre-existing")
     baseline = cy._git_status_lines(tmp_path)
-    (tmp_path / "cycles" / "memory-v1.md").write_text("notes")
     cy.check_repo_clean(tmp_path, baseline)  # must not raise
+
+
+def test_check_repo_clean_fails_on_new_cycles_touch(tmp_path: Path) -> None:
+    import pytest
+
+    _git_repo(tmp_path)
+    baseline = cy._git_status_lines(tmp_path)
+    # Even cycles/ is guarded: a stray coach write there could silently
+    # rewrite a memory file or the ledger. The next version is saved only
+    # after this check passes.
+    (tmp_path / "cycles" / "memory-v9.md").write_text("coach was here")
+    with pytest.raises(cy.CycleSafetyError, match="coach touched the repository"):
+        cy.check_repo_clean(tmp_path, baseline)
 
 
 def test_check_repo_clean_fails_on_new_src_touch(tmp_path: Path) -> None:
@@ -113,7 +125,7 @@ def test_check_repo_clean_fails_on_new_src_touch(tmp_path: Path) -> None:
     _git_repo(tmp_path)
     baseline = cy._git_status_lines(tmp_path)
     (tmp_path / "tracked.txt").write_text("coach was here")
-    with pytest.raises(cy.CycleSafetyError, match="outside cycles/"):
+    with pytest.raises(cy.CycleSafetyError, match="coach touched the repository"):
         cy.check_repo_clean(tmp_path, baseline)
 
 
