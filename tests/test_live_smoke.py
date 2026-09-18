@@ -141,7 +141,8 @@ def test_build_match_prompt_orders_the_match_steps():
     for call in (
         "game_start_1v1_game",
         "game_get_overview",
-        "game_order_attack (target=expand, troops=5000)",
+        "game_get_overview (FIRST",
+        "game_order_attack (target=expand, troops=half your current troops)",
         "game_end_decision (decision=1)",
         "game_end_decision (decision=2)",
         "game_get_overview",
@@ -149,6 +150,10 @@ def test_build_match_prompt_orders_the_match_steps():
     ):
         assert call in prompt
     assert "game_end_decision (decision=3)" not in prompt
+    # Lesson: fixed small expands + never engaging loses 30:1. The prompt must
+    # demand scaling, nation attacks, and win-or-die.
+    assert "ATTACK THE NATION" in prompt
+    assert "WIN or DIE" in prompt
     assert prompt.index("game_order_attack") < prompt.index(
         "game_end_decision (decision=1)"
     )
@@ -177,6 +182,10 @@ def test_build_solo_prompt_names_solo_game_and_cap():
     assert "game_order_build" in prompt
     assert "game_order_cancel_attack" in prompt
     assert '"easy"' in prompt
+    # Win-or-die: the only acceptable end is victory or elimination, never
+    # an early close (the agent twice closed healthy games to "report").
+    assert "WIN" in prompt and "DIE" in prompt
+    assert "Only call game_close_game after a" in prompt
 
 
 def test_build_solo_prompt_impossible_names_difficulty():

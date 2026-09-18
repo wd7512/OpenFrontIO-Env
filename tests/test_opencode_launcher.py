@@ -152,6 +152,33 @@ def test_config_never_contains_the_key_literal(tmp_path: Path) -> None:
     assert "{env:ANTHROPIC_API_KEY}" in blob
 
 
+def test_config_custom_provider_carries_base_url_without_key(tmp_path: Path) -> None:
+    assert ol.PROVIDER_BASE_URLS["opencode-go"] == "https://opencode.ai/zen/go/v1"
+    assert ol.PROVIDER_BASE_URLS["opencode-zen"] == "https://opencode.ai/zen/v1"
+    cfg = ol.build_config(
+        model="opencode-go/muse-spark-1.3-contributor",
+        mcp=_mcp(tmp_path),
+        provider="opencode-go",
+        key_env_var="OPENCODE_API_KEY",
+        base_url=ol.PROVIDER_BASE_URLS["opencode-go"],
+    )
+    blob = json.dumps(cfg)
+    assert SECRET not in blob
+    options = cfg["provider"]["opencode-go"]["options"]
+    assert options["baseURL"] == "https://opencode.ai/zen/go/v1"
+    assert options["apiKey"] == "{env:OPENCODE_API_KEY}"
+
+
+def test_config_omits_base_url_for_built_in_providers(tmp_path: Path) -> None:
+    cfg = ol.build_config(
+        model=MODEL,
+        mcp=_mcp(tmp_path),
+        provider="anthropic",
+        key_env_var="ANTHROPIC_API_KEY",
+    )
+    assert "baseURL" not in cfg["provider"]["anthropic"]["options"]
+
+
 # ---------------------------------------------------------------------------
 # MCP spec
 # ---------------------------------------------------------------------------

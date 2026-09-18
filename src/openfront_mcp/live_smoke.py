@@ -12,6 +12,7 @@ from typing import Any
 
 from openfront_mcp.opencode_launcher import (
     McpServerSpec,
+    PROVIDER_BASE_URLS,
     launch_playing_agent,
     redact,
 )
@@ -24,6 +25,8 @@ KEY_ENV_BY_PROVIDER = {
     "openrouter": "OPENROUTER_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
+    "opencode-go": "OPENCODE_API_KEY",
+    "opencode-zen": "OPENCODE_ZEN_API_KEY",
 }
 
 
@@ -72,17 +75,26 @@ def build_match_prompt(max_decisions: int = 6) -> str:
     steps = ["game_start_1v1_game", "game_get_overview"]
     for n in range(1, max_decisions + 1):
         steps += [
-            "game_order_attack (target=expand, troops=5000)",
+            "game_get_overview (FIRST — size your order off what you see)",
+            "game_order_attack (target=expand, troops=half your current troops)",
             f"game_end_decision (decision={n})",
         ]
     steps += ["game_get_overview", "game_close_game"]
     lines = [
         "Play one 1v1 match (your human vs one nation) to completion using only "
-        "game MCP tools. Each decision: FIRST order expansion with "
-        "game_order_attack (target must be exactly 'expand', troops a positive "
-        "integer you can afford — never more than half your current troops), "
-        "THEN advance 50 ticks with game_end_decision. get_overview shows both "
-        "sides, your live attacks, and the winner.",
+        "game MCP tools. Each decision, IN ORDER: FIRST game_get_overview to "
+        "see both sides (never order blind — a previous game was lost playing "
+        "100 decisions with 2 observations), THEN game_order_attack (target "
+        "must be exactly 'expand', troops HALF your current troops — scale up "
+        "as you grow, never a fixed small number), "
+        "THEN advance 50 ticks with game_end_decision. The overview also shows "
+        "your live attacks and the winner.",
+        "ATTACK THE NATION: once it borders you and is not immune, strike it "
+        "with game_order_attack using its nation id and most of your troops "
+        "(up to three quarters) instead of expanding that decision. Repeat "
+        "until it is eliminated — expanding forever while it outgrows you is "
+        "defeat. Keep playing until you WIN or DIE; ending early is failure. "
+        "Only call game_close_game after the winner is declared, then report.",
         "Do exactly these tool calls in order (start_1v1_game takes no arguments):",
         *[f"- {s}" for s in steps],
         "Then stop. Report each side's tiles and troops per decision, whether "
@@ -91,7 +103,9 @@ def build_match_prompt(max_decisions: int = 6) -> str:
     return "\n".join(lines)
 
 
-def build_solo_prompt(max_decisions: int = 20, difficulty: str = "easy") -> str:
+def build_solo_prompt(
+    max_decisions: int = 20, difficulty: str = "easy", memory: str | None = None
+) -> str:
     lines = [
         "Play one default solo game (your human vs 400 tribes and 52 nations "
         f"on full Europe, bots at {difficulty} difficulty) using only game "
@@ -128,12 +142,20 @@ def build_solo_prompt(max_decisions: int = 20, difficulty: str = "easy") -> str:
         "Start with game_start_solo_game with difficulty "
         f'"{difficulty}" (no other arguments) and one game_get_overview. '
         "Check game_get_overview whenever you need the "
-        "state. End with game_get_overview and game_close_game. "
-        f"Play at most {max_decisions} decisions, then stop even if no winner.",
+        "state. Keep playing until you WIN (winner is you) or DIE (you are "
+        "eliminated) — that is the only acceptable end. "
+        f"{max_decisions} is a hard ceiling, not a target: ending before a "
+        "win or elimination is failure. Only call game_close_game after a "
+        "win or elimination, then report.",
         "Then stop. Report tiles and troops per phase, tribe kills, when "
         "contact happened, whether nation attacks landed, what you built, "
         "and the winner if declared.",
     ]
+    if memory and memory.strip():
+        lines.append(
+            "NOTES FROM A PREVIOUS MATCH (same format, learned the hard way — "
+            "follow what worked, avoid what failed):\n" + memory.strip()
+        )
     return "\n".join(lines)
 
 
@@ -157,7 +179,9 @@ def build_campaign_prompt(max_decisions: int = 45) -> str:
         "Start with game_start_1v1_game (no arguments) and one "
         "game_get_overview. Check game_get_overview whenever you need the "
         "state. End with game_get_overview and game_close_game. "
-        f"Play at most {max_decisions} decisions, then stop even if no winner.",
+        f"Play all {max_decisions} decisions unless a winner is declared sooner. "
+        "Never call game_close_game early: keep playing until the decision "
+        "count is reached or the game declares a winner.",
         "Then stop. Report tiles and troops per phase, when contact happened, "
         "whether your nation attacks landed, and the winner if declared.",
     ]
@@ -296,6 +320,7 @@ def run(
     scenario: str = "smoke",
     max_decisions: int = 3,
     difficulty: str = "easy",
+    memory: str | None = None,
 ) -> dict[str, Any]:
     """Run one bounded live session. Key check happens before any launch.
 
@@ -316,8 +341,8 @@ def run(
         )
     if isinstance(max_decisions, bool) or not isinstance(max_decisions, int):
         raise ValueError("max_decisions must be an integer")
-    if not 1 <= max_decisions <= 60:
-        raise ValueError("max_decisions must be in [1, 60]")
+    if not 1 <= max_decisions <= 500:
+        raise ValueError("max_decisions must be in [1, 500]")
     if difficulty not in ("easy", "medium", "hard", "impossible"):
         raise ValueError(
             "difficulty must be one of easy, medium, hard, impossible, "
@@ -350,7 +375,7 @@ def run(
         },
     )
     prompt = (
-        build_solo_prompt(max_decisions, difficulty)
+        build_solo_prompt(max_decisions, difficulty, memory=memory)
         if scenario == "solo"
         else build_campaign_prompt(max_decisions)
         if scenario == "campaign"
@@ -379,6 +404,7 @@ def run(
         timeout_s=float(timeout_s),
         provider=provider,
         key_env_var=key_env,
+        base_url=PROVIDER_BASE_URLS.get(provider),
         models_cache_source=cache_source,
     )
     duration_s = time.monotonic() - t0

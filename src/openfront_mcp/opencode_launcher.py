@@ -59,6 +59,13 @@ DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "anthropic/claude-sonnet-4-5"
 DEFAULT_KEY_ENV_VAR = "ANTHROPIC_API_KEY"
 
+# Custom providers the stock OpenCode binary does not know: endpoint it must
+# be pointed at. Public routing info only — no credentials here.
+PROVIDER_BASE_URLS: dict[str, str] = {
+    "opencode-go": "https://opencode.ai/zen/go/v1",
+    "opencode-zen": "https://opencode.ai/zen/v1",
+}
+
 # Only these inherited variables reach the OpenCode child. Everything else,
 # including every ``OPENCODE_*`` config override and every provider credential,
 # is dropped and rebuilt explicitly.
@@ -229,24 +236,36 @@ class LaunchResult:
 def build_config(
     *,
     model: str = DEFAULT_MODEL,
-    mcp: McpServerSpec,
+    mcp: McpServerSpec | None = None,
     agent_name: str = DEFAULT_AGENT_NAME,
     agent_prompt: str = DEFAULT_AGENT_PROMPT,
     provider: str | None = DEFAULT_PROVIDER,
     key_env_var: str | None = DEFAULT_KEY_ENV_VAR,
+    base_url: str | None = None,
 ) -> dict[str, Any]:
     """Return the isolated OpenCode config as a plain dict.
 
     The dict never contains a key literal: provider credentials are referenced
     only as ``{env:VAR}`` and the value is injected into the child environment
     at launch time.
+
+    ``mcp=None`` builds a coach config: no match tools, file tools only.
     """
     if not isinstance(model, str) or not model:
         raise ValueError("model must be a non-empty 'provider/model' string")
     if not isinstance(agent_name, str) or not _NAME_RE.match(agent_name):
         raise ValueError(f"agent_name is not a safe identifier: {agent_name!r}")
 
-    permission: dict[str, Any] = {"*": "deny", f"{mcp.name}_*": "allow"}
+    if mcp is None:
+        permission = {
+            "*": "deny",
+            "read": "allow",
+            "edit": "allow",
+            "write": "allow",
+        }
+    else:
+        permission = {"*": "deny", f"{mcp.name}_*": "allow"}
+    permission = dict[str, Any](permission)
     config: dict[str, Any] = {
         "$schema": CONFIG_SCHEMA,
         "model": model,
@@ -265,7 +284,9 @@ def build_config(
                 "permission": dict(permission),
             }
         },
-        "mcp": {
+    }
+    if mcp is not None:
+        config["mcp"] = {
             mcp.name: {
                 "type": "local",
                 "command": list(mcp.command),
@@ -274,12 +295,12 @@ def build_config(
                 "timeout": mcp.timeout_ms,
                 "environment": dict(mcp.environment),
             }
-        },
-    }
-    if provider and key_env_var:
-        config["provider"] = {
-            provider: {"options": {"apiKey": "{env:" + key_env_var + "}"}}
         }
+    if provider and key_env_var:
+        options: dict[str, str] = {"apiKey": "{env:" + key_env_var + "}"}
+        if base_url:
+            options["baseURL"] = base_url
+        config["provider"] = {provider: {"options": options}}
     return config
 
 
@@ -726,6 +747,7 @@ def launch_playing_agent(
     agent_prompt: str = DEFAULT_AGENT_PROMPT,
     provider: str | None = DEFAULT_PROVIDER,
     key_env_var: str = DEFAULT_KEY_ENV_VAR,
+    base_url: str | None = None,
     opencode_bin: str = "opencode",
     base_env: Mapping[str, str] | None = None,
     managed_paths: Sequence[Path | str] | None = None,
@@ -754,6 +776,7 @@ def launch_playing_agent(
         agent_prompt=agent_prompt,
         provider=provider,
         key_env_var=key_env_var,
+        base_url=base_url,
     )
     run = prepare_run(run_root, config)
     if models_cache_source is not None:
