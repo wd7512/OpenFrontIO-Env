@@ -156,7 +156,7 @@ def test_summarise_winner_is_null_when_never_declared():
     assert _summarise_events(stdout)["winner"] is None
 
 
-def test_build_solo_prompt_names_solo_game_and_cap():
+def test_build_solo_prompt_is_win_focused_and_minimal():
     from openfront_mcp.live_smoke import build_solo_prompt
 
     prompt = build_solo_prompt(20)
@@ -164,14 +164,13 @@ def test_build_solo_prompt_names_solo_game_and_cap():
     assert "400 tribes" in prompt
     assert "52 nations" in prompt
     assert "20" in prompt
-    assert "tribes_list" in prompt
-    assert "game_order_build" in prompt
-    assert "game_order_cancel_attack" in prompt
     assert '"easy"' in prompt
     # Win-or-die: the only acceptable end is victory or elimination, never
     # an early close (the agent twice closed healthy games to "report").
-    # Full Civ parity: no close tool exists — the match ends server-side.
-    assert "WIN" in prompt and "DIE" in prompt
+    assert "win" in prompt and "eliminated" in prompt
+    # Stripped down: tool docs live on the MCP server, not in the prompt.
+    assert "tribes_list" not in prompt
+    assert "game_order_build" not in prompt
     assert "game_close_game" not in prompt
 
 

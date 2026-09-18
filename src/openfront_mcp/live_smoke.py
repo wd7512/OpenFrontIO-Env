@@ -76,8 +76,8 @@ def build_solo_prompt(
 ) -> str:
     if memory and memory.strip():
         memory_block = (
-            "NOTES FROM A PREVIOUS MATCH (same format, learned the hard way — "
-            "follow what worked, avoid what failed):\n" + memory.strip()
+            "PLAYBOOK from previous runs of this format (general strategy — "
+            "follow it unless the board says otherwise):\n" + memory.strip()
         )
     else:
         memory_block = ""
