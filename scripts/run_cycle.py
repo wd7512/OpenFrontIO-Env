@@ -103,7 +103,9 @@ def main(argv: list[str] | None = None) -> int:
         if row.get("winner"):
             logging.getLogger(__name__).info("winner declared; stopping")
             break
-        if (row.get("decisions") or 0) >= cap:
+        # Only a live player that ran out of ceiling earns a longer game;
+        # a run eliminated at the ceiling proves nothing about stamina.
+        if (row.get("decisions") or 0) >= cap and (row.get("tiles") or 0) > 0:
             cap_hits += 1
         new_cap, cap_hits = cap_after_cap_hits(cap_hits, cap)
         if new_cap != cap:
