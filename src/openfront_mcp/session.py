@@ -274,8 +274,10 @@ class GameSession:
     def order_boat_attack(self, x: object, y: object, troops: object) -> dict[str, Any]:
         """Launch a boat attack at tile (``x``, ``y``) with ``troops``.
 
-        Rides the production boat intent (TransportShipExecution); integer
-        bounds are checked here, the engine validates the tile itself.
+        ``x``/``y`` come from ``get_overview`` ``boat_targets`` (the agent
+        cannot see terrain). Rides the production boat intent
+        (TransportShipExecution); integer bounds are checked here, the
+        engine validates the tile itself.
         """
         with self._lock:
             self._require_running()
@@ -643,6 +645,17 @@ class GameSession:
             {"id": boat["id"], "troops": boat["troops"]}
             for boat in self._snapshot.get("boats", [])
         ]
+        boat_targets = [
+            {
+                "x": target.get("x"),
+                "y": target.get("y"),
+                "owner": target.get("owner"),
+                "troops": target.get("troops"),
+                "tiles": target.get("tiles"),
+            }
+            for target in self._snapshot.get("boat_targets", [])
+            if isinstance(target, dict)
+        ]
         units = [
             {
                 "id": unit["id"],
@@ -691,6 +704,7 @@ class GameSession:
             "nations": nations,
             "tribes_list": tribes_list,
             "boats": boats,
+            "boat_targets": boat_targets,
             "units": units,
             "alliances": alliances,
             "alliance_requests": alliance_requests,

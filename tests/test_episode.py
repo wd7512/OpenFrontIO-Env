@@ -229,6 +229,7 @@ def test_overview_is_controlled_human_state_not_engine_internals() -> None:
                 "tribes",
                 "tribes_list",
                 "boats",
+                "boat_targets",
                 "units",
                 "alliances",
                 "alliance_requests",

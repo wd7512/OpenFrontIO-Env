@@ -53,6 +53,21 @@ def test_britannia_spawn_is_deterministic():
     ]
 
 
+def test_britannia_boat_targets_are_launchable():
+    # The agent cannot see terrain; boat_targets is its only aim. Every
+    # listed target must be launchable through the production boat intent.
+    with _britannia() as engine:
+        started = engine.start(
+            nations=0, difficulty="easy", map_size="compact", spawn=None
+        )
+        targets = started["boat_targets"]
+        assert targets, "coastal spawn on an island must expose crossings"
+        target = targets[0]
+        engine.boat_attack(x=target["x"], y=target["y"], troops=1000)
+        advanced = engine.advance(1)
+        assert advanced["boats"], "boat order to a listed target must launch"
+
+
 def test_britannia_rejects_bad_map_size():
     with _britannia() as engine:
         try:

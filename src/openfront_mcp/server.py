@@ -144,7 +144,7 @@ async def order_cancel_attack(ctx: Context, attack_id: str = "") -> str:
 async def order_boat_attack(
     ctx: Context, x: StrictInt = 0, y: StrictInt = 0, troops: StrictInt = 1000
 ) -> str:
-    """Launch a boat attack at tile (x, y) with a positive integer troop count. Bounds are checked; the engine validates the tile (needs shore and water, same as a human order)."""
+    """Launch a boat attack at a landing tile (x, y) from get_overview boat_targets, with a positive integer troop count. Bounds are checked; the engine validates the tile (needs shore and water, same as a human order)."""
     return json.dumps(
         await asyncio.to_thread(_session_of(ctx).order_boat_attack, x, y, troops)
     )

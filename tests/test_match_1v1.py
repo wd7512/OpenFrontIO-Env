@@ -84,6 +84,7 @@ def test_1v1_lifecycle_through_tools() -> None:
                 "tribes",
                 "tribes_list",
                 "boats",
+                "boat_targets",
                 "units",
                 "alliances",
                 "alliance_requests",
