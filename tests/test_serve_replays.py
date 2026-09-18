@@ -213,6 +213,21 @@ def test_load_summary_reads_difficulty(tmp_path: Path) -> None:
     assert mod.load_summary(run)["difficulty"] == "hard"
 
 
+def test_load_summary_omits_live_fields_until_run_finishes(tmp_path: Path) -> None:
+    mod = _mod()
+    run = tmp_path / "a-run"
+    run.mkdir()
+    (run / "record.json").write_text(
+        json.dumps({"gameId": "ENGINE01", "ticks": 500, "turns": []})
+    )
+    summary = mod.load_summary(run)
+    # A run still being played has no live_result.json: the card must show
+    # blanks, not a fake 0-decision/None-model score line.
+    assert "model" not in summary
+    assert "decisions" not in summary
+    assert summary["turns_total"] == 0
+
+
 def test_archive_serves_records_and_404s(tmp_path: Path) -> None:
     mod = _mod()
     records = {

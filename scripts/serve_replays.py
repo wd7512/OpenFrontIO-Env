@@ -83,11 +83,15 @@ def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
 def load_summary(run_dir: Path) -> dict[str, Any]:
     """Best-effort index card facts from live_result.json + record.json."""
     summary: dict[str, Any] = {"name": run_dir.name}
-    try:
-        live = json.loads((run_dir / "live_result.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        live = {}
-    if isinstance(live, dict):
+    live: Any = {}
+    if (run_dir / "live_result.json").is_file():
+        try:
+            live = json.loads(
+                (run_dir / "live_result.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            live = {}
+    if isinstance(live, dict) and live:
         summary["model"] = live.get("model")
         summary["scenario"] = live.get("scenario")
         summary["difficulty"] = live.get("difficulty")
