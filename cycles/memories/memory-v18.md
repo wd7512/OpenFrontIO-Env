@@ -1,0 +1,23 @@
+# Playbook — Solo FFA vs nations + tribes
+
+## Ethos
+- Land share wins, not kills, and a decision is 50 ticks you cannot get back. Every decision must take land, finish a target, offset incoming, or build; an empty decision idles your regen and loses the run. Long passivity is the main way runs die.
+- Nations compound: their maxTroops grows with land and cities, and they build ports, factories, SAMs, silos and nukes (first silo at ~3 cities, hard max 3). Tribes cap at a third of raw maxTroops and never scale; neutral land earns nothing. Farm tribes/neutral early; the run is decided by killing nations, weakest and nearest first.
+- One war at a time. Attacks on the same player-target merge; force split across 3+ targets stalls every one. Finish a target below 100 tiles (it is auto-conquered and its land redistributes) or do not open it.
+- Keep economy and defense moving with the war: cities raise maxTroops (+250k/level), ports and factories raise gold, SAMs and a defense post keep you alive. A run of pure city-builds then silence is not a plan.
+
+## When to act
+- Rival cadence: a Medium nation acts every 55-70 ticks, each act sending troops down to 30-40% of its max (reserve), then it must regrow to 50-60% (trigger) to act again, with only a 10% chance per attack tick below trigger. A sharp troop drop since your last look means it just spent — that is the counter window, not when it sits fat at 50-60%.
+- Forced retaliation: on its attack tick a nation hits the largest incoming non-bot attacker with everything above reserve, and Medium has no too-weak gate. Never open a nation you cannot out-size in the same exchange: an equal-or-smaller attack dies and its remainder lands on you; a larger one deletes its counter and your remainder advances. Fully offset any incoming you want gone — send more than it, or do not.
+- Alliances: on Medium, being >2.5x a nation's troops forces acceptance regardless of relation (threat is checked before relation); Friendly also accepts; before ~tick 1900 it accepts ~70% of the time; it rejects below Neutral relation, with 4-5 allies already, and traitors 90%. Tribes accept any request. Request early and stay Friendly: attacking a target auto-embargoes it, drops relation ~70 and auto-rejects its pending request — so never request alliance with anyone you attacked or plan to attack.
+- Defense posts: a defender spawns one only from a land attack (sourceTile null) summing to >=35% of its own troops; Medium rolls 50% per call, max 1, cost 50k+. Every tile within 30 of it costs the attacker x5 loss and x3 slower. Keep a land raid under 35% of its troops, or strike a front >30 tiles from a post. Boat landings carry sourceTile and never trigger a post, so boats open water, blocked fronts and post-free beaches — but an existing post still applies its x5 to a landing within 30.
+- Dogpile: a bordering rival with incoming_troops >= 50% of its own troops is a victim whose army is already committed; prefer it to an idle neighbor. If your own incoming sum reaches ~50% of your troops, stop expanding and offset/consolidate.
+
+## Attack sizing (derive every number; never a fixed share)
+- Per-tile attacker loss vs a player (<~150k tiles, no post): 0.48 * clamp(D/A, 0.6, 2) * m + 0.52 * (D/T) * (m/100), with m = 80 plains / 100 highland / 120 mountain, x0.7 vs a tribe. D = target troops, A = sent, T = target tiles, D/T = density. The first term stops falling once A >= 1.67*D.
+- Cheapest rate is A = 1.67*D (clamp floor 0.6); above that only reserve burns. Hard cap A <= ownTroops - strongest bordering rival's troops. Regen is fast below cap, so refill before the next push.
+- Sweep cost ~= per-tile loss * (T - 99), plus what the defender regens while you grind. The defender also loses D/T troops per tile, so a long fight thins its density and your per-tile rate.
+- Tribe (m=56), 800 tiles, 50k troops (density 62.5): ~35/tile at A=80k, so a sweep ~25-35k. Send ~1.3-1.7x its troops (~70-85k) and finish in one push; never dribble a target back to full.
+- Nation (plains), 3000 tiles, 200k troops (density 67): ~53/tile at A=300k; a sweep ~150k plus its regen. Send ~1.3-1.7x its troops (~260-340k). A post in range multiplies that x5 — open by boat or on a post-free axis instead.
+- Neutral: loss is flat m/5 = 16/20/24 per tile whatever you send, and speed floors at ~7k troops (A >= 6600). Send ~7-10k per frontier; more takes no extra land and only ties up troops. Survivors refund when the frontier closes.
+- Highlands and mountains cost 25-50% more per tile and move slower; prefer plains. Confirm every order can land (shared border, reachable boat tile, gold for builds) — a rejected order burns the whole decision.
