@@ -6,9 +6,8 @@ Tools (game MCP only):
 - game_order_attack with target 'expand' plus troops, or a tribe-/nation-id plus troops.
 - game_order_build / game_order_upgrade_unit, game_order_embargo, game_order_cancel_attack.
 - game_end_decision with the next decision integer advances 50 ticks.
-- game_close_game ends the match.
 
 Loop every decision: game_get_overview, then orders, then game_end_decision. {max_decisions} is a hard ceiling, not a target.
-Keep playing until you WIN (winner is you) or DIE (you are eliminated) — that is the only acceptable end. Only call game_close_game after a win or elimination, then report.
+Keep playing until you WIN (winner is you) or DIE (you are eliminated) — that is the only acceptable end. When the match ends (win, elimination, or the decision ceiling), write your final report and stop calling tools.
 Then stop. Report tiles and troops per phase, tribe kills, when contact happened, whether nation attacks landed, what you built, and the winner if declared.
 {memory_block}
