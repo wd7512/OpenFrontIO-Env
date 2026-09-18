@@ -1,4 +1,4 @@
-"""Digest-keyed harness cache path helpers (T3, pure functions only)."""
+"""Digest-keyed harness cache path helpers (pure functions only)."""
 
 from __future__ import annotations
 

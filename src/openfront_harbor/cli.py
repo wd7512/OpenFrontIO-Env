@@ -1,4 +1,9 @@
-"""Console entry `openfront-harbor` (T3 skeleton + T4 dry-run plan/gates, keyless)."""
+"""Console entry `openfront-harbor` (keyless harbor gates).
+
+Process lives in ``runner`` / ``reconcile`` / ``evidence``; domain values
+arrive from ``example.py`` (the single worked example) as explicit CLI
+defaults below.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,8 @@ import logging
 import shutil
 import sys
 from pathlib import Path
+
+from openfront_harbor import example
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +53,17 @@ def _build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--config", type=Path, required=True, help="job YAML to plan")
     plan.add_argument("--jobs-dir", type=Path, required=True, help="base jobs dir")
     plan.add_argument("--run-id", required=True, help="run id for the plan")
+    plan.add_argument(
+        "--base-port",
+        type=int,
+        default=example.BASE_PORT,
+        help="first proxy port; one port per cell, counting upward",
+    )
+    plan.add_argument(
+        "--proxy-url-template",
+        default=example.PROXY_URL_TEMPLATE,
+        help="proxy base URL with a {port} placeholder",
+    )
     reconcile = sub.add_parser(
         "reconcile", help="ledger-loss gate for a run (no network, no keys)"
     )
@@ -76,10 +94,14 @@ def _build_parser() -> argparse.ArgumentParser:
 def _run_preflight(repo_root: Path) -> int:
     from openfront_harbor.reconcile.preflight import run_preflight
 
-    errors = run_preflight(repo_root)
+    errors = run_preflight(
+        repo_root,
+        expected_harbor_version=example.EXPECTED_HARBOR_VERSION,
+        required_files=example.REQUIRED_FILES,
+    )
     if shutil.which("docker") is None:
-        # Warn-only in T3: docker presence is not required for unit checks.
-        log.warning("docker CLI not found on PATH (warn-only in T3 skeleton)")
+        # Warn-only: docker presence is not required for unit checks.
+        log.warning("docker CLI not found on PATH (warn-only)")
     # .env.local is explicitly NOT required in the keyless skeleton.
     if errors:
         for line in errors:

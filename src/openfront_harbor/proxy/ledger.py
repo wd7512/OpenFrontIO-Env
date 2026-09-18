@@ -1,9 +1,9 @@
-"""Pure per-cell proxy ledger helpers (T4, keyless, no network).
+"""Pure per-cell proxy ledger helpers (keyless, no network).
 
-Mirrors the usage-ledger layout from the reference proxy server: each cell
-owns ``<jobs-dir>/proxy-ledger/cell-<port>/`` holding ``usage.jsonl``,
-``attempt-summary.json``, ``ready.json`` (ready-file handshake), and
-``proxy.log``. These helpers touch only the local filesystem.
+Each cell owns ``<jobs-dir>/proxy-ledger/cell-<port>/`` holding
+``usage.jsonl``, ``attempt-summary.json``, ``ready.json`` (ready-file
+handshake), and ``proxy.log``. These helpers touch only the local
+filesystem.
 """
 
 from __future__ import annotations

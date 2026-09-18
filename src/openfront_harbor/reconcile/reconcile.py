@@ -1,4 +1,4 @@
-"""Ledger-loss reconcile gate (T4, keyless, pure filesystem check).
+"""Ledger-loss reconcile gate (keyless, pure filesystem check).
 
 Each expected proxy cell must leave ``ready.json`` (ready-file handshake)
 and ``usage.jsonl`` (usage ledger) under its ledger dir. Any gap is

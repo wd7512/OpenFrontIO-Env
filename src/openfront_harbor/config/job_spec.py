@@ -1,4 +1,4 @@
-"""Minimal JobSpec for the keyless smoke job (T3 skeleton)."""
+"""Minimal JobSpec for a keyless harbor job config."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _JOB_NAME_RE = re.compile(r"[A-Za-z0-9_.-]+")
 
 @dataclass(frozen=True)
 class JobSpec:
-    """Boring subset of a harbor job config used by the T3 skeleton."""
+    """Boring subset of a harbor job config used by the runner gates."""
 
     job_name: str
     n_attempts: int = 1
@@ -35,8 +35,9 @@ def _regex_fallback(text: str) -> JobSpec:
         int(m.group(1)) for m in re.finditer(r"proxy_base_url\s*:\s*\S+:(\d+)", text)
     )
     tasks = tuple(
-        m.group(1).strip().strip("\"'")
-        for m in re.finditer(r"-\s*([A-Za-z0-9_.\-/]+-smoke)", text)
+        m.group(1).strip()
+        for line in text.splitlines()
+        if (m := re.match(r"\s*-\s*([A-Za-z0-9_][A-Za-z0-9_.\-/]*)\s*$", line))
     )
     log.warning("pyyaml unavailable; used regex fallback for job config")
     return JobSpec(
@@ -88,7 +89,7 @@ def _extract_ports(data: dict[str, Any]) -> tuple[int, ...]:
 
 
 def load_job_yaml(path: Path) -> JobSpec:
-    """Parse a minimal smoke job YAML file into a JobSpec."""
+    """Parse a minimal harbor job YAML file into a JobSpec."""
     text = Path(path).read_text(encoding="utf-8")
     try:
         import yaml  # type: ignore[import-not-found]

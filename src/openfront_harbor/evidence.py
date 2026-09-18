@@ -1,4 +1,4 @@
-"""Evidence summary writer (T4, keyless).
+"""Evidence summary writer (keyless).
 
 Writes ``evidence/<run-id>/summary.json`` with the run id, job, ports, and
 gate result — never secrets. Mirrors the fresh-dir policy: refuses to

@@ -1,29 +1,27 @@
-"""Fail-closed preflight checks for the harbor skeleton (T3, keyless).
+"""Fail-closed preflight checks (keyless).
 
-No network, no docker pull, no API keys. Returns error strings; empty means pass.
+No network, no docker pull, no API keys. Returns error strings; empty means
+pass. All expectations arrive as explicit inputs — see ``example.py`` for
+the single worked example.
 """
 
 from __future__ import annotations
 
 import importlib.metadata
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-EXPECTED_HARBOR_VERSION = "0.21.0"
-PINNED_TOML_REL = Path("config/pinned-images-amd64-native.toml")
-SMOKE_JOB_REL = Path("jobs/tests/live-smoke-openfront-k1.yaml")
-TASK_FILES_REL = (
-    Path("tasks/plains-smoke/task.toml"),
-    Path("tasks/plains-smoke/environment/Dockerfile"),
-    Path("tasks/plains-smoke/instruction.md"),
-    Path("tasks/plains-smoke/tests/test.sh"),
-)
 
-
-def run_preflight(repo_root: Path) -> list[str]:
-    """Check the local skeleton layout without touching network or docker."""
+def run_preflight(
+    repo_root: Path | str,
+    *,
+    expected_harbor_version: str | None = None,
+    required_files: Sequence[str | Path] = (),
+) -> list[str]:
+    """Check the local layout without touching network or docker."""
     root = Path(repo_root)
     errors: list[str] = []
 
@@ -32,26 +30,20 @@ def run_preflight(repo_root: Path) -> list[str]:
     except importlib.metadata.PackageNotFoundError:
         errors.append("harbor package not installed; run `uv sync --dev`")
         version = ""
-    if version and version != EXPECTED_HARBOR_VERSION:
+    if version and expected_harbor_version and version != expected_harbor_version:
         errors.append(
-            f"harbor version {version!r} != expected {EXPECTED_HARBOR_VERSION!r}"
+            f"harbor version {version!r} != expected {expected_harbor_version!r}"
         )
 
-    pinned = root / PINNED_TOML_REL
-    if not pinned.is_file():
-        errors.append(f"pinned-images toml missing: {PINNED_TOML_REL}")
-    elif pinned.stat().st_size == 0:
-        errors.append(f"pinned-images toml is empty: {PINNED_TOML_REL}")
-
-    for rel in TASK_FILES_REL:
-        if not (root / rel).is_file():
-            errors.append(f"smoke task file missing: {rel}")
-
-    if not (root / SMOKE_JOB_REL).is_file():
-        errors.append(f"smoke job yaml missing: {SMOKE_JOB_REL}")
+    for rel in required_files:
+        candidate = root / rel
+        if not candidate.is_file():
+            errors.append(f"required file missing: {rel}")
+        elif candidate.stat().st_size == 0:
+            errors.append(f"required file is empty: {rel}")
 
     if errors:
         log.error("preflight found %d issue(s)", len(errors))
     else:
-        log.info("preflight skeleton checks passed")
+        log.info("preflight checks passed")
     return errors
