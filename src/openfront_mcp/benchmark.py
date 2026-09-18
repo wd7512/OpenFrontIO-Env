@@ -1,12 +1,16 @@
-"""Keyless scripted-episode CLI over the real MCP stdio server.
+"""Keyless episode CLI over a real MCP stdio server.
 
-``python -m openfront_mcp.benchmark --config <json> --output <dir>`` runs the
-pinned single-human smoke episode (start, overview, ``end_decision`` x N,
-overview, close) against the packaged MCP server over a real stdio transport,
-then writes ``result.json``, ``trace.jsonl`` and ``manifest.json`` atomically
-into a fresh output directory. No LLM and no API key: the ``scripted``
-controller makes every decision, and every tool request/result/error is traced
-in order with its decision id and simulation tick.
+``python -m openfront_mcp.benchmark --config <json> --output <dir>`` runs an
+episode (start, overview, decisions, overview, close) against the packaged
+MCP server over a real stdio transport, then writes ``result.json``,
+``trace.jsonl`` and ``manifest.json`` atomically into a fresh output
+directory. No LLM and no API key: the driver script makes every decision,
+and every tool request/result/error is traced in order with its decision
+id and simulation tick.
+
+Process lives here; domain specifics arrive via an ``EpisodeDriver`` (see
+``openfront_mcp.episodes``). The default driver is the pinned single-human
+smoke episode (``episodes.smoke.SMOKE_DRIVER``) — the single worked example.
 """
 
 from __future__ import annotations
@@ -18,7 +22,6 @@ import json
 import logging
 import math
 import os
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,24 +31,17 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
-from openfront_mcp import pins as _pins
-from openfront_mcp.engine import DEFAULT_ENGINE_DIR, PLAINS_MAP_DIR
+from openfront_mcp.episodes import EpisodeDriver
+from openfront_mcp.episodes.smoke import SMOKE_DRIVER
 from openfront_mcp.paths import REPO_ROOT
-from openfront_mcp.session import SMOKE_SCENARIO
 
 log = logging.getLogger(__name__)
 CONFIG_KEYS = frozenset({"version", "scenario", "controller", "max_decisions"})
-ALLOWED_SCENARIOS = frozenset({SMOKE_SCENARIO})
-ALLOWED_CONTROLLERS = frozenset({"scripted"})
 SCHEMA_VERSION = 1
 MAX_DECISIONS_MIN = 1
 MAX_DECISIONS_MAX = 1000
 DEFAULT_TOOL_TIMEOUT_S = 60.0
 DEFAULT_CONNECT_TIMEOUT_S = 10.0
-
-ENGINE_BUNDLE_REL = "engine/dist/worker.mjs"
-MAP_ASSET_DIR = "vendor/OpenFrontIO/tests/testdata/maps/plains"
-MAP_ASSET_NAMES = ("manifest.json", "map.bin", "map4x.bin")
 
 
 class ConfigError(ValueError):
@@ -85,7 +81,10 @@ def load_episode_config(path: Path) -> EpisodeConfig:
     return parse_episode_config(data)
 
 
-def parse_episode_config(data: object) -> EpisodeConfig:
+def parse_episode_config(
+    data: object, driver: EpisodeDriver = SMOKE_DRIVER
+) -> EpisodeConfig:
+    """Validate a config dict against the core schema plus driver sets."""
     if isinstance(data, bool) or not isinstance(data, dict):
         raise ConfigError("config must be a JSON object")
     raw = cast(dict[str, Any], data)
@@ -107,17 +106,19 @@ def parse_episode_config(data: object) -> EpisodeConfig:
     scenario = raw["scenario"]
     if not isinstance(scenario, str):
         raise ConfigError("scenario must be a string")
-    if scenario not in ALLOWED_SCENARIOS:
+    if scenario not in driver.allowed_scenarios:
         raise ConfigError(
-            f"unsupported scenario {scenario!r}; supported: {sorted(ALLOWED_SCENARIOS)}"
+            f"unsupported scenario {scenario!r}; "
+            f"supported: {sorted(driver.allowed_scenarios)}"
         )
 
     controller = raw["controller"]
     if not isinstance(controller, str):
         raise ConfigError("controller must be a string")
-    if controller not in ALLOWED_CONTROLLERS:
+    if controller not in driver.allowed_controllers:
         raise ConfigError(
-            f"unsupported controller {controller!r}; supported: {sorted(ALLOWED_CONTROLLERS)}"
+            f"unsupported controller {controller!r}; "
+            f"supported: {sorted(driver.allowed_controllers)}"
         )
 
     max_decisions = raw["max_decisions"]
@@ -194,71 +195,26 @@ def _file_asset(label: str, path: Path) -> dict[str, Any]:
     }
 
 
-def _actual_vendor_pin() -> str | None:
-    try:
-        proc = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(REPO_ROOT / "vendor" / "OpenFrontIO"),
-                "rev-parse",
-                "HEAD",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if proc.returncode != 0:
-        return None
-    value = proc.stdout.strip()
-    return value if value else None
-
-
-def _manifest_probe() -> tuple[str | None, list[str]]:
-    """Check pinned-artifact integrity before writing results.
-
-    Returns ``(actual_pin, issues)`` where ``issues`` is empty only when the
-    engine bundle, map assets and the vendored core all check out.
-    """
-    issues: list[str] = []
-    if not (DEFAULT_ENGINE_DIR / "dist" / "worker.mjs").is_file():
-        issues.append(f"engine bundle missing: {ENGINE_BUNDLE_REL}")
-    for name in MAP_ASSET_NAMES:
-        if not (PLAINS_MAP_DIR / name).is_file():
-            issues.append(f"map asset missing: {MAP_ASSET_DIR}/{name}")
-    actual = _actual_vendor_pin()
-    if actual is None:
-        issues.append("cannot verify vendor pin (git unavailable)")
-    elif actual != _pins.VENDOR_PIN:
-        issues.append(
-            f"vendor pin mismatch: expected {_pins.VENDOR_PIN}, actual {actual}"
-        )
-    return actual, issues
-
-
 def build_manifest(
     config_bytes: bytes,
     trace_path: Path,
     result_path: Path,
+    driver: EpisodeDriver,
     actual_pin: str | None,
 ) -> dict[str, Any]:
-    engine_path = DEFAULT_ENGINE_DIR / "dist" / "worker.mjs"
-    map_dir = PLAINS_MAP_DIR
-    assets = [
-        _file_asset(f"{MAP_ASSET_DIR}/{name}", map_dir / name)
-        for name in MAP_ASSET_NAMES
-    ]
+    """Hash config/trace/result plus the driver's pinned artifacts."""
+    assets = [_file_asset(label, path) for label, path in driver.map_assets]
     return {
         "schema_version": SCHEMA_VERSION,
         "vendor_pin": {
-            "tag": _pins.VENDOR_TAG,
-            "expected_commit": _pins.VENDOR_PIN,
+            "tag": driver.vendor_tag,
+            "expected_commit": driver.vendor_pin,
             "actual_commit": actual_pin,
-            "matches": actual_pin is not None and actual_pin == _pins.VENDOR_PIN,
+            "matches": actual_pin is not None and actual_pin == driver.vendor_pin,
         },
-        "engine_bundle": _file_asset(ENGINE_BUNDLE_REL, engine_path),
+        "engine_bundle": _file_asset(
+            driver.engine_bundle_rel, driver.engine_bundle_path
+        ),
         "map_assets": assets,
         "config_sha256": _sha256_bytes(config_bytes),
         "trace_sha256": _sha256_file(trace_path),
@@ -267,7 +223,7 @@ def build_manifest(
 
 
 # ---------------------------------------------------------------------------
-# Scripted episode over a real stdio MCP session
+# Episode run over a real stdio MCP session (driver supplies the script)
 # ---------------------------------------------------------------------------
 
 
@@ -323,6 +279,7 @@ async def _run_scripted(
     trace: TraceWriter,
     tool_timeout: float,
     connect_timeout: float,
+    driver: EpisodeDriver,
 ) -> dict[str, Any]:
     stats: dict[str, Any] = {
         "tool_calls": 0,
@@ -336,18 +293,11 @@ async def _run_scripted(
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if p)
     params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "openfront_mcp"],
+        args=["-m", driver.server_module],
         env=env,
         cwd=str(REPO_ROOT),
     )
-    steps: list[tuple[str, dict[str, Any]]] = [
-        ("start_smoke_game", {}),
-        ("get_overview", {}),
-    ]
-    steps.extend(
-        ("end_decision", {"decision": n}) for n in range(1, config.max_decisions + 1)
-    )
-    steps.extend([("get_overview", {}), ("close_game", {})])
+    steps = driver.build_steps(config.max_decisions)
 
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -376,7 +326,7 @@ async def _run_scripted(
                     if stats["tick_start"] is None:
                         stats["tick_start"] = tick
                     stats["tick_end"] = tick
-                if name == "end_decision":
+                if name == driver.decision_tool:
                     stats["decisions_taken"] += 1
     return stats
 
@@ -387,7 +337,10 @@ async def _run_scripted(
 
 
 def _build_result(
-    config: EpisodeConfig, stats: dict[str, Any], problems: list[str]
+    config: EpisodeConfig,
+    stats: dict[str, Any],
+    problems: list[str],
+    driver: EpisodeDriver,
 ) -> dict[str, Any]:
     errors = stats["errors"]
     if errors:
@@ -395,23 +348,14 @@ def _build_result(
     elif problems:
         outcome, reason = "error", problems[0]
     else:
-        outcome, reason = "decision_cap", "scripted maximum decisions reached"
+        outcome, reason = "decision_cap", driver.completion_reason
     return {
         "schema_version": SCHEMA_VERSION,
         "outcome": outcome,
         "reason": reason,
-        "winner": None,
-        "metrics": {
-            "PMR": None,
-            "RAG_at_10": None,
-            "unavailable_reason": (
-                "unavailable in smoke: the scripted controller records no "
-                "strategic-query or commitment events, so PMR (proactive "
-                "monitoring rate) and RAG@10 (reflection-action gap) cannot be "
-                "scored from this trace"
-            ),
-        },
-        "source": "scripted_not_llm",
+        "winner": driver.winner,
+        "metrics": dict(driver.metrics),
+        "source": driver.source,
         "scenario": config.scenario,
         "controller": config.controller,
         "max_decisions": config.max_decisions,
@@ -436,6 +380,7 @@ def run_episode(
     *,
     tool_timeout: float,
     connect_timeout: float,
+    driver: EpisodeDriver = SMOKE_DRIVER,
 ) -> RunOutcome:
     if not (
         math.isfinite(tool_timeout)
@@ -475,16 +420,16 @@ def run_episode(
         )
         try:
             stats = asyncio.run(
-                _run_scripted(config, trace, tool_timeout, connect_timeout)
+                _run_scripted(config, trace, tool_timeout, connect_timeout, driver)
             )
         except Exception as error:  # last-resort failure artefact
             log.exception("unexpected episode failure")
             stats["errors"].append(f"unexpected failure: {error}")
             trace.emit(event="episode_error", error=f"unexpected failure: {error}")
     finally:
-        actual_pin, probe_issues = _manifest_probe()
+        actual_pin, probe_issues = driver.probe_issues()
         problems = list(probe_issues)
-        result = _build_result(config, stats, problems)
+        result = _build_result(config, stats, problems, driver)
         trace.emit(
             event="episode_end",
             outcome=result["outcome"],
@@ -498,12 +443,13 @@ def run_episode(
                 config_bytes,
                 output / "trace.jsonl",
                 output / "result.json",
+                driver,
                 actual_pin,
             )
         except EpisodeError as error:
             log.error("manifest error: %s", error)
             problems.append(f"manifest build failed: {error}")
-            result = _build_result(config, stats, problems)
+            result = _build_result(config, stats, problems, driver)
             _write_result(output, result)
             manifest = {"schema_version": SCHEMA_VERSION, "error": str(error)}
         write_json_atomic(output / "manifest.json", manifest)
@@ -531,7 +477,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser = argparse.ArgumentParser(
         prog="python -m openfront_mcp.benchmark",
-        description="Run a keyless scripted smoke episode over real MCP stdio.",
+        description="Run a keyless episode over real MCP stdio "
+        "(default driver: smoke episode).",
     )
     parser.add_argument(
         "--config",

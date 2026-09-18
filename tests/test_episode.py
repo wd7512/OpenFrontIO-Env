@@ -695,7 +695,9 @@ def _tiny_smoke_config(tmp_path: Path) -> Path:
 def test_run_episode_exits_nonzero_on_vendor_pin_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(benchmark, "_actual_vendor_pin", lambda: "0" * 40)
+    monkeypatch.setattr(
+        "openfront_mcp.episodes.smoke._actual_vendor_pin", lambda: "0" * 40
+    )
     cfg = _tiny_smoke_config(tmp_path)
     output = tmp_path / "out"
     outcome = benchmark.run_episode(
