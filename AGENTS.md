@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This is a generic Python project template using `uv`, `ruff`, `ty`, and `pytest`.
+OpenFrontBench: a keyless MCP benchmark harness over the pinned OpenFrontIO engine, using `uv`, `ruff`, `ty`, and `pytest`.
 
 Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a required runtime dependency.
 
