@@ -1,0 +1,32 @@
+schema_version = "1.4"
+artifacts = []
+
+[task]
+name = "openfront/plains-smoke"
+version = "1.0.0"
+description = "Keyless smoke: run the scripted plains benchmark and report result.json."
+authors = []
+keywords = ["smoke", "keyless"]
+
+[metadata]
+difficulty = "trivial"
+category = "smoke"
+
+[verifier]
+timeout_sec = 180.0
+collect = []
+
+[verifier.env]
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 600.0
+os = "linux"
+mcp_servers = []
+
+[environment.env]
+
+[solution.env]

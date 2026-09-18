@@ -1,0 +1,11 @@
+# Pinned-images allowlist skeleton (amd64 qemu, T3).
+#
+# Digests get recorded here at build time by the T1 build script pattern.
+# Never commit real digests without a local build; this placeholder keeps
+# the layout symmetric with the native manifest until T4 records real ids.
+
+[agent."openfront-env:local"]
+digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+image_id = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+source = "placeholder-until-T4-build"
+built_at = "unbuilt"

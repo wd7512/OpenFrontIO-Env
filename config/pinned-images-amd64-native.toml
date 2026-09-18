@@ -1,0 +1,11 @@
+# Pinned-images allowlist skeleton (amd64 native, T3).
+#
+# Digests get recorded here at build time by the T1 build script pattern.
+# Never commit real digests without a local build; this placeholder keeps
+# preflight (exists + non-empty) green until T4 records the real image id.
+
+[agent."openfront-env:local"]
+digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+image_id = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+source = "placeholder-until-T4-build"
+built_at = "unbuilt"

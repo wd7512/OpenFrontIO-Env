@@ -1,0 +1,22 @@
+# Live 1-cell smoke for the OpenFront keyless benchmark (T3 skeleton).
+#
+# No image_manifest key: it is inferred per-host until the T4 grid records
+# real digests into config/pinned-images-amd64-{native,qemu}.toml.
+# Proxy port 8801 is fixed and clear of typical grid ranges; the agent below
+# is the keyless openfront smoke (no API key, scripted controller only).
+
+job_name: live-smoke-openfront-k1
+n_attempts: 1
+n_concurrent_trials: 1
+timeout_multiplier: 1.0
+
+datasets:
+  - path: tasks
+    task_names:
+      - plains-smoke
+
+agents:
+  - name: openfront-smoke
+    model_name: openfront/smoke
+    kwargs:
+      proxy_base_url: http://host.docker.internal:8801/v1
