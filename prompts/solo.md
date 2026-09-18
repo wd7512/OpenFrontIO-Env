@@ -1,10 +1,14 @@
-Play one default solo game (your human vs 400 tribes and 52 nations on full Europe, bots at {difficulty} difficulty) using only game MCP tools. Phases, triggered by what you observe:
-PHASE 1 — EXPAND: while your tile count is still growing between decisions, call game_order_attack (target exactly 'expand', troops a positive integer never more than half your current troops), then game_end_decision with the next decision integer.
-TRIBES: tribes (tribe-1 .. tribe-400 in get_overview tribes_list) are attackable with game_order_attack once one shows borders_human true — they never have immunity, and clearing them is safe expansion. Prefer tribes over nations while tiles grow. tribes_list shows only bordering tribes (the only attackable ones); the tribes count tracks the rest.
-PHASE 2 — ATTACK NATIONS: only when BOTH hold: (a) your tiles have stalled across two consecutive overviews (expansion exhausted, fronts met), AND (b) a nation shows borders_human true AND immune false in get_overview. Then ONE decisive strike: game_order_attack with that nation's id and most of your troops (up to three quarters), not repeated small waves — repeated half-troop waves bleed out while nations outproduce you. Then game_end_decision as before.
-BUILD: when gold exceeds 150000, buy game_order_build unit 'defense-post' at your spawn tile (x, y from get_overview human spawn). Cities at 125000+ if richer. Check get_overview units to confirm. Upgrade the city once with game_order_upgrade_unit when gold allows.
-DIPLOMACY (optional): game_order_embargo can pressure a bordering nation (action start/stop). Alliance requests and donations exist but nations rarely answer — do not rely on them.
-Cancel a mistargeted attack with game_order_cancel_attack (id from attacks). Boats and warships need shore + water you cannot see — skip them unless adjacent water is obvious from your growth.
-Start with game_start_solo_game with difficulty "{difficulty}" (no other arguments) and one game_get_overview. Check game_get_overview whenever you need the state. Keep playing until you WIN (winner is you) or DIE (you are eliminated) — that is the only acceptable end. {max_decisions} is a hard ceiling, not a target: ending before a win or elimination is failure. Only call game_close_game after a win or elimination, then report.
+Play one default solo game: your human vs 400 tribes and 52 nations on full Europe, bots at {difficulty} difficulty.
+
+Tools (game MCP only):
+- game_start_solo_game with difficulty "{difficulty}" (no other arguments), then game_get_overview.
+- game_get_overview: the state. Human, nations, tribes_list (only bordering tribes are attackable), boats, units, alliances, attacks, winner.
+- game_order_attack with target 'expand' plus troops, or a tribe-/nation-id plus troops.
+- game_order_build / game_order_upgrade_unit, game_order_embargo, game_order_cancel_attack.
+- game_end_decision with the next decision integer advances 50 ticks.
+- game_close_game ends the match.
+
+Loop every decision: game_get_overview, then orders, then game_end_decision. {max_decisions} is a hard ceiling, not a target.
+Keep playing until you WIN (winner is you) or DIE (you are eliminated) — that is the only acceptable end. Only call game_close_game after a win or elimination, then report.
 Then stop. Report tiles and troops per phase, tribe kills, when contact happened, whether nation attacks landed, what you built, and the winner if declared.
 {memory_block}

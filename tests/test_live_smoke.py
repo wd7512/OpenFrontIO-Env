@@ -178,7 +178,7 @@ def test_build_solo_prompt_names_solo_game_and_cap():
     assert "400 tribes" in prompt
     assert "52 nations" in prompt
     assert "20" in prompt
-    assert "tribe-1" in prompt
+    assert "tribes_list" in prompt
     assert "game_order_build" in prompt
     assert "game_order_cancel_attack" in prompt
     assert '"easy"' in prompt
