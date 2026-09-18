@@ -21,10 +21,16 @@ This is a generic Python project template using `uv`, `ruff`, `ty`, and `pytest`
 - Prefer clear, boring Python over clever abstractions.
 - Use `logging` (stdlib) for all output — never `print()`. Configure via `logging.basicConfig()` in entry points.
 
+## Worktrees
+
+- Create worktrees only under `.worktrees/` (`git worktree add .worktrees/<name> -b <branch> origin/main`).
+- Before every commit, `git branch --show-current` must match the intended branch.
+
 ## Optional Agent Support
 
 - `opencode.json` configures project-local OpenCode behavior.
-- `.opencode/agents/` contains reusable OpenCode agents.
+- `.opencode/agents/` contains reusable OpenCode agents (`python-engineer`, `research` with CrossRef/OpenAlex/PubMed MCPs disabled by default).
 - `.opencode/skills/` contains reusable workflow skills for AI-assisted development.
+- `.opencode/skills-available/brooks/` contains the full opt-in brooks-lint review suite.
 - `.opencode/plugins/write-size-guard.ts` prevents oversized generated writes.
 - `.opencode/plugins-available/` contains optional telemetry plugins that can be copied into `.opencode/plugins/` when desired.

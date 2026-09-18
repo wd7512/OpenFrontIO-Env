@@ -66,14 +66,14 @@ AI coding agents, the repository also includes:
 
 - `opencode.json` with conservative default permissions and useful commands
 - `.opencode/agents/python-engineer.md` for focused Python implementation work
+- `.opencode/agents/research.md` for read-only academic research (CrossRef/OpenAlex/PubMed MCPs, disabled by default)
 - `.opencode/skills/dev-workflow` for planned, verified changes
 - `.opencode/skills/grill-me` to stress-test a plan before implementation
-- `.opencode/skills/plan-change` for lightweight change planning
-- `.opencode/skills/code-review` for correctness-first reviews
-- `.opencode/skills/debug` for structured debugging
+- `.opencode/skills/code-review` for actionable code reviews
 - `.opencode/skills/session-retro` to capture lessons and follow-ups
 - `.opencode/skills/caveman` for terse technical communication
 - `.opencode/plugins/write-size-guard.ts` to prevent oversized generated writes
+- `.opencode/skills-available/brooks/` with the full opt-in brooks-lint review suite
 
 Optional telemetry plugins live in `.opencode/plugins-available/`. Copy one into
 `.opencode/plugins/` and restart OpenCode to enable it.
