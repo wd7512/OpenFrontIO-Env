@@ -43,7 +43,7 @@ def test_ledger_branches_and_order() -> None:
     path = ROOT / "docs/overhaul-integration.md"
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
-    for branch in ("docker-base", "harbor-deps", "harbor-skeleton", "lit-review"):
+    for branch in ("docker-base", "harbor-skeleton", "lit-review"):
         assert branch in text
     assert "Merge order" in text or "merge order" in text.lower()
 

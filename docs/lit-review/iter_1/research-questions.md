@@ -1,8 +1,8 @@
-# Detailed Research Questions — OpenFrontBench Lit Review
+# Research Questions — OpenFrontBench Lit Review
 
-**Companion to:** `../iter_1/proposal_v1.md`
+**Companion to:** `proposal.md`
 **Purpose:** 180 numbered research questions (30 sections A–AD × 6) grounding
-every OpenFrontBench design choice in primary sources. The T6 batch parses
+every OpenFrontBench design choice in primary sources. The batch parses
 lines matching `^\s*(\d+)\.\s+`; keep that format exact.
 
 ---

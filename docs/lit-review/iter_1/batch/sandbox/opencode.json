@@ -1,9 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "_note": "T6 sandbox lock: keyless docs-grounded sessions only. Primary model mimo-v2.5; deepseek-v4-flash is the documented fallback when the primary is unavailable.",
-  "model": "opencode-go/mimo-v2.5",
-  "fallback_model": "opencode-go/deepseek-v4-flash",
-  "_mcp_note": "Research MCP pointers (crossref/openalex/pubmed). Root opencode.json disables these tools by default; enable per-session only for the T7 live runner.",
+  "_note": "Sandbox lock: keyless docs-grounded sessions only. Set a primary model before any live run; document the fallback here when you do.",
+  "model": "TODO-set-primary-model",
+  "_mcp_note": "Optional research MCP pointers (crossref/openalex/pubmed). Disabled by default; enable per-session only for a future live runner.",
   "mcp": {
     "crossref": {
       "type": "local",

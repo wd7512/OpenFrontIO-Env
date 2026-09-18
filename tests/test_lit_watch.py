@@ -9,10 +9,10 @@ WATCH = REPO / "docs" / "lit-review" / "lit-watch"
 SEEN = WATCH / "seen.txt"
 CRON = WATCH / "cron-prompt.md"
 WATCH_README = WATCH / "README.md"
-DIGEST = WATCH / "daily-files" / "competitive-landscape-2026-09-18.md"
+DIGEST_DIR = WATCH / "daily-files"
 CHECK_SEEN = WATCH / "check_seen.py"
 SEED_BIBS = [
-    REPO / "docs" / "lit-review-seed.bib",
+    REPO / "docs" / "lit-review" / "iter_1" / "seed.bib",
     REPO / "docs" / "lit-review" / "references.bib",
 ]
 
@@ -86,28 +86,24 @@ def test_check_seen_detects_duplicate_vs_new(tmp_path):
     assert "10.1126/science.ade9097" in extracted
 
 
-def test_digest_sample_exists_with_tiers_and_sample_marker():
-    assert DIGEST.is_file(), f"{DIGEST.name} missing"
-    text = _read(DIGEST)
-    assert "Tier 1" in text and "Tier 2" in text, (
-        "digest must have Tier 1 / Tier 2 headers"
-    )
-    assert "SAMPLE" in text, "digest must be marked SAMPLE"
-    assert "DRAFT" in text, "digest must be marked DRAFT"
-    assert "TODO" in text, "digest skeleton must carry TODO rows"
+def test_daily_files_dir_exists_and_holds_no_samples():
+    assert DIGEST_DIR.is_dir(), "lit-watch/daily-files/ missing"
+    for digest in DIGEST_DIR.glob("*.md"):
+        text = _read(digest)
+        assert "SAMPLE" not in text, (
+            f"{digest.name} is a placeholder: no unearned digests"
+        )
 
 
-def test_cron_prompt_has_steps_and_scoped_add():
+def test_cron_prompt_has_process_and_scoped_add():
     assert CRON.is_file(), "lit-watch/cron-prompt.md missing"
     text = _read(CRON)
-    for step in ("STEP 1", "STEP 2", "STEP 3", "STEP 4", "STEP 5", "STEP 6", "STEP 7"):
-        assert step in text, f"cron-prompt must contain {step}"
+    for keyword in ("DISCOVER", "VERIFY", "DEDUP", "RECORD", "DIGEST"):
+        assert keyword in text, f"cron-prompt must contain {keyword}"
     assert "git add docs/lit-review/lit-watch/" in text, (
         "cron-prompt must carry the scoped-add rule"
     )
-    assert "lit-watch: update seen-list" in text, (
-        "cron-prompt must carry the scoped commit message"
-    )
+    assert "git add -A" in text, "cron-prompt must forbid git add -A"
 
 
 def test_watch_readme_mentions_idempotent():

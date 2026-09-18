@@ -3,7 +3,7 @@
 # Usage: bash extract_questions.sh [questions-file]
 set -euo pipefail
 
-QUESTIONS_FILE="${1:-$(dirname "$0")/../../detailed_research_questions.md}"
+QUESTIONS_FILE="${1:-$(dirname "$0")/../research-questions.md}"
 
 if [[ ! -f "$QUESTIONS_FILE" ]]; then
     echo "ERROR: questions file not found: $QUESTIONS_FILE" >&2

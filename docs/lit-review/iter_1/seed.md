@@ -1,9 +1,10 @@
 # Lit Review Seed — OpenFrontBench
 
-*Compiled 2026-09-18. Scope: `OpenFrontIO-Env` repo + `docs/paper-summary.md`,
+*Compiled 2026-09-18. Scope: `OpenFrontIO-Env` repo + the CivBench paper
+note (`civbench-long-horizon-benchmark-tool-mediated-agents-civilization-vi.md`),
 `docs/openfrontbench-task-spec.md`, `docs/pins.md`. All entries verified via
 research subagent MCPs (OpenAlex HIT; CrossRef HIT only for published venues;
-PubMed out of scope). See `docs/lit-review-seed.bib` for citations.*
+PubMed out of scope). See `seed.bib` for citations.*
 
 ## 0. What we are building (repo grounding)
 
@@ -135,5 +136,5 @@ bias). PubMed MISS throughout (biomedical scope). Lesson: seed from OpenAlex,
 confirm venues via proceedings/OpenReview, do not rely on CrossRef for
 preprints.
 
-*All summaries cross-checked against `docs/paper-summary.md` §6; tribunal:
+*All summaries cross-checked against the CivBench paper note §6; tribunal:
 CivBench VI is the only entry with PMR/RAG ground truth in-repo.*

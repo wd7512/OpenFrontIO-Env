@@ -1,22 +1,24 @@
 # Overhaul integration ledger
 
-Merge-aware glue for T1–T8. CI and agent wiring skip cleanly pre-merge
-(`if [ -f ...]`) and activate post-merge when files land.
+Merge-aware glue for the overhaul tracks. CI and agent wiring skip cleanly
+pre-merge (`if [ -f ...]`) and activate post-merge when files land.
 
 ## Branch → contents
 
 - `overhaul/docker-base`: `docker/`, `docs/docker-runbook.md`, `tests/test_docker.py`.
-- `overhaul/harbor-deps`: Python 3.12, `harbor==0.21.0`, `tests/test_harbor_dep.py`.
-- `overhaul/harbor-skeleton`: skeleton + runner + grids + runbook
+- `overhaul/harbor-skeleton`: Python 3.12, `harbor==0.21.0`,
+  `tests/test_harbor_dep.py`, plus skeleton + runner + grids + runbook
   (`src/openfront_harbor/`, `config/`, `jobs/`, `tasks/`,
-  `docs/evidence-run-folders-runbook.md`).
-- `overhaul/lit-review`: `docs/lit-review/` + 4 test files
-  (`tests/test_lit_review.py`, `tests/test_lit_batch.py`,
-  `tests/test_lit_synthesis.py`, `tests/test_lit_watch.py`).
+  `docs/evidence-run-folders-runbook.md`). (The `harbor-deps` branch was
+  folded into this branch's T2 commit and deleted.)
+- `overhaul/lit-review`: `docs/lit-review/` (single `iter_1/` pass +
+  lit-watch intake) + 3 test files (`tests/test_lit_review.py`,
+  `tests/test_lit_batch.py`, `tests/test_lit_watch.py`).
 
 ## Merge order
 
-T1 (docker-base) → T2 (harbor-deps) → skeleton → lit-review → this (T9).
+T1 (docker-base) → T2+T3+T4 (harbor-skeleton) → T5–T8 (lit-review) →
+this (T9).
 
 ## Known conflict points
 
@@ -31,7 +33,7 @@ T1 (docker-base) → T2 (harbor-deps) → skeleton → lit-review → this (T9).
 - Full `uv run pytest` with engine build (`engine/dist/worker.mjs`).
 - `bash scripts/build-openfront.sh --dry-run`.
 - `uv run openfront-harbor preflight`.
-- `uv run pytest tests/test_lit_review.py tests/test_lit_batch.py tests/test_lit_synthesis.py tests/test_lit_watch.py -q`.
+- `uv run pytest tests/test_lit_review.py tests/test_lit_batch.py tests/test_lit_watch.py -q`.
 
 ## Live-gate policy
 

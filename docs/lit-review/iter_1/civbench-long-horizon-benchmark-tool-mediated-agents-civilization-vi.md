@@ -1,4 +1,4 @@
-# Paper Summary: CivBench — A Long-Horizon Benchmark for Tool-Mediated Agents in Civilization VI
+# CivBench — A Long-Horizon Benchmark for Tool-Mediated Agents in Civilization VI
 
 **arXiv:** [2609.02459](https://arxiv.org/abs/2609.02459) (cs.AI) | **Submitted:** 2 Sep 2026 | **Venue:** NeurIPS 2026 E&D Track
 **Authors:** Andrews\*, Wilkinson\*, Heagerty, Coppock, Foerster, Costa (Oxford, Google DeepMind, UK AISI, Imperial)

@@ -1,4 +1,4 @@
-"""Keyless dedup checker for lit-watch seen-list (T8, stdlib only)."""
+"""Keyless dedup checker for lit-watch seen-list (stdlib only)."""
 
 import argparse
 import logging

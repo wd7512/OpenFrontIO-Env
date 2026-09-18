@@ -39,7 +39,7 @@ Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a requi
 
 ## Overhaul tracks
 
-- Python 3.12 + harbor==0.21.0 required (see pyproject when merged).
+- Python 3.12 + harbor==0.21.0 required (see pyproject.toml).
 - Docker base: `docker/openfront/Dockerfile`; check via `scripts/build-openfront.sh --dry-run`.
 - Harbor skeleton: `uv run openfront-harbor preflight/plan/reconcile/evidence --help`.
 - Lit-review: `docs/lit-review/README.md`; dry-run batch only, lit-watch scoped commits.

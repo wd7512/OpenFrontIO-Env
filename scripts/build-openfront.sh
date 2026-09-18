@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Build the reproducible openfront-env base image for linux/amd64.
 #
-# Pattern ported from custom-harbor/scripts/build-amd64.sh: explicit
-# `docker buildx` platform build, `--load` into the local daemon, then a
-# host-side `docker inspect` arch guard (sufficient because the image is
-# consumed locally, never pushed).
+# Explicit `docker buildx` platform build, `--load` into the local daemon,
+# then a host-side `docker inspect` arch guard (sufficient because the image
+# is consumed locally, never pushed).
 #
 # Usage: scripts/build-openfront.sh [--tag <tag>] [--dry-run]
 # Env: IMAGE (default openfront-env), TAG (default: git short SHA, else local).

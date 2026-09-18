@@ -43,10 +43,8 @@ mkdir -p .smoke && docker run --rm -v "$PWD/.smoke:/out" openfront-env:local \
 
 - Dev hosts here are arm64 (Apple silicon); the image targets `linux/amd64`,
   so local builds run under QEMU emulation via buildx and are slower than
-  native. This mirrors the custom-harbor rationale behind
-  `pinned-images-amd64-native.toml`: that allowlist exists because M-series
-  QEMU builds differ from fast native amd64 rebuilds, so prefer a native
-  amd64 builder for release images and record the resulting digest.
+  native. Prefer a native amd64 builder for release images and record the
+  resulting digest in the pinned-images allowlist.
 - The Dockerfile pins `python:3.12`, `uv==0.11.11` and Node major 22;
   base-image patch versions float until pinned by digest (T2 follow-up).
 

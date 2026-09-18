@@ -1,7 +1,7 @@
-# OpenFrontBench Lit-Review Seed Proposal (v1)
+# OpenFrontBench Lit-Review Seed Proposal
 
-**Role:** `{proposal}` context for the T6 keyless batch. One-page synthesis of
-`docs/lit-review-seed.md`, `docs/paper-summary.md`,
+**Role:** `{proposal}` context for the keyless batch. One-page synthesis of
+`iter_1/seed.md`, `iter_1/civbench-long-horizon-benchmark-tool-mediated-agents-civilization-vi.md`,
 `docs/openfrontbench-task-spec.md`, and `docs/pins.md`.
 
 ## RTS port of CivBench PMR/RAG to tick boundaries

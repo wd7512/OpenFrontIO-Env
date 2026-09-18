@@ -80,7 +80,7 @@ Optional telemetry plugins live in `.opencode/plugins-available/`. Copy one into
 
 ## Overhaul tracks
 
-When merged from overhaul/* branches: docker via `docs/docker-runbook.md`, harbor runs via `docs/evidence-run-folders-runbook.md`, lit-review via `docs/lit-review/README.md`.
+Docker via `docs/docker-runbook.md`, harbor runs via `docs/evidence-run-folders-runbook.md`, lit-review via `docs/lit-review/README.md`.
 
 ## Limitations
 
