@@ -9,7 +9,7 @@ Use this skill for disciplined Python project changes.
 
 ## Workflow
 
-1. Scope the goal and inspect relevant files before editing.
+1. Scope the goal and inspect relevant files before editing. For failures, reproduce first and test one hypothesis at a time.
 2. Create or update tests for behavior changes.
 3. Implement the smallest correct change.
 4. Run formatting, linting, tests, and build checks.

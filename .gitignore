@@ -206,3 +206,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Worktrees live ONLY here; everything ignored except the committed marker.
+.worktrees/*
+!.worktrees/.gitkeep
