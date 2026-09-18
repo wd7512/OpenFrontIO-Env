@@ -75,12 +75,14 @@ def test_assign_ids_keeps_unique_remaps_collisions() -> None:
         assert mod.GAME_ID_RE.fullmatch(gid)
 
 
-def test_remap_game_id_only_retargets_info(tmp_path: Path) -> None:
+def test_served_records_keep_live_game_id() -> None:
+    # The engine seeds its RNG from the gameID: served bytes must keep the
+    # taped ID (route IDs only select, never rewrite).
     mod = _mod()
-    record = {"info": {"gameID": "ENGINE01", "x": 1}, "turns": []}
-    staged = mod.remap_game_id(record, "OF000001")
-    assert staged["info"]["gameID"] == "OF000001"
-    assert record["info"]["gameID"] == "ENGINE01"
+    record = {"info": {"gameID": "ENGINE01"}, "turns": []}
+    staged = json.dumps(record).encode()
+    assert json.loads(staged)["info"]["gameID"] == "ENGINE01"
+    assert mod.GAME_ID_RE.fullmatch("ENGINE01")
 
 
 def test_index_links_every_game_to_client(tmp_path: Path) -> None:
@@ -100,7 +102,7 @@ def test_index_links_every_game_to_client(tmp_path: Path) -> None:
 def test_archive_serves_records_and_404s(tmp_path: Path) -> None:
     mod = _mod()
     records = {
-        "OF000001": json.dumps({"info": {"gameID": "OF000001"}}).encode(),
+        "OF000001": json.dumps({"info": {"gameID": "ENGINE01"}}).encode(),
     }
     index = mod.render_index({}, "http://localhost:9000")
     server, port = _serve(records, index)
@@ -111,7 +113,8 @@ def test_archive_serves_records_and_404s(tmp_path: Path) -> None:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/game/OF000001") as res:
             assert res.status == 200
             assert res.headers.get("Access-Control-Allow-Origin") == "*"
-            assert json.loads(res.read())["info"]["gameID"] == "OF000001"
+            body = json.loads(res.read())
+            assert body["info"]["gameID"] == "ENGINE01"
         for path in ("/game/NOPE1234", "/other/OF000001"):
             try:
                 urllib.request.urlopen(f"http://127.0.0.1:{port}{path}")

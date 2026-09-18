@@ -16,9 +16,11 @@ tape through the real engine renderer. Have the client running first
 (``npm run start:client`` in vendor/OpenFrontIO, serves :9000).
 
 raw/ is never modified: conversion output is moved away and only record
-bytes are served from memory. Colliding gameIDs (every engine run tapes
-ENGINE01) are remapped to unique OF00000N form, which satisfies the
-production gameID schema.
+bytes are served from memory. Every engine run tapes gameID ENGINE01, so
+route IDs (OF000001, ...) only select which pristine record to serve: the
+record bytes are NEVER rewritten, because the engine seeds its RNG from
+``simpleHash(gameID)`` and any rewrite would reseed the replay into a
+different world than the live game.
 """
 
 from __future__ import annotations
@@ -58,7 +60,12 @@ def find_runs(raw_dir: Path) -> list[Path]:
 
 
 def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
-    """Unique 8-char gameID per run; keeps originals that are already unique."""
+    """Unique route ID per run; originals are only used to detect collisions.
+
+    Route IDs select which record to serve and never rewrite it: every run
+    tapes ENGINE01, so colliding originals get OF00000N routes while the
+    served bytes keep the live gameID (and its RNG seed) intact.
+    """
     counts = Counter(original.values())
     out: dict[str, str] = {}
     n = 0
@@ -70,13 +77,6 @@ def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
             n += 1
             out[name] = f"OF{n:06d}"
     return out
-
-
-def remap_game_id(record: dict[str, Any], game_id: str) -> dict[str, Any]:
-    """Return a copy of a game record addressed under game_id."""
-    staged = dict(record)
-    staged["info"] = {**record.get("info", {}), "gameID": game_id}
-    return staged
 
 
 def load_summary(run_dir: Path) -> dict[str, Any]:
@@ -176,7 +176,7 @@ def convert_run(run_dir: Path, bundle: Path) -> dict[str, Any]:
 def stage_records(
     runs: list[Path], bundle: Path
 ) -> tuple[dict[str, bytes], dict[str, dict[str, Any]]]:
-    """Convert every run; return ({gameID: record bytes}, {name: summary})."""
+    """Convert every run; return ({routeID: pristine record bytes}, summaries)."""
     converted: dict[str, dict[str, Any]] = {}
     originals: dict[str, str] = {}
     for run_dir in runs:
@@ -190,11 +190,10 @@ def stage_records(
     records: dict[str, bytes] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for run_dir in runs:
-        game_id = ids[run_dir.name]
-        staged = remap_game_id(converted[run_dir.name], game_id)
-        records[game_id] = json.dumps(staged).encode("utf-8")
+        route_id = ids[run_dir.name]
+        records[route_id] = json.dumps(converted[run_dir.name]).encode("utf-8")
         summary = load_summary(run_dir)
-        summary["game_id"] = game_id
+        summary["game_id"] = route_id
         summaries[run_dir.name] = summary
     return records, summaries
 
