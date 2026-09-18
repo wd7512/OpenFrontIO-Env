@@ -76,6 +76,9 @@ def test_coach_prompt_asks_for_ethos_from_engine_sources(tmp_path: Path) -> None
     assert "record.json" in prompt and "memory.md" in prompt
     assert "ethos" in prompt
     assert "attackLogic" in prompt and "TransportShip" in prompt
+    # Timing and explicit sizing are mandatory sections, not optional colour.
+    assert "When to act" in prompt and "Attack sizing" in prompt
+    assert "incoming_troops" in prompt and "incoming attacks" in prompt
     # No playbook bundled: nothing tells the coach to evolve one.
     assert "previous_playbook.md" not in prompt
 
@@ -83,6 +86,13 @@ def test_coach_prompt_asks_for_ethos_from_engine_sources(tmp_path: Path) -> None
         ["record.json", "previous_playbook.md"], "memory.md", has_previous=True
     )
     assert "previous_playbook.md" in evolved
+
+
+def test_cap_escalates_after_five_ceiling_finishes() -> None:
+    assert cy.cap_after_cap_hits(0, 200) == (200, 0)
+    assert cy.cap_after_cap_hits(4, 200) == (200, 4)
+    assert cy.cap_after_cap_hits(5, 200) == (300, 0)
+    assert cy.cap_after_cap_hits(5, 300) == (400, 0)
 
 
 def test_coach_bundle_shares_budget_by_source_size(tmp_path: Path) -> None:

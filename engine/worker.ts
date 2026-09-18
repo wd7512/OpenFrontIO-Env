@@ -65,12 +65,19 @@ interface NationState {
   alive: boolean;
   immune: boolean;
   borders_human: boolean;
+  incoming_troops: number;
 }
 
 interface AttackState {
   id: string;
   attacker: string;
   target: string | null;
+  troops: number;
+  retreating: boolean;
+}
+
+interface IncomingAttackState {
+  attacker: string;
   troops: number;
   retreating: boolean;
 }
@@ -83,6 +90,7 @@ interface TribeState {
   tiles: number;
   alive: boolean;
   borders_human: boolean;
+  incoming_troops: number;
 }
 
 interface BoatState {
@@ -150,6 +158,7 @@ interface Snapshot {
   alliance_requests: { incoming: string[]; outgoing: string[] };
   embargoes: EmbargoState[];
   attacks: AttackState[];
+  incoming_attacks: IncomingAttackState[];
   nations: NationState[];
   human: {
     id: string;
@@ -1130,6 +1139,7 @@ class EngineSession {
             tiles: 0,
             alive: false,
             borders_human: false,
+            incoming_troops: 0,
           };
         }
         const tribe = game.player(id);
@@ -1141,6 +1151,9 @@ class EngineSession {
           tiles: tribe.numTilesOwned(),
           alive: tribe.isAlive(),
           borders_human: player.sharesBorderWith(tribe),
+          incoming_troops: tribe
+            .incomingAttacks()
+            .reduce((sum, attack) => sum + attack.troops(), 0),
         };
       }),
       boats: player.units([UnitType.TransportShip]).map((boat) => ({
@@ -1201,6 +1214,11 @@ class EngineSession {
           retreating: attack.retreating(),
         };
       }),
+      incoming_attacks: player.incomingAttacks().map((attack) => ({
+        attacker: attack.attacker().name(),
+        troops: attack.troops(),
+        retreating: attack.retreating(),
+      })),
       nations: this.nationIDs.map((id) => {
         const nation = game.player(id);
         return {
@@ -1213,6 +1231,9 @@ class EngineSession {
           alive: nation.isAlive(),
           immune: nation.isImmune(),
           borders_human: player.sharesBorderWith(nation),
+          incoming_troops: nation
+            .incomingAttacks()
+            .reduce((sum, attack) => sum + attack.troops(), 0),
         };
       }),
       human: {

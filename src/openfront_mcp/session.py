@@ -612,6 +612,7 @@ class GameSession:
                 "alive": nation.get("alive", True),
                 "immune": nation.get("immune", False),
                 "borders_human": nation.get("borders_human", False),
+                "incoming_troops": nation.get("incoming_troops", 0),
             }
             for index, nation in enumerate(self._snapshot.get("nations", []))
         ]
@@ -624,6 +625,15 @@ class GameSession:
             }
             for attack in self._snapshot.get("attacks", [])
         ]
+        incoming_attacks = [
+            {
+                "attacker": attack.get("attacker"),
+                "troops": attack.get("troops"),
+                "retreating": attack.get("retreating", False),
+            }
+            for attack in self._snapshot.get("incoming_attacks", [])
+            if isinstance(attack, dict)
+        ]
         tribes_list = [
             {
                 "id": tribe["id"],
@@ -632,6 +642,7 @@ class GameSession:
                 "tiles": tribe["tiles"],
                 "alive": tribe.get("alive", True),
                 "borders_human": tribe.get("borders_human", False),
+                "incoming_troops": tribe.get("incoming_troops", 0),
             }
             # Only bordering tribes are listed: distant ones are unactionable
             # (attacks without shared border retreat silent), and 400 full
@@ -710,4 +721,5 @@ class GameSession:
             "alliance_requests": alliance_requests,
             "embargoes": embargoes,
             "attacks": attacks,
+            "incoming_attacks": incoming_attacks,
         }

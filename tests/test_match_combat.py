@@ -197,6 +197,7 @@ def test_tribes_projection_lists_only_bordering() -> None:
                 "tiles": 50,
                 "alive": True,
                 "borders_human": True,
+                "incoming_troops": 300,
             },
             {
                 "id": "tribe-2",
@@ -205,6 +206,7 @@ def test_tribes_projection_lists_only_bordering() -> None:
                 "tiles": 50,
                 "alive": True,
                 "borders_human": False,
+                "incoming_troops": 900,
             },
         ],
         "boats": [],
@@ -229,10 +231,18 @@ def test_tribes_projection_lists_only_bordering() -> None:
         "alliance_requests": {"incoming": [], "outgoing": []},
         "embargoes": [],
         "attacks": [],
+        "incoming_attacks": [
+            {"attacker": "Nation One", "troops": 1234, "retreating": False}
+        ],
     }
     projected = session._project("started")
     assert projected["tribes"] == 2
     assert [t["id"] for t in projected["tribes_list"]] == ["tribe-1"]
+    # Dogpile and defense timing: incoming pressure is visible both ways.
+    assert projected["incoming_attacks"] == [
+        {"attacker": "Nation One", "troops": 1234, "retreating": False}
+    ]
+    assert projected["tribes_list"][0]["incoming_troops"] == 300
     # Boat landing spots carry coordinates and owner strength for targeting.
     assert projected["boat_targets"] == [
         {"x": 5, "y": 6, "owner": "neutral", "troops": None, "tiles": None},

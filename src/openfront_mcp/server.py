@@ -123,10 +123,8 @@ async def end_decision(decision: StrictInt, ctx: Context) -> str:
 
 
 @mcp.tool()
-async def order_attack(
-    ctx: Context, target: str = "expand", troops: StrictInt = 1000
-) -> str:
-    """Order the human to expand or attack: target "expand" (adjacent neutral land), "nation-N" or "tribe-N", with a positive integer troop count. Production rules (immunity, shared border) decide whether the order lands; the result reports live attacks."""
+async def order_attack(ctx: Context, target: str, troops: StrictInt) -> str:
+    """Order the human to expand or attack: target "expand" (adjacent neutral land), "nation-N" or "tribe-N", with a positive integer troop count you size yourself from get_overview (target troops/tiles, your troops). There is no default size — the engine's 20% convention is a fallback for players who do not think. Production rules (immunity, shared border) decide whether the order lands; the result reports live attacks."""
     return json.dumps(
         await asyncio.to_thread(_session_of(ctx).order_attack, target, troops)
     )
@@ -142,9 +140,9 @@ async def order_cancel_attack(ctx: Context, attack_id: str = "") -> str:
 
 @mcp.tool()
 async def order_boat_attack(
-    ctx: Context, x: StrictInt = 0, y: StrictInt = 0, troops: StrictInt = 1000
+    ctx: Context, x: StrictInt, y: StrictInt, troops: StrictInt
 ) -> str:
-    """Launch a boat attack at a landing tile (x, y) from get_overview boat_targets, with a positive integer troop count. Bounds are checked; the engine validates the tile (needs shore and water, same as a human order)."""
+    """Launch a boat attack at a landing tile (x, y) from get_overview boat_targets, with a positive integer troop count sized from the target's troops/tiles — there is no default size. Bounds are checked; the engine validates the tile (needs shore and water, same as a human order)."""
     return json.dumps(
         await asyncio.to_thread(_session_of(ctx).order_boat_attack, x, y, troops)
     )

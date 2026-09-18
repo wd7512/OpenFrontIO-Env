@@ -35,6 +35,20 @@ COACH_SOURCES: tuple[str, ...] = (
     # Transport ships: cost, capacity, landing and retreat rules.
     "vendor/OpenFrontIO/src/core/execution/TransportShipExecution.ts",
     "vendor/OpenFrontIO/src/core/game/TransportShipUtils.ts",
+    # Nation/bot cadence, reserve/trigger gates, dogpile and retaliation
+    # targeting, and the engine's own 4x bot-attack sizing.
+    "vendor/OpenFrontIO/src/core/execution/utils/AiAttackBehavior.ts",
+    # Per-nation attack clock and structure-check cadence.
+    "vendor/OpenFrontIO/src/core/execution/NationExecution.ts",
+    # Alliance accept/reject thresholds, relation windows, betrayal rules.
+    "vendor/OpenFrontIO/src/core/execution/nation/NationAllianceBehavior.ts",
+    # What nations build when: defense-post trigger (land attacks only),
+    # city/port/SAM/silo pacing.
+    "vendor/OpenFrontIO/src/core/execution/nation/NationStructureBehavior.ts",
+    # Tribes are bots: their clock, trigger ratio and structure deletion.
+    "vendor/OpenFrontIO/src/core/execution/TribeExecution.ts",
+    # Per-tick gold and troop regen, relation decay.
+    "vendor/OpenFrontIO/src/core/execution/PlayerExecution.ts",
     # Adapter surface: what orders exist and how they reach the engine.
     "engine/worker.ts",
     "src/openfront_mcp/session.py",
@@ -42,6 +56,21 @@ COACH_SOURCES: tuple[str, ...] = (
 
 MEMORY_FILENAME = "memory.md"
 BUNDLE_FILENAMES: tuple[str, ...] = ("live_result.json", "record.json")
+
+# A run that stops at the decision ceiling without a winner proves the player
+# can still play: after five of those at the same ceiling, allow longer games.
+CAP_HIT_THRESHOLD = 5
+CAP_HIT_STEP = 100
+
+
+def cap_after_cap_hits(cap_hits: int, cap: int) -> tuple[int, int]:
+    """Escalate the decision ceiling every ``CAP_HIT_THRESHOLD`` ceiling ends.
+
+    Returns ``(cap, cap_hits)``: the new ceiling and the counter reset state.
+    """
+    if cap_hits >= CAP_HIT_THRESHOLD:
+        return cap + CAP_HIT_STEP, 0
+    return cap, cap_hits
 
 
 class MemoryStore:
@@ -91,7 +120,7 @@ def assemble_coach_bundle(
     run_dir: Path | str,
     sources: list[Path | str],
     dest: Path | str,
-    max_chars: int = 200_000,
+    max_chars: int = 320_000,
 ) -> list[str]:
     """Copy run outputs + curated sources into the coach work dir.
 
@@ -151,19 +180,37 @@ def build_coach_prompt(
         "Mine the engine source for the mechanics behind battles, boats and "
         "growth (attackLogic, attackAmount and maxTroops in Config.ts; "
         "AttackExecution.ts; TransportShipExecution.ts and "
-        "TransportShipUtils.ts). Turn them into general heuristics the player "
-        "can apply with only its game tools: when attacking is worth it, what "
-        "share of troops to commit, why retreats are costly, when transport "
-        "ships help, and how to break out when land expansion is blocked. "
+        "TransportShipUtils.ts) and for the timing behind them (the nation "
+        "and tribe cadence, reserve/trigger gates, retaliation, alliance "
+        "thresholds and structure pacing in utils/AiAttackBehavior.ts, "
+        "NationExecution.ts, nation/NationAllianceBehavior.ts, "
+        "nation/NationStructureBehavior.ts, TribeExecution.ts and "
+        "PlayerExecution.ts). The player acts once per decision (50 ticks = "
+        "5 s) and can read target troops and tiles for nations, bordering "
+        "tribes and boat targets, plus its own incoming attacks and every "
+        "rival's incoming_troops (pressure from others). Write rules it can "
+        "act on with exactly those fields. "
+        "Two sections are mandatory. (1) A short 'When to act' set of "
+        "conditional rules: rival refill cadence and the counter window "
+        "right after they spend, forced retaliation, when alliances are "
+        "accepted (threat overrides relation), when defense posts appear "
+        "(land attacks only) and how boats avoid triggering them, and when "
+        "incoming_troops marks a real dogpile target. (2) An 'Attack sizing' "
+        "rule set: never a fixed share — derive every size from observable "
+        "quantities (target troops, tiles, density, terrain) with the "
+        "exchange-rate math, including worked examples for tribes, nations "
+        "and neutral land. "
         "Read the tape critically: was force over-committed, were transport "
-        "ships used, did expansion stall against water? "
+        "ships used, did expansion stall against water, did the player act "
+        "on the timing windows? "
         f"Write the next player's playbook to {output_name}: a short general "
         "ethos, not a match report — durable principles and decision rules "
         "that hold in any run of this format. No board-state recap, no long "
         "stat lists, no narrative; a few engine-accurate thresholds are "
-        "welcome where they make a rule precise. The next player sees this "
-        "text and nothing else, so it must stand alone. No code, no match "
-        "tools, no edits outside this directory. Then stop."
+        "welcome where they make a rule precise, and keep the whole thing "
+        "under 60 lines. The next player sees this text and nothing else, so "
+        "it must stand alone. No code, no match tools, no edits outside this "
+        "directory. Then stop."
     )
 
 
@@ -355,6 +402,7 @@ def run_cycle(
         "decisions": len(summary.get("decisions", [])),
         "memory_version": version,
         "model": model,
+        "max_decisions": kwargs.get("max_decisions"),
     }
     append_ledger(root / "ledger.jsonl", row)
     return row

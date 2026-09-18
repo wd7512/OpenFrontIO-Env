@@ -73,6 +73,31 @@ def test_nation_attack_without_border_fizzles_by_design_but_engine_survives():
         assert after["nations"][0]["alive"] is True
 
 
+def test_incoming_attacks_and_troops_are_visible():
+    """Dogpile and defense timing need both directions of incoming pressure."""
+    with EngineWorker() as engine:
+        engine.start(nations=1, difficulty="easy")
+        engine.advance(60)  # past nation spawn immunity
+        state = engine.query()
+        previous_tiles = 0
+        for _ in range(15):
+            engine.attack(
+                target="expand", troops=max(1000, state["human"]["troops"] // 2)
+            )
+            state = engine.advance(50)
+            if state["human"]["tiles"] <= previous_tiles:
+                break
+            previous_tiles = state["human"]["tiles"]
+        engine.attack(
+            target="nation-1", troops=max(1000, state["human"]["troops"] // 2)
+        )
+        after = engine.advance(10)
+        # The human's attack shows up as incoming pressure on the nation.
+        assert after["nations"][0]["incoming_troops"] > 0
+        # Attacks against the human are exposed as their own list.
+        assert isinstance(after["incoming_attacks"], list)
+
+
 def test_attack_rejects_bad_target_and_survives():
     with EngineWorker() as engine:
         engine.start(nations=1, difficulty="easy")
