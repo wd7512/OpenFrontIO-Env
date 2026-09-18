@@ -113,6 +113,7 @@ def test_archive_serves_records_and_404s(tmp_path: Path) -> None:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/game/OF000001") as res:
             assert res.status == 200
             assert res.headers.get("Access-Control-Allow-Origin") == "*"
+            assert res.headers.get("Cache-Control") == "no-store"
             body = json.loads(res.read())
             assert body["info"]["gameID"] == "ENGINE01"
         for path in ("/game/NOPE1234", "/other/OF000001"):

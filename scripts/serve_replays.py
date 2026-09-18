@@ -256,6 +256,7 @@ def make_handler(records: dict[str, bytes], index: bytes):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(length))
             self.end_headers()
 

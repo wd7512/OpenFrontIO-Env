@@ -38,6 +38,7 @@ def test_serves_record_for_game_id(tmp_path) -> None:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/game/ENGINE01") as res:
             assert res.status == 200
+            assert res.headers.get("Cache-Control") == "no-store"
             assert json.loads(res.read())["info"]["gameID"] == "ENGINE01"
     finally:
         server.shutdown()
