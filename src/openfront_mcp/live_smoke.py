@@ -63,33 +63,12 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 def load_prompt(name: str, **values: Any) -> str:
     """Render a prompt template from ``prompts/<name>.md``.
 
-    Templates use ``str.format`` placeholders (``{steps}``,
-    ``{max_decisions}``, ``{difficulty}``, ``{memory_block}``). Literal
+    Templates use ``str.format`` placeholders (``{difficulty}``,
+    ``{max_decisions}``, ``{memory_block}``). Literal
     braces in prompt text must be doubled in the .md file.
     """
     template = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
     return template.format(**values).strip()
-
-
-def build_smoke_prompt(max_decisions: int = 3) -> str:
-    steps = ["game_start_smoke_game", "game_get_overview"]
-    steps += [f"game_end_decision (decision={n})" for n in range(1, max_decisions + 1)]
-    steps += ["game_get_overview", "game_close_game"]
-    rendered_steps = "\n".join(f"- {s}" for s in steps)
-    return load_prompt("smoke", steps=rendered_steps)
-
-
-def build_match_prompt(max_decisions: int = 6) -> str:
-    steps = ["game_start_1v1_game", "game_get_overview"]
-    for n in range(1, max_decisions + 1):
-        steps += [
-            "game_get_overview (FIRST — size your order off what you see)",
-            "game_order_attack (target=expand, troops=half your current troops)",
-            f"game_end_decision (decision={n})",
-        ]
-    steps += ["game_get_overview", "game_close_game"]
-    rendered_steps = "\n".join(f"- {s}" for s in steps)
-    return load_prompt("match", steps=rendered_steps)
 
 
 def build_solo_prompt(
@@ -108,10 +87,6 @@ def build_solo_prompt(
         max_decisions=max_decisions,
         memory_block=memory_block,
     )
-
-
-def build_campaign_prompt(max_decisions: int = 45) -> str:
-    return load_prompt("campaign", max_decisions=max_decisions)
 
 
 def _summarise_events(stdout: str) -> dict[str, Any]:
@@ -171,8 +146,7 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
             if (
                 part["tool"]
                 in (
-                    "game_start_1v1_game",
-                    "game_start_smoke_game",
+                    "game_start_solo_game",
                     "game_get_overview",
                     "game_order_attack",
                 )
@@ -243,16 +217,15 @@ def run(
     output: Path | str,
     timeout_s: float = 120.0,
     models_cache_source: Path | str | None = None,
-    scenario: str = "smoke",
-    max_decisions: int = 3,
+    max_decisions: int = 100,
     difficulty: str = "easy",
     memory: str | None = None,
 ) -> dict[str, Any]:
-    """Run one bounded live session. Key check happens before any launch.
+    """Run one bounded live solo session. Key check happens before any launch.
 
-    ``scenario`` is ``"smoke"`` (single human) or ``"1v1"`` (human vs one
-    nation); ``max_decisions`` counts the 50-tick advances. ``difficulty``
-    applies to the solo scenario (nation bot strength).
+    Solo only: one human vs 400 tribes and 52 nations on full Europe.
+    ``max_decisions`` counts the 50-tick advances. ``difficulty`` is the
+    nation bot strength.
     """
     settings = load_settings(env_file)
     provider = (
@@ -261,10 +234,6 @@ def run(
     model = (settings.get("OPENFRONT_MODEL") or "").strip()
     if not model:
         raise ValueError("OPENFRONT_MODEL is required in the env file")
-    if scenario not in ("smoke", "1v1", "campaign", "solo"):
-        raise ValueError(
-            f"scenario must be 'smoke', '1v1', 'campaign' or 'solo', got {scenario!r}"
-        )
     if isinstance(max_decisions, bool) or not isinstance(max_decisions, int):
         raise ValueError("max_decisions must be an integer")
     if not 1 <= max_decisions <= 500:
@@ -300,15 +269,7 @@ def run(
             "OPENFRONT_RECORD_DIR": str(out),
         },
     )
-    prompt = (
-        build_solo_prompt(max_decisions, difficulty, memory=memory)
-        if scenario == "solo"
-        else build_campaign_prompt(max_decisions)
-        if scenario == "campaign"
-        else build_match_prompt(max_decisions)
-        if scenario == "1v1"
-        else build_smoke_prompt(max_decisions)
-    )
+    prompt = build_solo_prompt(max_decisions, difficulty, memory=memory)
     t0 = time.monotonic()
     # The agent's working directory must have no `.opencode`/`opencode.json`
     # ancestor (OpenCode discovers project plugins upward from cwd), so it
@@ -339,7 +300,7 @@ def run(
     payload: dict[str, Any] = {
         "model": model,
         "provider": provider,
-        "scenario": scenario,
+        "scenario": "solo",
         "max_decisions": max_decisions,
         "agent_root": str(agent_root),
         "timeout_s": float(timeout_s),

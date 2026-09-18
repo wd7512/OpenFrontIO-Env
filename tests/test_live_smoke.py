@@ -112,7 +112,7 @@ def test_summarise_captures_winner_from_overviews():
 
     stdout = "\n".join(
         [
-            _tool_event("game_start_1v1_game", {"tick": 3, "winner": None}),
+            _tool_event("game_start_solo_game", {"tick": 3, "winner": None}),
             _tool_event("game_end_decision", {"decision": 1, "tick": 53}),
             _tool_event(
                 "game_get_overview", {"tick": 53, "winner": "Deeply Confused Bugs"}
@@ -127,47 +127,11 @@ def test_summarise_winner_is_null_when_never_declared():
 
     stdout = "\n".join(
         [
-            _tool_event("game_start_1v1_game", {"tick": 3, "winner": None}),
+            _tool_event("game_start_solo_game", {"tick": 3, "winner": None}),
             _tool_event("game_get_overview", {"tick": 53, "winner": None}),
         ]
     )
     assert _summarise_events(stdout)["winner"] is None
-
-
-def test_build_match_prompt_orders_the_match_steps():
-    from openfront_mcp.live_smoke import build_match_prompt
-
-    prompt = build_match_prompt(2)
-    for call in (
-        "game_start_1v1_game",
-        "game_get_overview",
-        "game_get_overview (FIRST",
-        "game_order_attack (target=expand, troops=half your current troops)",
-        "game_end_decision (decision=1)",
-        "game_end_decision (decision=2)",
-        "game_get_overview",
-        "game_close_game",
-    ):
-        assert call in prompt
-    assert "game_end_decision (decision=3)" not in prompt
-    # Lesson: fixed small expands + never engaging loses 30:1. The prompt must
-    # demand scaling, nation attacks, and win-or-die.
-    assert "ATTACK THE NATION" in prompt
-    assert "WIN or DIE" in prompt
-    assert prompt.index("game_order_attack") < prompt.index(
-        "game_end_decision (decision=1)"
-    )
-
-
-def test_build_campaign_prompt_has_two_phases_and_cap():
-    from openfront_mcp.live_smoke import build_campaign_prompt
-
-    prompt = build_campaign_prompt(45)
-    assert "PHASE 1" in prompt
-    assert "PHASE 2" in prompt
-    assert "nation-1" in prompt
-    assert "45" in prompt
-    assert "stalled" in prompt
 
 
 def test_build_solo_prompt_names_solo_game_and_cap():
@@ -214,10 +178,10 @@ def test_run_rejects_bad_difficulty(tmp_path):
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
     with pytest.raises(ValueError, match="difficulty must be one of"):
-        run(env, tmp_path / "x", 10, scenario="solo", difficulty="brutal")
+        run(env, tmp_path / "x", 10, difficulty="brutal")
 
 
-def test_run_rejects_bad_scenario_and_bounds(tmp_path):
+def test_run_rejects_bad_bounds(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text(
         "OPENROUTER_API_KEY=fake-test-only\n"
@@ -225,16 +189,14 @@ def test_run_rejects_bad_scenario_and_bounds(tmp_path):
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
     with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
-        with pytest.raises(ValueError, match="scenario"):
-            run(env, tmp_path / "o1", 10, scenario="2v2")
         with pytest.raises(ValueError, match="max_decisions"):
-            run(env, tmp_path / "o2", 10, scenario="1v1", max_decisions=0)
+            run(env, tmp_path / "o2", 10, max_decisions=0)
         with pytest.raises(ValueError, match="max_decisions"):
-            run(env, tmp_path / "o3", 10, scenario="1v1", max_decisions=True)
+            run(env, tmp_path / "o3", 10, max_decisions=True)
         launch.assert_not_called()
 
 
-def test_run_1v1_uses_match_prompt(tmp_path):
+def test_run_solo_uses_solo_prompt(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text(
         "OPENROUTER_API_KEY=fake-test-only\n"
@@ -250,10 +212,9 @@ def test_run_1v1_uses_match_prompt(tmp_path):
             config={},
             resolved_config=None,
         )
-        run(env, tmp_path / "output", 10, scenario="1v1", max_decisions=2)
+        run(env, tmp_path / "output", 10, max_decisions=2)
     _, kwargs = launch.call_args
-    assert "game_start_1v1_game" in kwargs["prompt"]
-    assert "game_start_smoke_game" not in kwargs["prompt"]
+    assert "game_start_solo_game" in kwargs["prompt"]
 
 
 def test_summarise_unwraps_nested_result_envelope():

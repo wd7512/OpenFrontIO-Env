@@ -207,7 +207,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Harbor skeleton outputs (T3, keyless): never commit run artefacts.
+# Harbor run outputs: never commit run artefacts.
 runs/
 evidence/
 .cache/
@@ -215,3 +215,7 @@ evidence/
 # Worktrees live ONLY here; everything ignored except the committed marker.
 .worktrees/*
 !.worktrees/.gitkeep
+
+# Raw experiment data lives here; never committed, only the marker.
+raw/*
+!raw/.gitkeep

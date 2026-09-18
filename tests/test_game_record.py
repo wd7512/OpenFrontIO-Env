@@ -71,7 +71,7 @@ def test_converter_builds_valid_record(tmp_path, monkeypatch) -> None:
     assert record["version"] == "v0.0.2"
     assert record["info"]["gameID"] == "ENGINE01"
     assert len(record["info"]["players"]) == 1
-    assert record["info"]["players"][0]["username"] == "Smoke"
+    assert record["info"]["players"][0]["username"] == "Agent"
     # Production archive shape: empty turns dropped, non-empty kept.
     tape = json.loads((tmp_path / "record.json").read_text())
     non_empty = sum(1 for t in tape["turns"] if t["intents"])

@@ -42,7 +42,7 @@ START_TROOPS = 25_000
 END_DECISION_TICKS = 50
 
 LIFECYCLE_TOOLS = {"start_smoke_game", "get_overview", "end_decision", "close_game"}
-METADATA_TOOLS = {"get_pin", "list_scenarios"}
+METADATA_TOOLS = {"get_pin"}
 
 
 def _server_params() -> StdioServerParameters:
@@ -205,7 +205,7 @@ def test_end_decision_expected_decisions_reject_stale() -> None:
 def test_overview_is_controlled_human_state_not_engine_internals() -> None:
     expected_human = {
         "id": "human-1",
-        "name": "Smoke",
+        "name": "Agent",
         "troops": START_TROOPS,
         "gold": "0",
         "tiles": 52,

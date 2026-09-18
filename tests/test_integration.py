@@ -45,7 +45,7 @@ def test_ledger_branches_and_order() -> None:
     text = path.read_text(encoding="utf-8")
     for branch in ("docker-base", "harbor-skeleton", "lit-review"):
         assert branch in text
-    assert "Merge order" in text or "merge order" in text.lower()
+    assert "Merge history" in text or "merge order" in text.lower()
 
 
 def test_agents_mentions_tracks() -> None:

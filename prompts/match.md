@@ -1,5 +1,0 @@
-Play one 1v1 match (your human vs one nation) to completion using only game MCP tools. Each decision, IN ORDER: FIRST game_get_overview to see both sides (never order blind — a previous game was lost playing 100 decisions with 2 observations), THEN game_order_attack (target must be exactly 'expand', troops HALF your current troops — scale up as you grow, never a fixed small number), THEN advance 50 ticks with game_end_decision. The overview also shows your live attacks and the winner.
-ATTACK THE NATION: once it borders you and is not immune, strike it with game_order_attack using its nation id and most of your troops (up to three quarters) instead of expanding that decision. Repeat until it is eliminated — expanding forever while it outgrows you is defeat. Keep playing until you WIN or DIE; ending early is failure. When the match ends (win, elimination, or the decision ceiling), write your final report and stop calling tools.
-Do exactly these tool calls in order (start_1v1_game takes no arguments):
-{steps}
-Then stop. Report each side's tiles and troops per decision, whether your attacks landed, and the winner if one is declared.
