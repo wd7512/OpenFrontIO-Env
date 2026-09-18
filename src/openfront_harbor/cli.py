@@ -88,6 +88,14 @@ def _build_parser() -> argparse.ArgumentParser:
     evidence.add_argument(
         "--ports", default="", help="cell ports recorded, comma-separated"
     )
+    devtools = sub.add_parser(
+        "dev-tools", help="repo hygiene checks: worklog, test names, encoding"
+    )
+    devtools.add_argument(
+        "rest",
+        nargs=argparse.REMAINDER,
+        help="arguments for dev-tools (e.g. check ...)",
+    )
     return parser
 
 
@@ -148,6 +156,12 @@ def _run_evidence(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_devtools(args: argparse.Namespace) -> int:
+    from openfront_harbor.devtools import main as devtools_main
+
+    return devtools_main(list(args.rest))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the `openfront-harbor` console script."""
     logging.basicConfig(
@@ -165,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_reconcile(args)
     if args.command == "evidence":
         return _run_evidence(args)
+    if args.command == "dev-tools":
+        return _run_devtools(args)
     parser.print_help()
     return 0
 

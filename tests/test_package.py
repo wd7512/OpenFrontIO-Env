@@ -1,7 +1,7 @@
 from openfrontbench.server import main
 
 
-def test_main_callable() -> None:
+def test_server_main_callable() -> None:
     assert callable(main)
 
 

@@ -46,7 +46,7 @@ CivBench is an **open-source benchmark** evaluating LLM agents in long-horizon, 
 ```
 LLM Agent → MCP Tools (76, stdio JSON-RPC) → CivBench MCP Server → FireTuner (TCP) → Civ VI
    ↑                                                                              │
-   └────────── Structured text via Narration Layer ◄──────────────────────────────┘
+   └────────── Structured text via Narration Layer <──────────────────────────────┘
 ```
 The server translates calls to Civ VI and returns structured observations through the narration layer.
 
@@ -60,7 +60,7 @@ The server translates calls to Civ VI and returns structured observations throug
 ```
 Any MCP Client → stdio (JSON-RPC) → CivBench MCP Server (Python) → TCP :4318 → FireTuner → Civ VI
        ↑                                                                     │
-       └─────── Structured text via Narration Layer (29 functions) ◄─────────┘
+       └─────── Structured text via Narration Layer (29 functions) <─────────┘
 ```
 
 **76 MCP tools** across 13 categories: Units (list/move/attack/fortify/found/build/promote/upgrade), Cities (inspect/production/purchase/focus), Map (terrain/resources/fog/settle advice), Research (tech/civic trees), Diplomacy (relationships/modifiers/alliances), Trade (routes/destinations), Government (policy cards/eras), Governors (appoint/assign/promote), Religion (pantheons/beliefs/spread), Great People (recruit/patronize/reject), World Congress (resolutions/favor), Victory (all conditions), Game lifecycle (save/load/launch/restart/kill).

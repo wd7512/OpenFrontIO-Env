@@ -11,6 +11,7 @@ Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a requi
 - Lint: `uv run ruff check`
 - Type check: `uv run ty check`
 - Test: `uv run pytest`
+- Hygiene: `uv run openfront-harbor dev-tools check`
 - Build: `uv build`
 
 ## Rules

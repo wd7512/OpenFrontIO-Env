@@ -31,6 +31,8 @@ jobs:
         run: uv run ruff format --check
       - name: Lint
         run: uv run ruff check
+      - name: Hygiene (dev-tools check)
+        run: uv run openfront-harbor dev-tools check
       - name: Type check
         run: uv run ty check
       - name: Test
