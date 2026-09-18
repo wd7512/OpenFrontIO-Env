@@ -207,8 +207,14 @@ def test_prompts_live_in_md_files():
 def test_run_rejects_bad_difficulty(tmp_path):
     from openfront_mcp.live_smoke import run
 
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
     with pytest.raises(ValueError, match="difficulty must be one of"):
-        run(".env.local", tmp_path / "x", 10, scenario="solo", difficulty="brutal")
+        run(env, tmp_path / "x", 10, scenario="solo", difficulty="brutal")
 
 
 def test_run_rejects_bad_scenario_and_bounds(tmp_path):
