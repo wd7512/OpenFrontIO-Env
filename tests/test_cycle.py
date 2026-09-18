@@ -71,10 +71,33 @@ def test_coach_bundle_assembles_report_tape_and_sources(tmp_path: Path) -> None:
     assert (bundle / "live_result.json").read_text() == '{"summary": {}}'
 
 
-def test_coach_prompt_names_bundle_and_output(tmp_path: Path) -> None:
-    prompt = cy.build_coach_prompt(["report.txt", "record.json"], "memory.md")
-    assert "report.txt" in prompt and "memory.md" in prompt
-    assert "game" not in prompt.lower().replace("endgame", "")
+def test_coach_prompt_asks_for_ethos_from_engine_sources(tmp_path: Path) -> None:
+    prompt = cy.build_coach_prompt(["record.json", "Config.ts"], "memory.md")
+    assert "record.json" in prompt and "memory.md" in prompt
+    assert "ethos" in prompt
+    assert "attackLogic" in prompt and "TransportShip" in prompt
+    # No playbook bundled: nothing tells the coach to evolve one.
+    assert "previous_playbook.md" not in prompt
+
+    evolved = cy.build_coach_prompt(
+        ["record.json", "previous_playbook.md"], "memory.md", has_previous=True
+    )
+    assert "previous_playbook.md" in evolved
+
+
+def test_coach_bundle_shares_budget_by_source_size(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    small = tmp_path / "small.py"
+    small.write_text("tiny\n")
+    big = tmp_path / "big.py"
+    big.write_text("x" * 50_000)
+    bundle = tmp_path / "bundle"
+    files = cy.assemble_coach_bundle(run_dir, [small, big], bundle, max_chars=10_000)
+    assert files == ["small.py", "big.py"]
+    # The short source is whole; the long one takes the rest of the budget.
+    assert (bundle / "small.py").read_text() == "tiny\n"
+    assert len((bundle / "big.py").read_text()) < 50_000
 
 
 def test_ledger_appends_jsonl(tmp_path: Path) -> None:

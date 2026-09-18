@@ -1,8 +1,9 @@
 """Play -> retro -> memory cycle.
 
 One cycle: a blind player matches via the MCP tools, then a sighted coach
-(reads the run bundle + curated sources, no play tools) writes versioned
-strategy notes. The next player gets the latest notes in its prompt.
+(reads the run bundle + curated sources, no play tools) writes the next
+version of the strategy playbook. The next player gets the latest playbook
+in its prompt.
 
 The coach never touches the repository: it works in an isolated temp dir on
 copies. The player never sees code: notes are the only channel.
@@ -22,9 +23,19 @@ from openfront_mcp.paths import REPO_ROOT
 
 log = logging.getLogger(__name__)
 
-# Curated sources the coach may study. Small on purpose: the whole repo
-# would blow the token budget this cycle exists to control.
+# Curated sources the coach may study: the engine mechanics that decide
+# battles, boats and growth, plus the adapter surface the player actually
+# drives. Small on purpose: the whole repo would blow the token budget this
+# cycle exists to control.
 COACH_SOURCES: tuple[str, ...] = (
+    # attackLogic/attackAmount/maxTroops: troop-loss math and tempo.
+    "vendor/OpenFrontIO/src/core/configuration/Config.ts",
+    # Retreat malus and the per-tile combat loop.
+    "vendor/OpenFrontIO/src/core/execution/AttackExecution.ts",
+    # Transport ships: cost, capacity, landing and retreat rules.
+    "vendor/OpenFrontIO/src/core/execution/TransportShipExecution.ts",
+    "vendor/OpenFrontIO/src/core/game/TransportShipUtils.ts",
+    # Adapter surface: what orders exist and how they reach the engine.
     "engine/worker.ts",
     "src/openfront_mcp/session.py",
 )
@@ -34,7 +45,7 @@ BUNDLE_FILENAMES: tuple[str, ...] = ("live_result.json", "record.json")
 
 
 class MemoryStore:
-    """Versioned strategy notes: memory-v1.md, memory-v2.md, ..."""
+    """Versioned strategy playbook: memory-v1.md, memory-v2.md, ..."""
 
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
@@ -80,12 +91,14 @@ def assemble_coach_bundle(
     run_dir: Path | str,
     sources: list[Path | str],
     dest: Path | str,
-    max_chars: int = 60_000,
+    max_chars: int = 200_000,
 ) -> list[str]:
     """Copy run outputs + curated sources into the coach work dir.
 
-    Returns the copied file names. Tapes are compacted; sources are
-    truncated to share the budget.
+    Returns the copied file names. Tapes are compacted. Source space is
+    split proportionally to file size so a long file (Config.ts) is not
+    cut off before its decisive section while a short one goes entire; all
+    sources fit whole whenever the total stays inside the budget.
     """
     run_path = Path(run_dir)
     dest_path = Path(dest)
@@ -103,34 +116,54 @@ def assemble_coach_bundle(
                 pass
         (dest_path / name).write_text(text[:max_chars], encoding="utf-8")
         names.append(name)
-    per_source = max(
-        4_000, (max_chars - sum(len(n) for n in names)) // max(1, len(sources))
-    )
+    loaded: list[tuple[Path, str]] = []
     for src in sources:
         src_path = Path(src)
         if not src_path.is_file():
             continue
-        (dest_path / src_path.name).write_text(
-            src_path.read_text(encoding="utf-8")[:per_source],
-            encoding="utf-8",
-        )
+        loaded.append((src_path, src_path.read_text(encoding="utf-8")))
+    budget = max_chars - sum((dest_path / name).stat().st_size for name in names)
+    total = sum(len(text) for _, text in loaded) or 1
+    for src_path, text in loaded:
+        share = max(2_000, budget * len(text) // total)
+        (dest_path / src_path.name).write_text(text[:share], encoding="utf-8")
         names.append(src_path.name)
     return names
 
 
-def build_coach_prompt(bundle_files: list[str], output_name: str) -> str:
+def build_coach_prompt(
+    bundle_files: list[str], output_name: str, has_previous: bool = False
+) -> str:
     files = ", ".join(bundle_files)
+    previous = (
+        "previous_playbook.md is the playbook the player used in this match; "
+        "evolve it — keep what still holds, correct or drop what the tape "
+        "contradicts, and fold in what this match teaches. "
+        if has_previous
+        else ""
+    )
     return (
-        "You are a strategy coach reviewing one completed match. "
-        f"Read these files in your working directory: {files}. "
-        "The result file holds the final score and the player notes; "
-        "the record holds the taped orders; other files are the engine "
-        "and adapter sources behind the match. "
-        "Write concise strategy notes for the NEXT player of the same "
-        "format: what won tiles, what bled troops, when to strike, what "
-        "to never repeat. Concrete numbers from this match beat general "
-        "advice. No code, no tool calls to any match, no edits to anything "
-        f"outside this directory. Write the notes to {output_name} and stop."
+        "You are the strategy coach for a solo OpenFront agent. Read these "
+        f"files in your working directory: {files}. "
+        "live_result.json is the final match state, record.json is the taped "
+        "orders, and the rest are engine and adapter sources. "
+        f"{previous}"
+        "Mine the engine source for the mechanics behind battles, boats and "
+        "growth (attackLogic, attackAmount and maxTroops in Config.ts; "
+        "AttackExecution.ts; TransportShipExecution.ts and "
+        "TransportShipUtils.ts). Turn them into general heuristics the player "
+        "can apply with only its game tools: when attacking is worth it, what "
+        "share of troops to commit, why retreats are costly, when transport "
+        "ships help, and how to break out when land expansion is blocked. "
+        "Read the tape critically: was force over-committed, were transport "
+        "ships used, did expansion stall against water? "
+        f"Write the next player's playbook to {output_name}: a short general "
+        "ethos, not a match report — durable principles and decision rules "
+        "that hold in any run of this format. No board-state recap, no long "
+        "stat lists, no narrative; a few engine-accurate thresholds are "
+        "welcome where they make a rule precise. The next player sees this "
+        "text and nothing else, so it must stand alone. No code, no match "
+        "tools, no edits outside this directory. Then stop."
     )
 
 
@@ -256,6 +289,11 @@ def coach_only(
     names = assemble_coach_bundle(
         out_dir, [REPO_ROOT / s for s in COACH_SOURCES], staging
     )
+    previous = store.latest()
+    has_previous = bool(previous)
+    if previous:
+        (staging / "previous_playbook.md").write_text(previous, encoding="utf-8")
+        names.append("previous_playbook.md")
     launched = launch_coach(
         run_root=coach_root / "agent",
         model=model,
@@ -263,7 +301,7 @@ def coach_only(
         key_env_var=key_env_var,
         base_url=base_url,
         api_key=api_key,
-        prompt=build_coach_prompt(names, MEMORY_FILENAME),
+        prompt=build_coach_prompt(names, MEMORY_FILENAME, has_previous),
         timeout_s=coach_timeout_s,
         bundle_files={name: staging / name for name in names},
         models_cache_source=models_cache_source,
