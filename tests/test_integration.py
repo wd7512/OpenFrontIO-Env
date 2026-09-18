@@ -50,5 +50,5 @@ def test_ledger_branches_and_order() -> None:
 
 def test_agents_mentions_tracks() -> None:
     text = _read("AGENTS.md")
-    assert "openfront-harbor" in text
+    assert "harbor" in text
     assert "lit-review" in text

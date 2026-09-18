@@ -39,12 +39,4 @@ Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a requi
 
 ## Tracks
 
-- Docker base: `docker/openfront/Dockerfile`; check via `scripts/build-openfront.sh --dry-run` (local tags only, never pushed).
-- Harbor gates: `uv run openfront-harbor preflight/plan/reconcile/evidence --help` (dry-run/keyless only).
-- Lit-review: `docs/lit-review/README.md`; dry-run batch only, lit-watch scoped commits.
-
-## Conventions
-
-- Process vs example: generic machinery takes explicit inputs and names no domain values. Domain specifics live in exactly one worked example each: `src/openfront_harbor/example.py` + `tasks/plains-smoke`, `src/openfront_mcp/episodes/smoke.py`, `docs/lit-review/iter_1/`. Process tests use synthetic fixtures; only `example_*`/smoke tests touch real files.
-- Research honesty: `docs/lit-review` holds one real pass (`iter_1/`). Never add `iter_N/`, syntheses, or proposals without running the work; no placeholder scaffolding that implies done work.
-- Live gates: no live harbor runs, LLM batch runs, or docker pushes until the task spec is amended. Keyless CI only.
+- Docker, harbor gates, and lit-review are keyless/dry-run only — see each track's README or runbook. Details live with the code, not here.
