@@ -3,7 +3,7 @@
 OpenFront OpenFrontIO-Env: a keyless MCP benchmark harness over a pinned
 OpenFrontIO engine core.
 
-It uses Python 3.11, `uv`, `ruff`, `ty`, `pytest`, and optional agent support for
+It uses Python 3.12, `uv`, `ruff`, `ty`, `pytest`, and optional agent support for
 AI-assisted development.
 
 ## Setup (exact)
@@ -77,6 +77,10 @@ AI coding agents, the repository also includes:
 
 Optional telemetry plugins live in `.opencode/plugins-available/`. Copy one into
 `.opencode/plugins/` and restart OpenCode to enable it.
+
+## Overhaul tracks
+
+When merged from overhaul/* branches: docker via `docs/docker-runbook.md`, harbor runs via `docs/evidence-run-folders-runbook.md`, lit-review via `docs/lit-review/README.md`.
 
 ## Limitations
 
