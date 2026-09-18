@@ -184,8 +184,9 @@ def test_build_solo_prompt_names_solo_game_and_cap():
     assert '"easy"' in prompt
     # Win-or-die: the only acceptable end is victory or elimination, never
     # an early close (the agent twice closed healthy games to "report").
+    # Full Civ parity: no close tool exists — the match ends server-side.
     assert "WIN" in prompt and "DIE" in prompt
-    assert "Only call game_close_game after a" in prompt
+    assert "game_close_game" not in prompt
 
 
 def test_build_solo_prompt_impossible_names_difficulty():
