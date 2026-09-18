@@ -1,7 +1,7 @@
 [project]
 name = "python-template"
 version = "0.1.0"
-description = "A minimal Python project template with uv, ruff, pytest, and optional agent support."
+description = "OpenFrontBench: a keyless MCP benchmark harness over the pinned OpenFrontIO engine."
 readme = "README.md"
 authors = [
     { name = "William Dennis", email = "wwdennis.home@gmail.com" }

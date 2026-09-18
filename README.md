@@ -1,6 +1,6 @@
-# python-template
+# OpenFrontBench
 
-OpenFront OpenFrontIO-Env: a keyless MCP benchmark harness over a pinned
+OpenFrontIO-Env: a keyless MCP benchmark harness over a pinned
 OpenFrontIO engine core.
 
 It uses Python 3.12, `uv`, `ruff`, `ty`, `pytest`, and optional agent support for
