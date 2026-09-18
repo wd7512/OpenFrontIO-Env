@@ -1,0 +1,3 @@
+{"cycle": 2, "tiles": 53897, "troops": 364874, "winner": null, "decisions": 100, "memory_version": 2, "model": "opencode-go/muse-spark-1.3-contributor"}
+{"cycle": 3, "tiles": 52492, "troops": 267678, "winner": null, "decisions": 100, "memory_version": 3, "model": "opencode-go/muse-spark-1.3-contributor"}
+{"cycle": 4, "tiles": 221059, "troops": 4393825, "winner": null, "decisions": 100, "memory_version": 4, "model": "opencode-go/muse-spark-1.3-contributor"}
