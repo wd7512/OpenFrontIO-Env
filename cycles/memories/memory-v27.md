@@ -1,0 +1,28 @@
+# Solo FFA vs nations — one order per 50-tick decision
+
+## Ethos
+- Survival is the score. maxTroops = 2*(tiles^0.6*1000+50000) + 250k/city level (tribe /3, Medium nation x0.75): tiles set the ceiling, cities raise it. Density (troops/tiles) is your defence; a sprawling thin empire is bait, not a lead.
+- Every decision: expand cheap neutral land, raid a spent/collapsed rival, or build/upgrade (city raises max troops; port/factory trade pays beyond the 100 gold/tick base). A no-op wastes refill and tempo.
+- Keep your army above every bordering non-ally. A Medium nation's cheapest kills are `weakest` (lightest bordering neighbour with fewer troops than it) and `hated` (any Hostile relation it can beat by up to 3x); it also attacks AFK and traitor neighbours.
+- Taking land under enemy structures captures those structures; posts are destroyed instead. Raids into a city-rich nation are the fastest way to grow your cap.
+- Ally before you strike: an attack sets -70 (Hostile), auto-embargoes (-20) and rejects its pending alliance. You may still ally a nation you out-troop >2.5x even while Hostile (threat overrides relation). Extend alliances before the 3000-tick lapse.
+- Don't go traitor: breaking an alliance = 300 ticks at 0.5x defence / 0.8x speed and near-universal refusal. An ally betrays you once it out-troops you ~10x (Medium) or you drop under 20% max (Hard+); an alliance is not protection after a collapse.
+
+## When to act
+- RIVAL CADENCE: Medium nations act every 55-70 ticks (tribes 40-80), and only at >=30-40% of max troops (reserve), 90% of the time at >=50-60% (trigger; 10% pass). Refill/tick = (10 + troops^0.73/4)*(1 - troops/max)*0.95. Troops climbing on flat tiles = refilling: strike below its trigger, not after it re-arms; pinned near max = an act is imminent.
+- COUNTER WINDOW: its act tick is its biggest spend. The decision after its wave lands, its home is short by that wave; hit its home before its next 55-70-tick act. Attacking it cancels its incoming attack troop-for-troop — send more than its incoming_attacks total to cancel and still press. A nation below its 30-40% reserve does not act at all, so draining it below reserve buys quiet ticks.
+- FORCED RETALIATION: if one incoming_attacks >= ~half your army, or is the largest and its attacker borders_human, hit that attacker with at least its troop count (it retaliates next act with everything above reserve). If it does not border you, land does nothing — boat it or ally it.
+- ALLIANCES (Medium accepts): your troops > its troops*2.5 (threat, overrides even Hostile); OR relation Friendly; OR early game (tick < ~1900, 70%); OR similarly strong (its troops+outgoing > 70-80% of yours, or its tiles > 80-90% of yours with troops > 50% of yours). Refused if relation < Neutral, if traitor, or if it already holds 4-6. A refusal is not a challenge; don't raid it unless incoming_troops shows collapse.
+- DEFENSE POSTS (land only): a Medium nation may raise its one post (50% chance per structure call) once incoming LAND troops (sourceTile null; boat landings excluded) reach 35% of its troops; calls land on its act tick and ~1/3 and 2/3 through the interval. Keep any land alpha under 35% of its troops, or open a boat front, or accept the x5 loss inside range 30. Build one on your own threatened front.
+- BOATS: 3 max, 1 tile/tick. A landing (a) never counts toward that 35% land-post trigger and (b) cancels the target's incoming attack troop-for-troop. Aim from boat_targets (owner troops/tiles) at water-blocked fronts; recall/loss costs 25%; keep all three sailing.
+- DOGPILE: a real victim has incoming_troops >= ~its own troops (engine test: incoming > 50% of troops AND its troops <= 1.2x yours). Medium nations do not run that strategy, so it is your heuristic — race a bordering victim: under 100 tiles it is auto-conquered and its land splits among adjacent players.
+
+## Attack sizing (A from D=troops, T=tiles; never a fixed share)
+- Per-tile attacker loss vs a player: L = 0.6*clamp(D/A,0.6,2)*m*0.8*f(T) + 0.4*1.3*(D/T)*(m/100), with f(T) = 0.7 + 0.3/(1+exp((T-150000)*ln2/50000)) ~0.97 under 30k tiles, 0.85 at 150k, 0.70 giant. m = 80 plains / 100 highland / 120 mountain (x0.7 vs a tribe). Terrain is not exposed; plan on plains and treat highland/mountain as 25-50% worse.
+- Clear cost ~= L*T (less as D falls, more from defender regen and the border-only crawl). A ~= D is the knee (clamp 1); below ~D/2 the 2x clamp ~doubles losses; past ~1.7D you only reach the 0.6 floor. Use A in [D, 1.7D]. Hard cap A = troops - reserve, reserve >= strongest bordering non-ally's army and >= ~35% of your maxTroops.
+- PRE-CHECK: if L*T > troops - reserve, do not launch — it cannot clear, it only marks you Hostile and feeds the enemy. A post multiplies L by 5, so never grind a post with land; boat a clear shore or skip. If your own tiles > 100k, your attack power and speed are scaled down — sprawling without cities is a trap.
+- Neutral land: flat m/5 per tile (16/20/24), no defender loss. Send >=6.6k plains / 8k highland / 10k mountain so each tile costs the minimum budget; cost = (m/5)*T. Spread spare troops on other frontiers rather than one.
+- Worked, tribe 800 tiles/50k plains: A=1.5D=75k -> c=0.67, L~36 -> ~29k clears. A 15k probe clamps to 2, L~70/tile -> dies.
+- Worked, nation 3,000/200k plains: A=1.4D=280k -> c=0.71, f~.97, L~54 -> ~163k clears; its post makes L~270 (~810k) — boat or skip.
+- Worked, large nation 40k/700k: L~44/tile -> ~1.7M to clear. Don't; hit it only while incoming_troops shows collapse, mainly to cancel its counter.
+- Worked, neutral 1,000 plains: 16/tile -> ~16k clears; send max(6.6k, frontier width), keep the rest home.
