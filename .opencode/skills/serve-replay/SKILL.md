@@ -9,7 +9,7 @@ Serve a finished run through the real engine replay (`createGameRunner`, the bro
 
 ## Steps
 
-1. Pick the run dir (latest `openfront-cycle-*` unless told otherwise). Done when: it holds `record.json` + `live_result.json`.
+1. Pick the run dir under `raw/` (canonical home for experiment data; latest `openfront-cycle-*` unless told otherwise). Done when: it holds `record.json` + `live_result.json`.
 2. Bundle the converter with an **absolute** resources alias (relative alias fails to resolve), run it on the run dir, then move the record out to `/tmp` staging. Done when: the run dir is byte-identical and staging holds `game_record.json`.
    ```bash
    engine/node_modules/.bin/esbuild scripts/build_game_record.ts --bundle --platform=node --format=esm --alias:resources=$PWD/vendor/OpenFrontIO/resources --outfile=/tmp/replay/build_game_record.mjs

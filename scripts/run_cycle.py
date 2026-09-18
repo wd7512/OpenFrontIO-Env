@@ -21,6 +21,7 @@ from openfront_mcp.live_smoke import (
     run,
 )
 from openfront_mcp.opencode_launcher import PROVIDER_BASE_URLS
+from openfront_mcp.paths import REPO_ROOT
 
 logging.basicConfig(level=logging.INFO)
 
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         out = (
             Path(args.out_prefix).parent / f"{Path(args.out_prefix).name}-{stamp}"
             if args.out_prefix
-            else Path(f"/Users/williamdennis/Downloads/openfront-cycle-{stamp}")
+            else REPO_ROOT / "raw" / f"openfront-cycle-{stamp}"
         )
         row = run_cycle(
             cycles_root=root,
