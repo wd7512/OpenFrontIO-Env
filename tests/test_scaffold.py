@@ -9,23 +9,20 @@ from openfront_mcp.__main__ import main
 from openfront_mcp.diary import append_diary, read_diary
 from openfront_mcp.metrics import pmr, rag_at_k
 from openfront_mcp.narrate import narrate_overview
-from openfront_mcp.server import TOOLS, get_pin, list_scenarios
+from openfront_mcp.server import TOOLS, get_pin
 
 
 def test_pin_names_version() -> None:
     assert "v0.33.14" in get_pin()
 
 
-def test_tool_registry_lists_both_scenarios() -> None:
-    assert set(TOOLS) == {"get_pin", "list_scenarios"}
-    out = list_scenarios()
-    assert "box-small-2nations" in out
-    assert "box-small-4nations-mixed" in out
+def test_tool_registry_lists_pin_only() -> None:
+    assert set(TOOLS) == {"get_pin"}
 
 
 def test_narrate_minimal_obs() -> None:
-    assert narrate_overview({"tick": 50, "scenario": "box-small-2nations"})
-    assert "50" in narrate_overview({"tick": 50, "scenario": "box-small-2nations"})
+    assert narrate_overview({"tick": 50, "scenario": "plains-human-smoke"})
+    assert "50" in narrate_overview({"tick": 50, "scenario": "plains-human-smoke"})
 
 
 def test_pmr() -> None:

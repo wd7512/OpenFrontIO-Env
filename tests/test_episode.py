@@ -42,7 +42,7 @@ START_TROOPS = 25_000
 END_DECISION_TICKS = 50
 
 LIFECYCLE_TOOLS = {"start_smoke_game", "get_overview", "end_decision", "close_game"}
-METADATA_TOOLS = {"get_pin", "list_scenarios"}
+METADATA_TOOLS = {"get_pin"}
 
 
 def _server_params() -> StdioServerParameters:

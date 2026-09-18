@@ -31,7 +31,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cycles", type=int, default=3)
     parser.add_argument("--cycles-root", default="cycles")
     parser.add_argument("--env-file", default=".env.local")
-    parser.add_argument("--scenario", default="solo")
     parser.add_argument("--max-decisions", type=int, default=150)
     parser.add_argument("--difficulty", default="easy")
     parser.add_argument("--coach-timeout", type=float, default=900)
@@ -86,7 +85,6 @@ def main(argv: list[str] | None = None) -> int:
                 "env_file": args.env_file,
                 "output": out,
                 "timeout_s": 30000,
-                "scenario": args.scenario,
                 "max_decisions": args.max_decisions,
                 "difficulty": args.difficulty,
                 "models_cache_source": cache,

@@ -1,11 +1,11 @@
 """Smoke + lifecycle tools over a real FastMCP stdio server.
 
-Plain metadata functions stay importable and the TOOLS registry survives for
-scaffold/evals compatibility; a FastMCP server on top registers them under the
-same names. The four lifecycle tools (start_smoke_game / get_overview /
-end_decision / close_game) talk to the real pinned engine through a
-per-lifespan ``GameSession``: one engine worker per server lifespan, with all
-requests serialized there. Tools never accept paths.
+Plain metadata functions stay importable; a FastMCP server on top registers
+them under the same names. The lifecycle tools (start_smoke_game /
+start_solo_game / get_overview / end_decision / orders / close_game) talk to
+the real pinned engine through a per-lifespan ``GameSession``: one engine
+worker per server lifespan, with all requests serialized there. Tools never
+accept paths.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from mcp.server.fastmcp import Context, FastMCP
 from pydantic import StrictInt
 
 from openfront_mcp import pins as _pins
-from openfront_mcp import scenarios as _scenarios
 from openfront_mcp.session import (
     MAX_TOOL_NATIONS,
     MAX_TOOL_TRIBES,
@@ -38,14 +37,8 @@ def get_pin() -> str:
     return f"upstream-openfrontio {PIN}; scope: {CORE_SCOPE}"
 
 
-def list_scenarios() -> str:
-    names = [s.name for s in _scenarios.SCENARIOS]
-    return "scenarios: " + ", ".join(names)
-
-
 TOOLS = {
     "get_pin": get_pin,
-    "list_scenarios": list_scenarios,
 }
 
 

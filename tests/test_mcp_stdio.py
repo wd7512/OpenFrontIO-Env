@@ -38,7 +38,7 @@ async def _discover_tools(timeout: float = 15.0) -> tuple[str, set[str]]:
 def test_stdio_initialize_and_tools_list() -> None:
     server_name, tool_names = asyncio.run(_discover_tools())
     assert server_name == "openfront-mcp"
-    assert {"get_pin", "list_scenarios"} <= tool_names
+    assert {"get_pin"} <= tool_names
 
 
 async def _call_tool(name: str, arguments: dict, timeout: float = 15.0) -> str:
@@ -53,9 +53,3 @@ def test_stdio_call_tool_get_pin() -> None:
     out = asyncio.run(_call_tool("get_pin", {}))
     assert "v0.33.14" in out
     assert "src/core only" in out
-
-
-def test_stdio_call_tool_list_scenarios() -> None:
-    out = asyncio.run(_call_tool("list_scenarios", {}))
-    assert "box-small-2nations" in out
-    assert "box-small-4nations-mixed" in out
