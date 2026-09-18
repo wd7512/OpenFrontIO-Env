@@ -37,10 +37,14 @@ Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a requi
 - `.opencode/plugins/write-size-guard.ts` prevents oversized generated writes.
 - `.opencode/plugins-available/` contains optional telemetry plugins that can be copied into `.opencode/plugins/` when desired.
 
-## Overhaul tracks
+## Tracks
 
-- Python 3.12 + harbor==0.21.0 required (see pyproject.toml).
-- Docker base: `docker/openfront/Dockerfile`; check via `scripts/build-openfront.sh --dry-run`.
-- Harbor skeleton: `uv run openfront-harbor preflight/plan/reconcile/evidence --help`.
+- Docker base: `docker/openfront/Dockerfile`; check via `scripts/build-openfront.sh --dry-run` (local tags only, never pushed).
+- Harbor gates: `uv run openfront-harbor preflight/plan/reconcile/evidence --help` (dry-run/keyless only).
 - Lit-review: `docs/lit-review/README.md`; dry-run batch only, lit-watch scoped commits.
-- All overhaul paths are merge-guarded: skip cleanly when files are absent.
+
+## Conventions
+
+- Process vs example: generic machinery takes explicit inputs and names no domain values. Domain specifics live in exactly one worked example each: `src/openfront_harbor/example.py` + `tasks/plains-smoke`, `src/openfront_mcp/episodes/smoke.py`, `docs/lit-review/iter_1/`. Process tests use synthetic fixtures; only `example_*`/smoke tests touch real files.
+- Research honesty: `docs/lit-review` holds one real pass (`iter_1/`). Never add `iter_N/`, syntheses, or proposals without running the work; no placeholder scaffolding that implies done work.
+- Live gates: no live harbor runs, LLM batch runs, or docker pushes until the task spec is amended. Keyless CI only.
