@@ -210,3 +210,7 @@ __marimo__/
 # Worktrees live ONLY here; everything ignored except the committed marker.
 .worktrees/*
 !.worktrees/.gitkeep
+
+# Raw experiment data lives here; never committed, only the marker.
+raw/*
+!raw/.gitkeep
