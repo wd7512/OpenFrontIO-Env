@@ -42,6 +42,12 @@ def _run(tmp_path: Path, name: str, game_id: str = "ENGINE01") -> Path:
                     "tool_calls": 10,
                     "cost": 0.001,
                     "final_human": {"tiles": 100, "troops": 200},
+                    "metrics": {
+                        "cities": 7,
+                        "attacks": 31,
+                        "attacks_after_50": 9,
+                        "tiles_peak": 4321,
+                    },
                 },
             }
         )
@@ -211,6 +217,20 @@ def test_load_summary_reads_difficulty(tmp_path: Path) -> None:
     mod = _mod()
     run = _run(tmp_path, "a-run")
     assert mod.load_summary(run)["difficulty"] == "hard"
+
+
+def test_index_shows_passivity_metrics(tmp_path: Path) -> None:
+    mod = _mod()
+    _run(tmp_path, "a-run")
+    summaries = {p.name: mod.load_summary(p) for p in mod.find_runs(tmp_path)}
+    ids = mod.assign_ids(list(summaries), {n: "ENGINE01" for n in summaries})
+    for name, gid in ids.items():
+        summaries[name]["game_id"] = gid
+    index = mod.render_index(summaries, "http://localhost:9000").decode()
+    assert summaries["a-run"]["metrics"]["attacks_after_50"] == 9
+    for header in ("cities", "atk", "atk&gt;50", "peak tiles"):
+        assert f"<th>{header}</th>" in index
+    assert "<td>31</td>" in index and "<td>4321</td>" in index
 
 
 def test_load_summary_omits_live_fields_until_run_finishes(tmp_path: Path) -> None:

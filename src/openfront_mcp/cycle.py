@@ -98,6 +98,16 @@ class MemoryStore:
             return None
         return self._path(versions[-1]).read_text(encoding="utf-8")
 
+    def latest_version(self) -> int | None:
+        versions = self._versions()
+        return versions[-1] if versions else None
+
+    def read(self, version: int) -> str:
+        """Read a pinned memory version (variance runs compare playbooks)."""
+        if version not in self._versions():
+            raise ValueError(f"memory-v{version}.md not found under {self.root}")
+        return self._path(version).read_text(encoding="utf-8")
+
     def save(self, text: str) -> int:
         if not text or not text.strip():
             raise ValueError("refusing to store empty memory")
@@ -370,16 +380,25 @@ def run_cycle(
     api_key: str,
     coach_timeout_s: float = 900,
     models_cache_source: Path | str | None = None,
+    memory_version: int | None = None,
 ) -> dict[str, Any]:
-    """Play one match with the latest memory, then coach the next version."""
+    """Play one match with the latest memory, then coach the next version.
+
+    ``memory_version`` pins the played playbook to one version (A/B and
+    variance runs); coaching still appends the next version.
+    """
     root = Path(cycles_root)
     store = MemoryStore(root / "memories")
-    memory = store.latest()
+    memory_used = (
+        memory_version if memory_version is not None else store.latest_version()
+    )
+    memory = store.read(memory_used) if memory_used is not None else None
     kwargs = dict(play_kwargs)
     if memory:
         kwargs["memory"] = memory
     played = play_fn(**kwargs)
     summary = played.get("summary", {})
+    metrics = summary.get("metrics") or {}
     out_dir = Path(str(kwargs.get("output", "")))
     version: int | None = None
     if out_dir.is_dir():
@@ -395,14 +414,22 @@ def run_cycle(
             models_cache_source=models_cache_source,
         )
     row = {
-        "cycle": (store._versions()[-1] if store._versions() else 0),
+        "cycle": store.latest_version() or 0,
         "tiles": (summary.get("final_human") or {}).get("tiles"),
         "troops": (summary.get("final_human") or {}).get("troops"),
         "winner": summary.get("winner"),
         "decisions": len(summary.get("decisions", [])),
         "memory_version": version,
+        "memory_used": memory_used,
         "model": model,
         "max_decisions": kwargs.get("max_decisions"),
+        "attacks": metrics.get("attacks"),
+        "attacks_after_50": metrics.get("attacks_after_50"),
+        "nation_attacks": metrics.get("nation_attacks"),
+        "cities": metrics.get("cities"),
+        "defense_posts": metrics.get("defense_posts"),
+        "tiles_peak": metrics.get("tiles_peak"),
+        "gold_end": metrics.get("gold_end"),
     }
     append_ledger(root / "ledger.jsonl", row)
     return row

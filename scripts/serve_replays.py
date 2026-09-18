@@ -107,6 +107,9 @@ def load_summary(run_dir: Path) -> dict[str, Any]:
             summary["winner"] = inner.get("winner")
             summary["tool_calls"] = inner.get("tool_calls")
             summary["cost"] = inner.get("cost")
+            metrics = inner.get("metrics")
+            if isinstance(metrics, dict):
+                summary["metrics"] = metrics
             human = inner.get("final_human", {})
             if isinstance(human, dict):
                 summary["tiles"] = human.get("tiles")
@@ -306,6 +309,7 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
         )
         duration = s.get("duration_s")
         wall = f"{duration:.0f}s" if isinstance(duration, (int, float)) else None
+        metrics = s.get("metrics") or {}
         rows.append(
             "<tr>"
             f"<td>{html.escape(name)}</td>"
@@ -320,6 +324,10 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
             f"{_cell(s.get('tiles'))}"
             f"{_cell(s.get('troops'))}"
             f"{_cell(s.get('tool_calls'))}"
+            f"{_cell(metrics.get('cities'))}"
+            f"{_cell(metrics.get('attacks'))}"
+            f"{_cell(metrics.get('attacks_after_50'))}"
+            f"{_cell(metrics.get('tiles_peak'))}"
             f"{_cell(wall)}"
             f"{_cell(s.get('cost'))}"
             "</tr>"
@@ -338,8 +346,11 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
         "vendor/OpenFrontIO).</p>\n"
         + "<table><tr><th>run</th><th>watch</th><th>model</th><th>scenario</th>"
         "<th>difficulty</th><th>max decisions</th><th>decisions</th><th>ticks</th>"
-        "<th>winner</th><th>tiles</th><th>troops</th><th>tool calls</th><th>wall</th>"
-        "<th>cost</th></tr>\n" + "".join(rows) + "\n</table></body></html>\n"
+        "<th>winner</th><th>tiles</th><th>troops</th><th>tool calls</th>"
+        "<th>cities</th><th>atk</th><th>atk&gt;50</th><th>peak tiles</th>"
+        "<th>wall</th><th>cost</th></tr>\n"
+        + "".join(rows)
+        + "\n</table></body></html>\n"
     )
     return page.encode("utf-8")
 

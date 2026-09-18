@@ -30,6 +30,67 @@ def test_memory_store_rejects_empty(tmp_path: Path) -> None:
         store.save("   ")
 
 
+def test_memory_store_read_pins_version(tmp_path: Path) -> None:
+    import pytest
+
+    store = cy.MemoryStore(tmp_path / "memories")
+    store.save("one")
+    store.save("two")
+    assert store.read(1) == "one\n"
+    assert store.latest_version() == 2
+    with pytest.raises(ValueError, match="not found"):
+        store.read(9)
+
+
+def test_run_cycle_pins_memory_version_and_records_metrics(tmp_path: Path) -> None:
+    root = tmp_path / "cycles"
+    memories = root / "memories"
+    memories.mkdir(parents=True)
+    (memories / "memory-v21.md").write_text("old\n")
+    (memories / "memory-v22.md").write_text("pinned playbook\n")
+    (memories / "memory-v23.md").write_text("latest\n")
+    seen: dict = {}
+
+    def play_fn(**kwargs):
+        seen.update(kwargs)
+        return {
+            "summary": {
+                "decisions": [1, 2],
+                "winner": None,
+                "final_human": {"tiles": 42, "troops": 7},
+                "metrics": {
+                    "attacks": 3,
+                    "attacks_after_50": 1,
+                    "nation_attacks": 2,
+                    "cities": 4,
+                    "defense_posts": 5,
+                    "tiles_peak": 99,
+                    "gold_end": "123",
+                },
+            }
+        }
+
+    row = cy.run_cycle(
+        cycles_root=root,
+        play_fn=play_fn,
+        play_kwargs={"output": tmp_path / "never-created"},
+        model="m",
+        provider="p",
+        key_env_var="K",
+        base_url=None,
+        api_key="k",
+        memory_version=22,
+    )
+    assert seen["memory"] == "pinned playbook\n"
+    assert row["memory_used"] == 22
+    assert row["memory_version"] is None  # no output dir, no coach
+    assert row["cycle"] == 23
+    assert row["attacks_after_50"] == 1
+    assert row["cities"] == 4
+    assert row["tiles_peak"] == 99
+    assert row["gold_end"] == "123"
+
+
 def test_solo_prompt_carries_memory_when_given() -> None:
     from openfront_mcp.live_smoke import build_solo_prompt
 

@@ -116,17 +116,72 @@ def test_run_auto_cache_missing_means_none(tmp_path):
     assert kwargs["models_cache_source"] is None
 
 
-def _tool_event(tool: str, result: dict) -> str:
+def _tool_event(tool: str, result: dict, inputs: dict | None = None) -> str:
+    state: dict = {"output": json.dumps({"result": json.dumps(result)})}
+    if inputs is not None:
+        state["input"] = inputs
     return json.dumps(
         {
             "type": "tool_use",
             "timestamp": 1000,
-            "part": {
-                "tool": tool,
-                "state": {"output": json.dumps({"result": json.dumps(result)})},
-            },
+            "part": {"tool": tool, "state": state},
         }
     )
+
+
+def test_summarise_metrics_track_passivity_and_builds():
+    from openfront_mcp.live_smoke import _summarise_events
+
+    def overview(decision: int, tiles: int, gold: str) -> str:
+        return _tool_event(
+            "game_get_overview",
+            {"decision": decision, "human": {"tiles": tiles, "gold": gold}},
+        )
+
+    stdout = "\n".join(
+        [
+            _tool_event(
+                "game_start_solo_game",
+                {"decision": 0, "human": {"tiles": 52, "gold": "0"}},
+            ),
+            _tool_event(
+                "game_order_attack",
+                {"decision": 0},
+                {"target": "tribe-1", "troops": 5000},
+            ),
+            _tool_event(
+                "game_order_attack",
+                {"decision": 0},
+                {"target": "expand", "troops": 2000},
+            ),
+            _tool_event("game_order_build", {"decision": 1}, {"unit": "city"}),
+            overview(50, 900, "1000"),
+            overview(100, 2000, "2500"),
+            _tool_event(
+                "game_order_attack",
+                {"decision": 100},
+                {"target": "nation-3", "troops": 40000},
+            ),
+            _tool_event(
+                "game_order_boat_attack",
+                {"decision": 100},
+                {"x": 1, "y": 2, "troops": 3000},
+            ),
+            overview(120, 1500, "9000"),
+        ]
+    )
+    metrics = _summarise_events(stdout)["metrics"]
+    assert metrics["attacks"] == 3
+    assert metrics["attacks_after_50"] == 1
+    assert metrics["expand_attacks"] == 1
+    assert metrics["tribe_attacks"] == 1
+    assert metrics["nation_attacks"] == 1
+    assert metrics["boats"] == 1
+    assert metrics["cities"] == 1
+    assert metrics["tiles_50"] == 900
+    assert metrics["tiles_100"] == 2000
+    assert metrics["tiles_peak"] == 2000
+    assert metrics["gold_end"] == "9000"
 
 
 def test_summarise_captures_winner_from_overviews():

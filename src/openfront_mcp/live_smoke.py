@@ -100,6 +100,12 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
     cost: float | None = None
     start_ms: float | None = None
     end_ms: float | None = None
+    attacks: list[dict[str, Any]] = []
+    builds: list[str] = []
+    boats = 0
+    tiles_by_decision: dict[int, int] = {}
+    gold_end: str | None = None
+    last_decision: int | None = None
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
@@ -173,6 +179,36 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
                         for n in nations_raw
                         if isinstance(n, dict)
                     ] or None
+            if isinstance(parsed, dict):
+                decision_raw = parsed.get("decision")
+                human_state = parsed.get("human")
+                if isinstance(decision_raw, int):
+                    last_decision = decision_raw
+                    if isinstance(human_state, dict) and isinstance(
+                        human_state.get("tiles"), int
+                    ):
+                        tiles_by_decision[decision_raw] = human_state["tiles"]
+                if isinstance(human_state, dict) and isinstance(
+                    human_state.get("gold"), str
+                ):
+                    gold_end = human_state["gold"]
+            input_raw: Any = state.get("input")
+            inputs: dict[str, Any] = input_raw if isinstance(input_raw, dict) else {}
+            tool = part["tool"]
+            if tool == "game_order_attack":
+                attacks.append(
+                    {
+                        "decision": last_decision,
+                        "target": inputs.get("target"),
+                        "troops": inputs.get("troops"),
+                    }
+                )
+            elif tool == "game_order_build":
+                unit = inputs.get("unit")
+                if isinstance(unit, str):
+                    builds.append(unit)
+            elif tool == "game_order_boat_attack":
+                boats += 1
         if etype == "step_finish":
             tokens_raw: Any = part.get("tokens")
             if isinstance(tokens_raw, dict):
@@ -185,6 +221,38 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
         "decisions": decisions,
         "ticks": ticks,
         "winner": winner,
+    }
+    dec_sorted = sorted(tiles_by_decision)
+
+    def tiles_at(decision: int) -> int | None:
+        prior = [d for d in dec_sorted if d <= decision]
+        return tiles_by_decision[prior[-1]] if prior else None
+
+    summary["metrics"] = {
+        "attacks": len(attacks),
+        "attacks_after_50": sum(
+            1
+            for a in attacks
+            if isinstance(a.get("decision"), int) and a["decision"] > 50
+        ),
+        "expand_attacks": sum(1 for a in attacks if a.get("target") == "expand"),
+        "nation_attacks": sum(
+            1
+            for a in attacks
+            if isinstance(a.get("target"), str) and a["target"].startswith("nation")
+        ),
+        "tribe_attacks": sum(
+            1
+            for a in attacks
+            if isinstance(a.get("target"), str) and a["target"].startswith("tribe")
+        ),
+        "boats": boats,
+        "cities": sum(1 for b in builds if b == "city"),
+        "defense_posts": sum(1 for b in builds if b == "defense-post"),
+        "tiles_50": tiles_at(50),
+        "tiles_100": tiles_at(100),
+        "tiles_peak": max(tiles_by_decision.values()) if tiles_by_decision else None,
+        "gold_end": gold_end,
     }
     if human is not None:
         summary["final_human"] = human

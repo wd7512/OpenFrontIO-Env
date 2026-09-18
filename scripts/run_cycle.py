@@ -34,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-decisions", type=int, default=150)
     parser.add_argument("--difficulty", default="easy")
     parser.add_argument("--coach-timeout", type=float, default=900)
+    parser.add_argument(
+        "--memory-version",
+        type=int,
+        default=None,
+        help="pin the played playbook to a version (variance/A-B runs); "
+        "coaching still appends the next version",
+    )
     parser.add_argument("--out-prefix", default=None)
     parser.add_argument(
         "--retro-only",
@@ -98,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             api_key=api_key,
             coach_timeout_s=args.coach_timeout,
             models_cache_source=cache,
+            memory_version=args.memory_version,
         )
         logging.getLogger(__name__).info("cycle done: %s", row)
         if row.get("winner"):
