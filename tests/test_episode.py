@@ -205,7 +205,7 @@ def test_end_decision_expected_decisions_reject_stale() -> None:
 def test_overview_is_controlled_human_state_not_engine_internals() -> None:
     expected_human = {
         "id": "human-1",
-        "name": "Smoke",
+        "name": "Agent",
         "troops": START_TROOPS,
         "gold": "0",
         "tiles": 52,

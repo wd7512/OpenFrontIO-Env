@@ -148,7 +148,7 @@ def test_tribes_projection_lists_only_bordering() -> None:
         "height": 100,
         "tribes": 2,
         "human": {
-            "name": "Smoke",
+            "name": "Agent",
             "troops": 1000,
             "gold": "0",
             "tiles": 52,

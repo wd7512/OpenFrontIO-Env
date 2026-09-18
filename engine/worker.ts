@@ -38,8 +38,8 @@ import {
 
 const GAME_ID = "ENGINE01";
 const CLIENT_ID = "ENGINECL";
-const PLAYER_ID = "engine-smoke-human";
-const PLAYER_NAME = "Smoke";
+const PLAYER_ID = "engine-agent-human";
+const PLAYER_NAME = "Agent";
 const MAX_ADVANCE = 100_000;
 const MAX_SPAWN_TICKS = 10;
 const MAX_NATIONS = 100;
