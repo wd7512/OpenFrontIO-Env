@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "_note": "T6 sandbox lock: keyless docs-grounded sessions only. Primary model mimo-v2.5; deepseek-v4-flash is the documented fallback when the primary is unavailable.",
+  "model": "opencode-go/mimo-v2.5",
+  "fallback_model": "opencode-go/deepseek-v4-flash",
+  "_mcp_note": "Research MCP pointers (crossref/openalex/pubmed). Root opencode.json disables these tools by default; enable per-session only for the T7 live runner.",
+  "mcp": {
+    "crossref": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/crossref-mcp-server"]
+    },
+    "openalex": {
+      "type": "local",
+      "command": ["npx", "-y", "openalex-research-mcp"]
+    },
+    "pubmed": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/pubmed-mcp-server"]
+    }
+  },
+  "tools": {
+    "crossref_*": false,
+    "openalex_*": false,
+    "pubmed_*": false
+  },
+  "_permission_note": "Sandbox sessions may read the brief only. Deny network fetch tools (curl/wget) and all writes outside the assigned report file.",
+  "permission": {
+    "read": "allow",
+    "edit": "deny",
+    "bash": "deny",
+    "curl *": "deny",
+    "wget *": "deny",
+    "skill": "allow"
+  }
+}
