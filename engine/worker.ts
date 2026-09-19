@@ -44,9 +44,10 @@ const PLAYER_NAME = "Agent";
 const MAX_ADVANCE = 100_000;
 const MAX_SPAWN_TICKS = 10;
 const MAX_NATIONS = 100;
-const MAX_ATTACK_TROOPS = 1_000_000;
 const MAX_SPAWN_ATTEMPTS = 10_000;
 const MAX_TRIBES = 500;
+// Production schema bound for build/upgrade `amount` (Game.ts).
+const MAX_UPGRADE_AMOUNT = 50;
 
 const DIFFICULTIES: Record<string, Difficulty> = {
   easy: Difficulty.Easy,
@@ -537,14 +538,16 @@ class EngineSession {
         `invalid attack target: expected "expand", "nation-N" or "tribe-N", got ${JSON.stringify(target)}`,
       );
     }
+    // Production contract (Schemas.ts AttackIntentSchema): troops is a
+    // float >= 0 — the live client sends attackRatio * troops() raw. There
+    // is no upper bound here; AttackExecution clamps to owner troops.
     if (
       typeof troops !== "number" ||
-      !Number.isInteger(troops) ||
-      troops <= 0 ||
-      troops > MAX_ATTACK_TROOPS
+      !Number.isFinite(troops) ||
+      troops < 0
     ) {
       throw new Error(
-        `invalid attack troops: expected an integer in [1, ${MAX_ATTACK_TROOPS}], got ${JSON.stringify(troops)}`,
+        `invalid attack troops: expected a non-negative number, got ${JSON.stringify(troops)}`,
       );
     }
     // Production intent path, the same one live turns take through
@@ -600,14 +603,15 @@ class EngineSession {
         );
       }
     }
+    // Same production contract as AttackIntentSchema: BoatAttackIntentSchema
+    // troops is a float >= 0 (attackRatio * troops()).
     if (
       typeof troops !== "number" ||
-      !Number.isInteger(troops) ||
-      troops <= 0 ||
-      troops > MAX_ATTACK_TROOPS
+      !Number.isFinite(troops) ||
+      troops < 0
     ) {
       throw new Error(
-        `invalid boat troops: expected an integer in [1, ${MAX_ATTACK_TROOPS}], got ${JSON.stringify(troops)}`,
+        `invalid boat troops: expected a non-negative number, got ${JSON.stringify(troops)}`,
       );
     }
     const boatIntent = {
@@ -645,18 +649,42 @@ class EngineSession {
     return this.snapshot("ok");
   }
 
-  buildUnit(unit: unknown, x: unknown, y: unknown): Snapshot {
+  buildUnit(
+    unit: unknown,
+    x: unknown,
+    y: unknown,
+    rocketDirectionUp: unknown = undefined,
+    amount: unknown = undefined,
+  ): Snapshot {
     const game = this.requireGame();
     const executor = this.requireExecutor();
     // Production path: a build_unit intent becomes a ConstructionExecution,
     // the same one a human build-menu click takes. Structures need owned
     // land, nukes take the target tile, warships need water access — the
-    // engine validates all of it; here we check the menu allowlist and
-    // integer bounds only.
+    // engine validates all of it; here we check the menu allowlist, integer
+    // bounds and the optional client fields (nuke direction, stack amount).
     if (typeof unit !== "string" || !(unit in BUILDABLE)) {
       throw new Error(
         `invalid build unit: expected one of ${Object.keys(BUILDABLE).join(", ")}, got ${JSON.stringify(unit)}`,
       );
+    }
+    // JSON has no undefined: absent optional fields arrive as null.
+    if (rocketDirectionUp != null && typeof rocketDirectionUp !== "boolean") {
+      throw new Error(
+        `invalid rocketDirectionUp: expected a boolean, got ${JSON.stringify(rocketDirectionUp)}`,
+      );
+    }
+    if (amount != null) {
+      if (
+        typeof amount !== "number" ||
+        !Number.isInteger(amount) ||
+        amount < 1 ||
+        amount > MAX_UPGRADE_AMOUNT
+      ) {
+        throw new Error(
+          `invalid build amount: expected an integer in [1, ${MAX_UPGRADE_AMOUNT}], got ${JSON.stringify(amount)}`,
+        );
+      }
     }
     for (const [label, value, max] of [
       ["x", x, game.width()],
@@ -678,12 +706,14 @@ class EngineSession {
       clientID: CLIENT_ID,
       unit: BUILDABLE[unit],
       tile: game.ref(x as number, y as number),
+      ...(rocketDirectionUp == null ? {} : { rocketDirectionUp }),
+      ...(amount == null ? {} : { amount }),
     } as StampedIntent;
     this.submit(buildIntent);
     return this.snapshot("ok");
   }
 
-  upgradeUnit(unitID: unknown): Snapshot {
+  upgradeUnit(unitID: unknown, amount: unknown = undefined): Snapshot {
     const game = this.requireGame();
     const executor = this.requireExecutor();
     // Production path: an upgrade_structure intent, same as the human
@@ -701,11 +731,24 @@ class EngineSession {
         `invalid unit id: no such human unit ${JSON.stringify(unitID)}`,
       );
     }
+    if (amount != null) {
+      if (
+        typeof amount !== "number" ||
+        !Number.isInteger(amount) ||
+        amount < 1 ||
+        amount > MAX_UPGRADE_AMOUNT
+      ) {
+        throw new Error(
+          `invalid upgrade amount: expected an integer in [1, ${MAX_UPGRADE_AMOUNT}], got ${JSON.stringify(amount)}`,
+        );
+      }
+    }
     const upgradeIntent = {
       type: "upgrade_structure",
       clientID: CLIENT_ID,
       unit: target.type(),
       unitId: target.id(),
+      ...(amount == null ? {} : { amount }),
     } as StampedIntent;
     this.submit(upgradeIntent);
     return this.snapshot("ok");
@@ -853,13 +896,16 @@ class EngineSession {
   }
 
   private checkDonationAmount(kind: string, amount: unknown): number {
+    // Production schemas take floats (DonateGoldIntentSchema /
+    // DonateTroopIntentSchema: zb.float({min: 0})); the client refuses only
+    // amounts <= 0.
     if (
       typeof amount !== "number" ||
-      !Number.isInteger(amount) ||
+      !Number.isFinite(amount) ||
       amount <= 0
     ) {
       throw new Error(
-        `invalid ${kind} amount: expected a positive integer, got ${JSON.stringify(amount)}`,
+        `invalid ${kind} amount: expected a positive number, got ${JSON.stringify(amount)}`,
       );
     }
     return amount;
@@ -977,26 +1023,34 @@ class EngineSession {
     };
   }
 
-  moveWarship(unitID: unknown, x: unknown, y: unknown): Snapshot {
+  moveWarship(unitIDs: unknown, x: unknown, y: unknown): Snapshot {
     const game = this.requireGame();
     const executor = this.requireExecutor();
     // Production path: a move_warship intent becomes a
-    // MoveWarshipExecution, the same one a human patrol order takes. The
-    // engine validates the water component; here we check the id resolves
-    // to a live human warship and the tile bounds.
-    const wanted = String(unitID);
-    const ship = game
-      .player(this.humanID)
-      .units([UnitType.Warship])
-      .find((u) => String(u.id()) === wanted);
-    if (
-      (typeof unitID !== "string" && typeof unitID !== "number") ||
-      ship === undefined
-    ) {
+    // MoveWarshipExecution, the same one a human patrol order takes (the
+    // intent carries a fleet: MoveWarshipIntentSchema.unitIds). The engine
+    // validates the water component; here we check every id resolves to a
+    // live human warship and the tile bounds.
+    if (!Array.isArray(unitIDs) || unitIDs.length === 0) {
       throw new Error(
-        `invalid warship id: no such human warship ${JSON.stringify(unitID)}`,
+        `invalid warship ids: expected a non-empty array, got ${JSON.stringify(unitIDs)}`,
       );
     }
+    const live = game.player(this.humanID).units([UnitType.Warship]);
+    const ships = unitIDs.map((unitID) => {
+      if (typeof unitID !== "string" && typeof unitID !== "number") {
+        throw new Error(
+          `invalid warship id: no such human warship ${JSON.stringify(unitID)}`,
+        );
+      }
+      const ship = live.find((u) => String(u.id()) === String(unitID));
+      if (ship === undefined) {
+        throw new Error(
+          `invalid warship id: no such human warship ${JSON.stringify(unitID)}`,
+        );
+      }
+      return ship;
+    });
     for (const [label, value, max] of [
       ["x", x, game.width()],
       ["y", y, game.height()],
@@ -1015,7 +1069,7 @@ class EngineSession {
     const intent = {
       type: "move_warship",
       clientID: CLIENT_ID,
-      unitIds: [ship.id()],
+      unitIds: ships.map((ship) => ship.id()),
       tile: game.ref(x as number, y as number),
     } as StampedIntent;
     this.submit(intent);
@@ -1042,17 +1096,27 @@ class EngineSession {
     );
   }
 
-  // Coastal landing spots reachable by transport ship. Derived from a sample
-  // of the human's own shore tiles: trace each cardinal direction across
-  // water and report the first foreign or neutral land hit. The agent has no
-  // map/terrain coordinates at all, so without this list boat orders would
-  // be unaimable guesses. Only the first landfall per ray is reported, so
-  // every entry sits on a straight, water-only line from human territory.
+  // Coastal landing spots reachable by transport ship. Candidates are found
+  // by tracing cardinal rays from a sample of the human's shore tiles (the
+  // agent has no terrain coordinates, so without this list boat orders would
+  // be unaimable guesses), then filtered against the engine's own landing
+  // rule: the candidate must sit on land owned by an attackable player or
+  // terra nullius and its water component must touch the human's coast
+  // (same criterion SpatialQuery.closestReachableShore uses, which is what
+  // TransportShipExecution calls). Unreachable or friendly entries are
+  // dropped instead of being offered as silent no-ops.
   private boatTargets(game: Game, player: Player): BoatTargetState[] {
     const shores = Array.from(player.borderTiles()).filter((t) =>
       game.isShore(t),
     );
     if (shores.length === 0) return [];
+    const reachableComponents = new Set<number>();
+    for (const tile of player.borderTiles()) {
+      if (!game.isLand(tile) || !game.isShore(tile)) continue;
+      const component = game.getWaterComponent(tile);
+      if (component !== null) reachableComponents.add(component);
+    }
+    if (reachableComponents.size === 0) return [];
     const directions: [number, number][] = [
       [0, -1],
       [0, 1],
@@ -1083,7 +1147,15 @@ class EngineSession {
           if (seen.has(tile)) break;
           const owner = game.owner(tile);
           if (owner === player) break;
-          if (owner.isPlayer() && player.isFriendly(owner)) break;
+          if (owner.isPlayer()) {
+            const ownerPlayer = owner as Player;
+            if (player.isFriendly(ownerPlayer)) break;
+            if (!player.canAttackPlayer(ownerPlayer)) break;
+          }
+          const component = game.getWaterComponent(tile);
+          if (component === null || !reachableComponents.has(component)) {
+            break;
+          }
           const playerOwner = owner.isPlayer() ? (owner as Player) : null;
           seen.add(tile);
           targets.push({
@@ -1151,8 +1223,11 @@ class EngineSession {
           tiles: tribe.numTilesOwned(),
           alive: tribe.isAlive(),
           borders_human: player.sharesBorderWith(tribe),
+          // Retreating attacks are heading home, not pressure: exclude them
+          // so dogpile rules read committed force only.
           incoming_troops: tribe
             .incomingAttacks()
+            .filter((attack) => !attack.retreating())
             .reduce((sum, attack) => sum + attack.troops(), 0),
         };
       }),
@@ -1231,8 +1306,10 @@ class EngineSession {
           alive: nation.isAlive(),
           immune: nation.isImmune(),
           borders_human: player.sharesBorderWith(nation),
+          // Retreating attacks are heading home, not pressure.
           incoming_troops: nation
             .incomingAttacks()
+            .filter((attack) => !attack.retreating())
             .reduce((sum, attack) => sum + attack.troops(), 0),
         };
       }),
@@ -1268,7 +1345,9 @@ interface Request {
   troops?: unknown;
   attackID?: unknown;
   unitID?: unknown;
+  unitIDs?: unknown;
   unit?: unknown;
+  rocketDirectionUp?: unknown;
   step?: unknown;
   action?: unknown;
   amount?: unknown;
@@ -1352,14 +1431,20 @@ async function handle(raw: string): Promise<boolean> {
         writeResponse({
           id,
           ok: true,
-          result: session.buildUnit(request.unit, request.x, request.y),
+          result: session.buildUnit(
+            request.unit,
+            request.x,
+            request.y,
+            request.rocketDirectionUp,
+            request.amount,
+          ),
         });
         return true;
       case "upgrade":
         writeResponse({
           id,
           ok: true,
-          result: session.upgradeUnit(request.unitID),
+          result: session.upgradeUnit(request.unitID, request.amount),
         });
         return true;
       case "delete_unit":
@@ -1422,7 +1507,7 @@ async function handle(raw: string): Promise<boolean> {
         writeResponse({
           id,
           ok: true,
-          result: session.moveWarship(request.unitID, request.x, request.y),
+          result: session.moveWarship(request.unitIDs, request.x, request.y),
         });
         return true;
       case "grid":

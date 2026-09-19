@@ -71,18 +71,18 @@ def test_tribe_attack_and_cancel_attack() -> None:
             # Tribe order accepted (production decides landing: no shared
             # border yet, so it retreats silent — same as a human order).
             is_err, text = await _call(
-                session, "order_attack", {"target": "tribe-1", "troops": 5000}
+                session, "order_attack", {"target": "tribe-1", "percent": 20}
             )
             assert is_err is False, text
 
             is_err, _ = await _call(
-                session, "order_attack", {"target": "tribe-999", "troops": 5000}
+                session, "order_attack", {"target": "tribe-999", "percent": 20}
             )
             assert is_err is True
 
             # Expand, let the attack go live over a decision, then retreat it.
             is_err, text = await _call(
-                session, "order_attack", {"target": "expand", "troops": 5000}
+                session, "order_attack", {"target": "expand", "percent": 20}
             )
             assert is_err is False, text
             is_err, text = await _call(session, "end_decision", {"decision": 1})
@@ -117,9 +117,10 @@ def test_boat_attack_validation() -> None:
             assert is_err is False, text
 
             for bad in (
-                {"x": -1, "y": 10, "troops": 5000},
-                {"x": 10, "y": 10, "troops": 0},
-                {"x": "far", "y": 10, "troops": 5000},
+                {"x": -1, "y": 10, "percent": 20},
+                {"x": 10, "y": 10, "percent": 0},
+                {"x": 10, "y": 10, "percent": 101},
+                {"x": "far", "y": 10, "percent": 20},
             ):
                 is_err, _ = await _call(session, "order_boat_attack", bad)
                 assert is_err is True, bad
@@ -150,7 +151,7 @@ def test_overview_boat_targets_are_orderable() -> None:
             is_err, text = await _call(
                 session,
                 "order_boat_attack",
-                {"x": target["x"], "y": target["y"], "troops": 1000},
+                {"x": target["x"], "y": target["y"], "percent": 20},
             )
             assert is_err is False, text
             is_err, text = await _call(session, "end_decision", {"decision": 1})

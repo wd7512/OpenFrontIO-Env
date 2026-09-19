@@ -35,6 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--difficulty", default="easy")
     parser.add_argument("--coach-timeout", type=float, default=900)
     parser.add_argument(
+        "--min-decisions",
+        type=int,
+        default=10,
+        help="runs with fewer decisions (or provider crashes) are invalid: "
+        "retried once, recorded, never coached",
+    )
+    parser.add_argument(
         "--memory-version",
         type=int,
         default=None,
@@ -106,8 +113,17 @@ def main(argv: list[str] | None = None) -> int:
             coach_timeout_s=args.coach_timeout,
             models_cache_source=cache,
             memory_version=args.memory_version,
+            min_decisions=args.min_decisions,
         )
         logging.getLogger(__name__).info("cycle done: %s", row)
+        if not row.get("valid"):
+            logging.getLogger(__name__).warning(
+                "cycle %s invalid (decisions=%s api_error=%s); not counted",
+                row.get("cycle"),
+                row.get("decisions"),
+                row.get("api_error"),
+            )
+            continue
         if row.get("winner"):
             logging.getLogger(__name__).info("winner declared; stopping")
             break

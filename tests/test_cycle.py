@@ -80,15 +80,157 @@ def test_run_cycle_pins_memory_version_and_records_metrics(tmp_path: Path) -> No
         base_url=None,
         api_key="k",
         memory_version=22,
+        min_decisions=2,
     )
     assert seen["memory"] == "pinned playbook\n"
     assert row["memory_used"] == 22
     assert row["memory_version"] is None  # no output dir, no coach
     assert row["cycle"] == 23
+    assert row["valid"] is True
+    assert row["play_attempts"] == 1
     assert row["attacks_after_50"] == 1
     assert row["cities"] == 4
     assert row["tiles_peak"] == 99
     assert row["gold_end"] == "123"
+
+
+def _ok_play(**kwargs):
+    return {
+        "returncode": 0,
+        "timed_out": False,
+        "api_error": None,
+        "summary": {"decisions": list(range(1, 21)), "winner": None},
+    }
+
+
+def test_invalid_run_is_not_coached_and_retried(tmp_path: Path) -> None:
+    root = tmp_path / "cycles"
+    (root / "memories").mkdir(parents=True)
+    calls: list[dict] = []
+
+    def flaky_play(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return {
+                "returncode": 1,
+                "timed_out": False,
+                "api_error": "APIError: Cannot connect to API",
+                "summary": {"decisions": [1, 2, 3], "winner": None},
+            }
+        return _ok_play(**kwargs)
+
+    row = cy.run_cycle(
+        cycles_root=root,
+        play_fn=flaky_play,
+        play_kwargs={"output": tmp_path / "run-1"},
+        model="m",
+        provider="p",
+        key_env_var="K",
+        base_url=None,
+        api_key="k",
+    )
+    assert len(calls) == 2
+    assert row["valid"] is True
+    assert row["play_attempts"] == 2
+    assert row["api_error"] is None
+    # The retry writes to its own directory so the crashed attempt's
+    # artifacts survive for diagnosis.
+    assert calls[1]["output"] == f"{tmp_path / 'run-1'}-retry1"
+
+
+def test_crashed_run_recorded_invalid_without_coach(tmp_path: Path) -> None:
+    root = tmp_path / "cycles"
+    (root / "memories").mkdir(parents=True)
+    calls: list[dict] = []
+
+    def crashed_play(**kwargs):
+        calls.append(kwargs)
+        return {
+            "returncode": 1,
+            "timed_out": False,
+            "api_error": "APIError: Cannot connect to API",
+            "summary": {"decisions": [1, 2], "winner": None},
+        }
+
+    row = cy.run_cycle(
+        cycles_root=root,
+        play_fn=crashed_play,
+        play_kwargs={"output": tmp_path / "run-2"},
+        model="m",
+        provider="p",
+        key_env_var="K",
+        base_url=None,
+        api_key="k",
+        play_retries=1,
+    )
+    assert len(calls) == 2  # initial + one retry
+    assert row["valid"] is False
+    assert row["memory_version"] is None
+    assert "APIError" in row["api_error"]
+    # The ledger keeps the row: invalid runs are data, not dropped work.
+    ledger = [
+        json.loads(line) for line in (root / "ledger.jsonl").read_text().splitlines()
+    ]
+    assert ledger[-1]["valid"] is False
+
+
+def test_short_clean_run_not_retried(tmp_path: Path) -> None:
+    root = tmp_path / "cycles"
+    (root / "memories").mkdir(parents=True)
+    calls: list[dict] = []
+
+    def short_play(**kwargs):
+        calls.append(kwargs)
+        return {
+            "returncode": 0,
+            "timed_out": False,
+            "api_error": None,
+            "summary": {"decisions": [1, 2], "winner": None},
+        }
+
+    row = cy.run_cycle(
+        cycles_root=root,
+        play_fn=short_play,
+        play_kwargs={"output": tmp_path / "run-3"},
+        model="m",
+        provider="p",
+        key_env_var="K",
+        base_url=None,
+        api_key="k",
+        min_decisions=10,
+    )
+    assert len(calls) == 1  # a clean short run is deterministic, not flaky
+    assert row["valid"] is False
+
+
+def test_winner_is_valid_at_any_length(tmp_path: Path) -> None:
+    assert cy.is_valid_run(
+        {"returncode": 0, "summary": {"decisions": [1], "winner": "Agent"}}
+    )
+
+
+def test_coach_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "cycles"
+    (root / "memories").mkdir(parents=True)
+    out = tmp_path / "run-4"
+    out.mkdir()
+
+    def boom(**_kwargs):
+        raise ValueError("coach did not write memory.md")
+
+    monkeypatch.setattr(cy, "coach_only", boom)
+    row = cy.run_cycle(
+        cycles_root=root,
+        play_fn=_ok_play,
+        play_kwargs={"output": out},
+        model="m",
+        provider="p",
+        key_env_var="K",
+        base_url=None,
+        api_key="k",
+    )
+    assert row["memory_version"] is None
+    assert "memory.md" in row["coach_error"]
 
 
 def test_solo_prompt_carries_memory_when_given() -> None:

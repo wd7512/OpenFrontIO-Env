@@ -155,7 +155,7 @@ def test_britannia_solo_default_through_tools() -> None:
             home_tiles = started["human"]["tiles"]
 
             is_err, text = await _call(
-                session, "order_attack", {"target": "expand", "troops": 5000}
+                session, "order_attack", {"target": "expand", "percent": 20}
             )
             assert is_err is False, text
             is_err, text = await _call(session, "end_decision", {"decision": 1})
@@ -178,23 +178,30 @@ def test_order_attack_expand_then_observe_through_tools() -> None:
             started = json.loads(text)
             assert started["attacks"] == []
             home_tiles = started["human"]["tiles"]
+            home_troops = started["human"]["troops"]
 
             for bad in (
-                {"target": "nation-9", "troops": 1000},
-                {"target": "expand", "troops": 0},
-                {"target": "expand", "troops": -5},
-                {"target": "expand", "troops": "many"},
-                {"target": "human-1", "troops": 1000},
+                {"target": "nation-9", "percent": 20},
+                {"target": "expand", "percent": 0},
+                {"target": "expand", "percent": 101},
+                {"target": "expand", "percent": -5},
+                {"target": "expand", "percent": "many"},
+                {"target": "expand", "percent": 1.5},
+                {"target": "human-1", "percent": 20},
             ):
                 is_err, _ = await _call(session, "order_attack", bad)
                 assert is_err is True, bad
 
+            # Percent mirrors the human slider: 20% of current troops is
+            # computed by the harness and echoed back.
             is_err, text = await _call(
-                session, "order_attack", {"target": "expand", "troops": 5000}
+                session, "order_attack", {"target": "expand", "percent": 20}
             )
             assert is_err is False, text
             ordered = json.loads(text)
             assert ordered["status"] == "attack-ordered"
+            assert ordered["order"]["percent"] == 20
+            assert ordered["order"]["troops"] == home_troops * 0.2
 
             is_err, text = await _call(session, "end_decision", {"decision": 1})
             assert is_err is False, text

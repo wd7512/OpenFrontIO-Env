@@ -198,18 +198,21 @@ def build_coach_prompt(
         "PlayerExecution.ts). The player acts once per decision (50 ticks = "
         "5 s) and can read target troops and tiles for nations, bordering "
         "tribes and boat targets, plus its own incoming attacks and every "
-        "rival's incoming_troops (pressure from others). Write rules it can "
-        "act on with exactly those fields. "
+        "rival's incoming_troops (pressure from others). Attacks are sized "
+        "with a percent of current troops (1-100, the same slider a human "
+        "uses, computed as attackRatio * troops()); the harness has no "
+        "absolute-troop option. Write rules it can act on with exactly those "
+        "fields. "
         "Two sections are mandatory. (1) A short 'When to act' set of "
         "conditional rules: rival refill cadence and the counter window "
         "right after they spend, forced retaliation, when alliances are "
         "accepted (threat overrides relation), when defense posts appear "
         "(land attacks only) and how boats avoid triggering them, and when "
         "incoming_troops marks a real dogpile target. (2) An 'Attack sizing' "
-        "rule set: never a fixed share — derive every size from observable "
-        "quantities (target troops, tiles, density, terrain) with the "
-        "exchange-rate math, including worked examples for tribes, nations "
-        "and neutral land. "
+        "rule set: never a fixed percent — derive every slider value from "
+        "observable quantities (target troops, tiles, density, terrain) with "
+        "the exchange-rate math, including worked examples for tribes, "
+        "nations and neutral land. "
         "Read the tape critically: was force over-committed, were transport "
         "ships used, did expansion stall against water, did the player act "
         "on the timing windows? "
@@ -363,9 +366,36 @@ def coach_only(
         bundle_files={name: staging / name for name in names},
         models_cache_source=models_cache_source,
     )
-    note = (launched.run.work_dir / MEMORY_FILENAME).read_text(encoding="utf-8")
+    memory_path = launched.run.work_dir / MEMORY_FILENAME
+    if not memory_path.is_file():
+        raise ValueError(
+            f"coach did not write {MEMORY_FILENAME} (exit code "
+            f"{launched.process.returncode}); refusing to store an empty memory"
+        )
+    note = memory_path.read_text(encoding="utf-8")
     check_repo_clean(REPO_ROOT, baseline)
     return store.save(note)
+
+
+def is_valid_run(played: Mapping[str, Any], min_decisions: int = 10) -> bool:
+    """Whether a played run may be coached and counted as an experiment row.
+
+    A crashed or timed-out agent (provider error, nonzero exit) or one that
+    stopped after only a handful of decisions did not play the game; coaching
+    it would poison the memory with nonsense and inflate the A/B statistics.
+    """
+    if played.get("timed_out"):
+        return False
+    returncode = played.get("returncode")
+    if returncode not in (0, None):
+        return False
+    if played.get("api_error"):
+        return False
+    summary = played.get("summary", {})
+    if summary.get("winner"):
+        return True  # a declared win is a complete run at any length
+    decisions = summary.get("decisions", [])
+    return len(decisions) >= min_decisions
 
 
 def run_cycle(
@@ -381,11 +411,18 @@ def run_cycle(
     coach_timeout_s: float = 900,
     models_cache_source: Path | str | None = None,
     memory_version: int | None = None,
+    min_decisions: int = 10,
+    play_retries: int = 1,
 ) -> dict[str, Any]:
     """Play one match with the latest memory, then coach the next version.
 
     ``memory_version`` pins the played playbook to one version (A/B and
-    variance runs); coaching still appends the next version.
+    variance runs); coaching still appends the next version. Invalid runs
+    (provider crash, timeout, fewer than ``min_decisions`` decisions) are
+    retried up to ``play_retries`` times and, if still invalid, are recorded
+    in the ledger with ``valid: false`` but never coached. A coach failure
+    (including a missing memory.md) is recorded as ``coach_error`` and does
+    not raise: the batch keeps its row and moves on.
     """
     root = Path(cycles_root)
     store = MemoryStore(root / "memories")
@@ -397,24 +434,50 @@ def run_cycle(
     if memory:
         kwargs["memory"] = memory
     played = play_fn(**kwargs)
+    attempts = 1
+    out_dir = Path(str(kwargs.get("output", "")))
+    while attempts <= play_retries and not is_valid_run(played, min_decisions):
+        clean_exit = played.get("returncode") in (0, None)
+        if clean_exit and not played.get("timed_out") and not played.get("api_error"):
+            break  # valid execution, just short: retrying changes nothing
+        log.warning(
+            "invalid run (rc=%s timed_out=%s api_error=%s); retrying play",
+            played.get("returncode"),
+            played.get("timed_out"),
+            played.get("api_error"),
+        )
+        attempt_kwargs = dict(kwargs)
+        if "output" in attempt_kwargs:
+            attempt_kwargs["output"] = f"{attempt_kwargs['output']}-retry{attempts}"
+        played = play_fn(**attempt_kwargs)
+        attempts += 1
+        out_dir = Path(str(attempt_kwargs.get("output", "")))
     summary = played.get("summary", {})
     metrics = summary.get("metrics") or {}
-    out_dir = Path(str(kwargs.get("output", "")))
+    valid = is_valid_run(played, min_decisions)
     version: int | None = None
-    if out_dir.is_dir():
-        version = coach_only(
-            cycles_root=root,
-            run_dir=out_dir,
-            model=model,
-            provider=provider,
-            key_env_var=key_env_var,
-            base_url=base_url,
-            api_key=api_key,
-            coach_timeout_s=coach_timeout_s,
-            models_cache_source=models_cache_source,
-        )
+    coach_error: str | None = None
+    if valid and out_dir.is_dir():
+        try:
+            version = coach_only(
+                cycles_root=root,
+                run_dir=out_dir,
+                model=model,
+                provider=provider,
+                key_env_var=key_env_var,
+                base_url=base_url,
+                api_key=api_key,
+                coach_timeout_s=coach_timeout_s,
+                models_cache_source=models_cache_source,
+            )
+        except Exception as exc:  # coach failure must never kill the batch
+            coach_error = f"{type(exc).__name__}: {exc}"
+            log.warning("coach failed for %s: %s", out_dir, coach_error)
     row = {
         "cycle": store.latest_version() or 0,
+        "run_dir": str(out_dir) if out_dir.is_dir() else None,
+        "valid": valid,
+        "play_attempts": attempts,
         "tiles": (summary.get("final_human") or {}).get("tiles"),
         "troops": (summary.get("final_human") or {}).get("troops"),
         "winner": summary.get("winner"),
@@ -424,12 +487,22 @@ def run_cycle(
         "model": model,
         "max_decisions": kwargs.get("max_decisions"),
         "attacks": metrics.get("attacks"),
+        "attacks_engaged": metrics.get("attacks_engaged"),
         "attacks_after_50": metrics.get("attacks_after_50"),
+        "expand_attacks": metrics.get("expand_attacks"),
         "nation_attacks": metrics.get("nation_attacks"),
+        "tribe_attacks": metrics.get("tribe_attacks"),
+        "boats": metrics.get("boats"),
         "cities": metrics.get("cities"),
         "defense_posts": metrics.get("defense_posts"),
+        "tool_errors": metrics.get("tool_errors"),
+        "order_errors": metrics.get("order_errors"),
+        "tiles_50": metrics.get("tiles_50"),
+        "tiles_100": metrics.get("tiles_100"),
         "tiles_peak": metrics.get("tiles_peak"),
         "gold_end": metrics.get("gold_end"),
+        "api_error": played.get("api_error"),
+        "coach_error": coach_error,
     }
     append_ledger(root / "ledger.jsonl", row)
     return row

@@ -153,11 +153,14 @@ class EngineWorker:
         return self._request({"cmd": "advance", "ticks": ticks})
 
     def attack(self, target: object, troops: object) -> dict[str, Any]:
-        """Order the human to attack ``target`` (``"nation-N"``) with ``troops``.
+        """Order the human to attack ``target`` with ``troops``.
 
-        The order goes through the production intent path
-        (Executor.createExec -> AttackExecution); validation of the target
-        index and troop count happens worker-side against live game state.
+        ``troops`` is the engine's float contract (AttackIntentSchema:
+        ``float >= 0``, exactly what the live client sends as
+        ``attackRatio * troops()``); ``AttackExecution`` clamps to owner
+        troops. The order goes through the production intent path
+        (Executor.createExec -> AttackExecution); target validation happens
+        worker-side against live game state.
         """
         return self._request({"cmd": "attack", "target": target, "troops": troops})
 
@@ -168,9 +171,12 @@ class EngineWorker:
         return self._request({"cmd": "cancel_attack", "attackID": attack_id})
 
     def boat_attack(self, x: object, y: object, troops: object) -> dict[str, Any]:
-        """Launch a boat attack at tile (``x``, ``y``) with ``troops``
-        (production boat intent -> TransportShipExecution); destination
-        bounds are validated worker-side, the engine validates the tile."""
+        """Launch a boat attack at tile (``x``, ``y``) with ``troops``.
+
+        ``troops`` follows the same float contract as the live client's boat
+        intent (``attackRatio * troops()``); destination bounds are validated
+        worker-side, the engine validates the tile (production boat intent ->
+        TransportShipExecution)."""
         return self._request({"cmd": "boat", "x": x, "y": y, "troops": troops})
 
     def cancel_boat(self, unit_id: object) -> dict[str, Any]:
@@ -178,17 +184,37 @@ class EngineWorker:
         -> BoatRetreatExecution); validated worker-side against live boats."""
         return self._request({"cmd": "cancel_boat", "unitID": unit_id})
 
-    def build_unit(self, unit: object, x: object, y: object) -> dict[str, Any]:
-        """Build ``unit`` (build-menu kebab name) at tile (``x``, ``y``)
-        (production build_unit intent -> ConstructionExecution); the menu
-        allowlist and bounds are validated worker-side, the engine validates
-        costs and tiles."""
-        return self._request({"cmd": "build", "unit": unit, "x": x, "y": y})
+    def build_unit(
+        self,
+        unit: object,
+        x: object,
+        y: object,
+        rocket_direction_up: object = None,
+        amount: object = None,
+    ) -> dict[str, Any]:
+        """Build ``unit`` (build-menu kebab name) at tile (``x``, ``y``).
 
-    def upgrade_unit(self, unit_id: object) -> dict[str, Any]:
+        ``rocket_direction_up`` is the client's rocket toggle (atom-bomb /
+        hydrogen-bomb) and ``amount`` the stack amount for stackable nukes
+        (1..50), both optional (production build_unit intent ->
+        ConstructionExecution); the menu allowlist and bounds are validated
+        worker-side, the engine validates costs and tiles."""
+        return self._request(
+            {
+                "cmd": "build",
+                "unit": unit,
+                "x": x,
+                "y": y,
+                "rocketDirectionUp": rocket_direction_up,
+                "amount": amount,
+            }
+        )
+
+    def upgrade_unit(self, unit_id: object, amount: object = None) -> dict[str, Any]:
         """Upgrade a human unit by its id (production upgrade_structure
-        intent); validated worker-side against live human units."""
-        return self._request({"cmd": "upgrade", "unitID": unit_id})
+        intent); ``amount`` (1..50) is the client's multi-level amount.
+        Validated worker-side against live human units."""
+        return self._request({"cmd": "upgrade", "unitID": unit_id, "amount": amount})
 
     def delete_unit(self, unit_id: object) -> dict[str, Any]:
         """Delete a human unit by its id (production delete_unit intent);
@@ -225,11 +251,14 @@ class EngineWorker:
             {"cmd": "donate_troops", "target": target, "amount": amount}
         )
 
-    def move_warship(self, unit_id: object, x: object, y: object) -> dict[str, Any]:
-        """Retarget a warship to patrol tile (``x``, ``y``) (production
-        move_warship intent -> MoveWarshipExecution); validated worker-side
-        against live human warships and tile bounds."""
-        return self._request({"cmd": "move_warship", "unitID": unit_id, "x": x, "y": y})
+    def move_warship(self, unit_ids: object, x: object, y: object) -> dict[str, Any]:
+        """Retarget a fleet of warships to patrol tile (``x``, ``y``)
+        (production move_warship intent -> MoveWarshipExecution, which takes
+        a non-empty ``unitIds`` array); validated worker-side against live
+        human warships and tile bounds."""
+        return self._request(
+            {"cmd": "move_warship", "unitIDs": unit_ids, "x": x, "y": y}
+        )
 
     def grid(self, step: object = 12) -> dict[str, Any]:
         """Return a read-only downsampled ownership grid (no game mutation).

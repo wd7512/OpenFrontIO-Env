@@ -13,6 +13,7 @@ hashes, asset paths or internal ids.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 from typing import Any, Callable
@@ -31,6 +32,8 @@ TRIBAL_LABEL = "solo-vs-tribes"
 DECISION_TICKS = 50
 MAX_TOOL_NATIONS = 100
 MAX_TOOL_TRIBES = 500
+# Production bound for build/upgrade amount (MAX_UPGRADE_AMOUNT in Game.ts).
+MAX_TOOL_UPGRADE_AMOUNT = 50
 # Human build menu, kebab-case for the tool surface (worker maps to UnitType).
 BUILDABLE_UNITS = (
     "city",
@@ -86,9 +89,11 @@ class GameSession:
 
         ``nations=0`` is the single-human smoke game; ``nations>=1`` adds
         that many production nation opponents (capped for tool play).
-        ``map`` is ``"plains"`` (fast fixture), ``"britannia"`` (production
-        Compact board) or ``"world"`` (full-res, like online Normal).
-        ``tribes`` spawns that many neutral tribes (online solo default 400).
+        ``map`` is a map NAME — ``"plains"`` (fast fixture), ``"britannia"``
+        (production Compact board), ``"world"`` (full-res, like online
+        Normal) or ``"europe"`` (solo default). Map sizes (``"full"`` /
+        ``"compact"``) are chosen per map, never passed here. ``tribes``
+        spawns that many neutral tribes (online solo default 400).
         """
         with self._lock:
             self._require_open()
@@ -160,29 +165,45 @@ class GameSession:
             self._require_running()
             return self._project("running")
 
-    def end_decision(self, expected: int) -> dict[str, Any]:
+    def end_decision(self, expected: int | None = None) -> dict[str, Any]:
         """Advance exactly ``DECISION_TICKS`` sim ticks for one decision.
 
-        ``expected`` must equal the next decision integer; anything else is a
-        stale or out-of-order request and is rejected.
+        ``expected`` is optional: when given it must equal the next decision
+        integer (a stale value is rejected so out-of-order calls are caught);
+        when omitted the session advances the next decision, which keeps an
+        agent that lost its counter from looping on rejections. The reply
+        carries a compact human snapshot so the tape samples tiles/troops
+        every decision, not only on projection calls.
         """
         with self._lock:
             self._require_running()
-            if isinstance(expected, bool) or not isinstance(expected, int):
-                raise SessionError("decision must be an integer")
-            next_expected = self._decision + 1
-            if expected != next_expected:
-                raise SessionError(
-                    f"stale decision: expected {next_expected}, got {expected} "
-                    "(advance exactly one decision at a time)"
-                )
+            if expected is not None:
+                if isinstance(expected, bool) or not isinstance(expected, int):
+                    raise SessionError("decision must be an integer")
+                next_expected = self._decision + 1
+                if expected != next_expected:
+                    raise SessionError(
+                        f"stale decision: expected {next_expected}, got {expected} "
+                        "(advance exactly one decision at a time)"
+                    )
             assert self._engine is not None
             snapshot = self._engine.advance(DECISION_TICKS)
             self._snapshot = snapshot
             self._tick = int(snapshot["tick"])
             self._decision += 1
             self._capture_record()
-            return {"decision": self._decision, "tick": self._tick}
+            human = snapshot["human"]
+            return {
+                "decision": self._decision,
+                "tick": self._tick,
+                "in_spawn_phase": bool(snapshot["inSpawnPhase"]),
+                "winner": snapshot.get("winner"),
+                "human": {
+                    "troops": human["troops"],
+                    "gold": human["gold"],
+                    "tiles": human["tiles"],
+                },
+            }
 
     def _capture_record(self) -> None:
         """Persist the replay tape alongside grid frames.
@@ -199,14 +220,36 @@ class GameSession:
         except Exception as exc:
             log.debug("record capture skipped: %s", exc)
 
-    def order_attack(self, target: object, troops: object) -> dict[str, Any]:
+    def _check_percent(self, percent: object) -> int:
+        """Validate a slider percentage (1..100, the live client's control)."""
+        if (
+            isinstance(percent, bool)
+            or not isinstance(percent, int)
+            or not 1 <= percent <= 100
+        ):
+            raise SessionError(
+                f"percent must be an integer in [1, 100], got {percent!r}"
+            )
+        return percent
+
+    def _attack_troops(self, percent: int) -> float:
+        """Convert a slider percent into troops exactly like the live client.
+
+        ``ClientGameRunner`` sends ``attackRatio * player.troops()`` raw; the
+        engine clamps to owner troops at execution (AttackExecution).
+        """
+        assert self._snapshot is not None
+        return self._snapshot["human"]["troops"] * percent / 100.0
+
+    def order_attack(self, target: object, percent: object = 20) -> dict[str, Any]:
         """Order the human to expand or attack, then project the result.
 
         ``target`` is ``"expand"`` (adjacent neutral land), ``"nation-N"`` or
-        ``"tribe-N"``; ``troops`` is a positive integer. Bad values are
-        rejected before touching the engine; production rules (spawn
-        immunity, shared border) decide whether the order lands — the
-        projection reports what actually happened.
+        ``"tribe-N"``; ``percent`` is the attack slider (1..100 of current
+        troops, default 20) — the harness computes the troop number the live
+        client would send. Production rules (spawn immunity, shared border)
+        decide whether the order lands; the next snapshot shows what
+        happened (the order executes on the following tick).
         """
         with self._lock:
             self._require_running()
@@ -215,8 +258,8 @@ class GameSession:
                     'target must be "expand" or one of '
                     f"{self._valid_targets()}, got {target!r}"
                 )
-            if isinstance(troops, bool) or not isinstance(troops, int) or troops <= 0:
-                raise SessionError(f"troops must be a positive integer, got {troops!r}")
+            share = self._check_percent(percent)
+            troops = self._attack_troops(share)
             assert self._engine is not None
             try:
                 snapshot = self._engine.attack(target=target, troops=troops)
@@ -224,7 +267,9 @@ class GameSession:
                 raise SessionError(f"attack rejected by engine: {exc}") from exc
             self._snapshot = snapshot
             self._tick = int(snapshot["tick"])
-            return self._project("attack-ordered")
+            payload = self._project("attack-ordered")
+            payload["order"] = {"percent": share, "troops": troops}
+            return payload
 
     def order_cancel_attack(self, attack_id: object) -> dict[str, Any]:
         """Retreat a live outgoing attack by its id, then project.
@@ -249,13 +294,16 @@ class GameSession:
             self._tick = int(snapshot["tick"])
             return self._project("cancel-ordered")
 
-    def order_boat_attack(self, x: object, y: object, troops: object) -> dict[str, Any]:
-        """Launch a boat attack at tile (``x``, ``y``) with ``troops``.
+    def order_boat_attack(
+        self, x: object, y: object, percent: object = 20
+    ) -> dict[str, Any]:
+        """Launch a boat attack at tile (``x``, ``y``) with a percent of troops.
 
         ``x``/``y`` come from ``get_overview`` ``boat_targets`` (the agent
-        cannot see terrain). Rides the production boat intent
-        (TransportShipExecution); integer bounds are checked here, the
-        engine validates the tile itself.
+        cannot see terrain); ``percent`` is the same attack slider the live
+        client uses (1..100 of current troops, default 20). Rides the
+        production boat intent (TransportShipExecution); bounds are checked
+        here, the engine validates the tile itself.
         """
         with self._lock:
             self._require_running()
@@ -271,8 +319,8 @@ class GameSession:
                     raise SessionError(
                         f"{label} must be an integer in [0, {maximum}), got {value!r}"
                     )
-            if isinstance(troops, bool) or not isinstance(troops, int) or troops <= 0:
-                raise SessionError(f"troops must be a positive integer, got {troops!r}")
+            share = self._check_percent(percent)
+            troops = self._attack_troops(share)
             assert self._engine is not None
             try:
                 snapshot = self._engine.boat_attack(x=x, y=y, troops=troops)
@@ -280,7 +328,9 @@ class GameSession:
                 raise SessionError(f"boat order rejected by engine: {exc}") from exc
             self._snapshot = snapshot
             self._tick = int(snapshot["tick"])
-            return self._project("boat-ordered")
+            payload = self._project("boat-ordered")
+            payload["order"] = {"percent": share, "troops": troops}
+            return payload
 
     def order_cancel_boat(self, unit_id: object) -> dict[str, Any]:
         """Recall a transport ship by its id, then project.
@@ -305,6 +355,19 @@ class GameSession:
             self._tick = int(snapshot["tick"])
             return self._project("boat-cancel-ordered")
 
+    def _check_amount(self, amount: object) -> int:
+        """Validate a production build/upgrade stack amount (1..50)."""
+        if (
+            isinstance(amount, bool)
+            or not isinstance(amount, int)
+            or not 1 <= amount <= MAX_TOOL_UPGRADE_AMOUNT
+        ):
+            raise SessionError(
+                f"amount must be an integer in [1, {MAX_TOOL_UPGRADE_AMOUNT}], "
+                f"got {amount!r}"
+            )
+        return amount
+
     def _check_tile(self, label: str, value: object, maximum: int) -> int:
         if isinstance(value, bool) or not isinstance(value, int):
             raise SessionError(
@@ -316,14 +379,24 @@ class GameSession:
             )
         return value
 
-    def order_build(self, unit: object, x: object, y: object) -> dict[str, Any]:
+    def order_build(
+        self,
+        unit: object,
+        x: object,
+        y: object,
+        rocket_direction_up: object = None,
+        amount: object = None,
+    ) -> dict[str, Any]:
         """Order a build-menu unit at tile (``x``, ``y``), then project.
 
         ``unit`` is a kebab-case build-menu name (city, defense-post,
         sam-launcher, missile-silo, port, factory, atom-bomb, hydrogen-bomb,
-        mirv, warship). Rides the production build_unit intent; the engine
-        validates gold, costs and tiles — humans get no pre-flight guarantee
-        either, so acceptance (not landing) is the contract here.
+        mirv, warship). ``rocket_direction_up`` is the live client's rocket
+        direction toggle (atom-bomb/hydrogen-bomb); ``amount`` is the
+        production stack amount for stackable nukes (1..50). Rides the
+        production build_unit intent; the engine validates gold, costs and
+        tiles — humans get no pre-flight guarantee either, so acceptance
+        (not landing) is the contract here.
         """
         with self._lock:
             self._require_running()
@@ -332,13 +405,27 @@ class GameSession:
                 raise SessionError(
                     f"unit must be one of {list(BUILDABLE_UNITS)}, got {unit!r}"
                 )
+            if rocket_direction_up is not None and not isinstance(
+                rocket_direction_up, bool
+            ):
+                raise SessionError(
+                    "rocket_direction_up must be a boolean, got "
+                    f"{rocket_direction_up!r}"
+                )
+            stack = None if amount is None else self._check_amount(amount)
             width = int(self._snapshot["width"])
             height = int(self._snapshot["height"])
             tile_x = self._check_tile("x", x, width)
             tile_y = self._check_tile("y", y, height)
             assert self._engine is not None
             try:
-                snapshot = self._engine.build_unit(unit=unit, x=tile_x, y=tile_y)
+                snapshot = self._engine.build_unit(
+                    unit=unit,
+                    x=tile_x,
+                    y=tile_y,
+                    rocket_direction_up=rocket_direction_up,
+                    amount=stack,
+                )
             except Exception as exc:
                 raise SessionError(f"build rejected by engine: {exc}") from exc
             self._snapshot = snapshot
@@ -349,13 +436,17 @@ class GameSession:
         assert self._snapshot is not None
         return [u["id"] for u in self._snapshot.get("units", [])]
 
-    def order_upgrade_unit(self, unit_id: object) -> dict[str, Any]:
+    def order_upgrade_unit(
+        self, unit_id: object, amount: object = None
+    ) -> dict[str, Any]:
         """Upgrade a human unit by its id, then project.
 
         Rides the production upgrade_structure intent; unknown ids are
-        rejected before touching the engine. Only some structures are
-        upgradable in production (port, missile-silo, sam-launcher, city,
-        factory) — the engine decides, same as a human upgrade button.
+        rejected before touching the engine. ``amount`` is the production
+        stack amount (1..50) the client sends for multi-level upgrades. Only
+        some structures are upgradable in production (port, missile-silo,
+        sam-launcher, city, factory) — the engine decides, same as a human
+        upgrade button.
         """
         with self._lock:
             self._require_running()
@@ -364,9 +455,10 @@ class GameSession:
                 raise SessionError(
                     f"unit_id must be one of {live_ids}, got {unit_id!r}"
                 )
+            stack = None if amount is None else self._check_amount(amount)
             assert self._engine is not None
             try:
-                snapshot = self._engine.upgrade_unit(unit_id=unit_id)
+                snapshot = self._engine.upgrade_unit(unit_id=unit_id, amount=stack)
             except Exception as exc:
                 raise SessionError(f"upgrade rejected by engine: {exc}") from exc
             self._snapshot = snapshot
@@ -410,10 +502,15 @@ class GameSession:
             raise SessionError(f"target must be one of {labels}, got {target!r}")
         return target
 
-    def _check_donation(self, amount: object) -> int:
-        if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
-            raise SessionError(f"amount must be a positive integer, got {amount!r}")
-        return amount
+    def _check_donation(self, amount: object) -> float:
+        if (
+            isinstance(amount, bool)
+            or not isinstance(amount, (int, float))
+            or not math.isfinite(amount)
+            or not amount > 0
+        ):
+            raise SessionError(f"amount must be a positive number, got {amount!r}")
+        return float(amount)
 
     def order_alliance_request(self, target: object) -> dict[str, Any]:
         """Request an alliance with a nation or tribe, then project.
@@ -507,14 +604,16 @@ class GameSession:
         return self._project(status)
 
     def order_move_warship(
-        self, unit_id: object, x: object, y: object
+        self, unit_ids: object, x: object, y: object
     ) -> dict[str, Any]:
-        """Retarget a warship to patrol tile (``x``, ``y``), then project.
+        """Retarget a fleet of warships to patrol tile (``x``, ``y``).
 
-        Rides the production move_warship intent; the id must be a live
-        human warship (from get_overview units) and the tile in bounds. The
-        engine validates the water component — retargets only land on water
-        in the warship's component, same as a human patrol order.
+        Rides the production move_warship intent, which carries a non-empty
+        ``unitIds`` array — the live client moves every selected warship in
+        one order. Ids must be live human warships (from get_overview units)
+        and the tile in bounds. The engine validates the water component —
+        retargets only land on water in the warship's component, same as a
+        human patrol order.
         """
         with self._lock:
             self._require_running()
@@ -524,16 +623,26 @@ class GameSession:
                 for u in self._snapshot.get("units", [])
                 if u["type"] == "Warship"
             ]
-            if not isinstance(unit_id, str) or unit_id not in warships:
+            if (
+                not isinstance(unit_ids, (list, tuple))
+                or not unit_ids
+                or any(not isinstance(unit_id, str) for unit_id in unit_ids)
+            ):
                 raise SessionError(
-                    f"unit_id must be one of {warships}, got {unit_id!r}"
+                    f"unit_ids must be a non-empty list of warship ids, "
+                    f"got {unit_ids!r}"
+                )
+            unknown = [unit_id for unit_id in unit_ids if unit_id not in warships]
+            if unknown:
+                raise SessionError(
+                    f"unit_ids must be live warships {warships}, got {unknown!r}"
                 )
             width = int(self._snapshot["width"])
             height = int(self._snapshot["height"])
             tile_x = self._check_tile("x", x, width)
             tile_y = self._check_tile("y", y, height)
             return self._diplo_order_inner(
-                "warship-moved", "move_warship", unit_id, tile_x, tile_y
+                "warship-moved", "move_warship", list(unit_ids), tile_x, tile_y
             )
 
     def _valid_targets(self) -> list[str]:

@@ -147,12 +147,12 @@ def test_summarise_metrics_track_passivity_and_builds():
             _tool_event(
                 "game_order_attack",
                 {"decision": 0},
-                {"target": "tribe-1", "troops": 5000},
+                {"target": "tribe-1", "percent": 20},
             ),
             _tool_event(
                 "game_order_attack",
                 {"decision": 0},
-                {"target": "expand", "troops": 2000},
+                {"target": "expand", "percent": 8},
             ),
             _tool_event("game_order_build", {"decision": 1}, {"unit": "city"}),
             overview(50, 900, "1000"),
@@ -160,12 +160,12 @@ def test_summarise_metrics_track_passivity_and_builds():
             _tool_event(
                 "game_order_attack",
                 {"decision": 100},
-                {"target": "nation-3", "troops": 40000},
+                {"target": "nation-3", "percent": 25},
             ),
             _tool_event(
                 "game_order_boat_attack",
                 {"decision": 100},
-                {"x": 1, "y": 2, "troops": 3000},
+                {"x": 1, "y": 2, "percent": 15},
             ),
             overview(120, 1500, "9000"),
         ]
@@ -182,6 +182,97 @@ def test_summarise_metrics_track_passivity_and_builds():
     assert metrics["tiles_100"] == 2000
     assert metrics["tiles_peak"] == 2000
     assert metrics["gold_end"] == "9000"
+
+
+def test_summarise_counts_engaged_attacks_and_order_errors():
+    from openfrontbench.live_smoke import _summarise_events
+
+    def overview(decision: int, tiles: int) -> str:
+        return _tool_event(
+            "game_get_overview",
+            {"decision": decision, "human": {"tiles": tiles, "gold": "0"}},
+        )
+
+    def failed_order(tool: str, result: dict, inputs: dict) -> str:
+        event = json.loads(_tool_event(tool, result, inputs))
+        event["part"]["state"]["status"] = "error"
+        event["part"]["state"]["error"] = "rejected"
+        return json.dumps(event)
+
+    stdout = "\n".join(
+        [
+            overview(0, 52),
+            # Lands: tiles grow before the next decision.
+            _tool_event("game_order_attack", {"decision": 0}, {"target": "expand"}),
+            overview(1, 60),
+            # Silent no-op: tiles flat.
+            _tool_event("game_order_attack", {"decision": 1}, {"target": "tribe-2"}),
+            overview(2, 60),
+            # Rejected order: counted as an error, never as engaged.
+            failed_order("game_order_attack", {"decision": 2}, {"target": "nation-9"}),
+            overview(3, 60),
+        ]
+    )
+    metrics = _summarise_events(stdout)["metrics"]
+    assert metrics["attacks"] == 3
+    assert metrics["attacks_engaged"] == 1
+    assert metrics["tool_errors"] == 1
+    assert metrics["order_errors"] == 1
+
+
+def test_summarise_decision_payload_feeds_tile_samples():
+    """end_decision now carries a compact human snapshot: tiles_peak must be
+    sampled every decision, not only on overview calls."""
+    from openfrontbench.live_smoke import _summarise_events
+
+    stdout = "\n".join(
+        [
+            _tool_event(
+                "game_end_decision",
+                {
+                    "decision": 1,
+                    "tick": 53,
+                    "human": {"tiles": 70, "troops": 900, "gold": "5"},
+                    "in_spawn_phase": False,
+                    "winner": None,
+                },
+            ),
+            _tool_event(
+                "game_end_decision",
+                {
+                    "decision": 2,
+                    "tick": 103,
+                    "human": {"tiles": 120, "troops": 950, "gold": "9"},
+                    "in_spawn_phase": False,
+                    "winner": None,
+                },
+            ),
+        ]
+    )
+    summary = _summarise_events(stdout)
+    assert summary["decisions"] == [1, 2]
+    assert summary["metrics"]["tiles_peak"] == 120
+    assert summary["metrics"]["gold_end"] == "9"
+
+
+def test_summarise_captures_provider_api_error():
+    from openfrontbench.live_smoke import _summarise_events
+
+    stdout = json.dumps(
+        {
+            "type": "error",
+            "timestamp": 5000,
+            "error": {
+                "name": "APIError",
+                "data": {
+                    "message": "Cannot connect to API",
+                    "isRetryable": True,
+                },
+            },
+        }
+    )
+    summary = _summarise_events(stdout)
+    assert summary["api_error"] == "APIError: Cannot connect to API"
 
 
 def test_summarise_captures_winner_from_overviews():

@@ -95,6 +95,35 @@ def test_upgrade_unknown_unit_rejected() -> None:
             engine.upgrade_unit("99999")
 
 
+def test_upgrade_amount_rejects_out_of_range() -> None:
+    # The production schema bounds amount to 1..50 (MAX_UPGRADE_AMOUNT).
+    with _plains() as engine:
+        engine.start(nations=0, spawn=(50, 50), tribes=0)
+        for bad in (0, 51, -1, 1.5, True):
+            with pytest.raises(EngineError):
+                engine.upgrade_unit("99999", bad)
+
+
+def test_build_amount_rejects_out_of_range() -> None:
+    with _plains() as engine:
+        engine.start(nations=0, spawn=(50, 50), tribes=0)
+        for bad in (0, 51, -1, 1.5):
+            with pytest.raises(EngineError):
+                engine.build_unit("atom-bomb", 60, 60, None, bad)
+        with pytest.raises(EngineError):
+            engine.build_unit("atom-bomb", 60, 60, "up", None)
+
+
+def test_build_rocket_direction_and_amount_reach_the_intent() -> None:
+    # The live client sends rocketDirectionUp for atom/hydrogen bombs and a
+    # stack amount for stackable nukes; the worker must pass both through.
+    # Acceptance is the parity bit (gold/tile validation is the engine's).
+    with _plains() as engine:
+        engine.start(nations=0, spawn=(50, 50), tribes=0)
+        engine.build_unit("atom-bomb", 60, 60, True, 3)
+        engine.build_unit("hydrogen-bomb", 60, 60, False, None)
+
+
 def test_delete_unit_removes_it() -> None:
     with _plains() as engine:
         started = engine.start(nations=0, spawn=(50, 50), tribes=0)

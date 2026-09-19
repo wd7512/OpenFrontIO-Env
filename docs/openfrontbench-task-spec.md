@@ -2,6 +2,17 @@
 
 User approved implementation. Deliver (1) working MCP over pinned real OpenFrontIO engine, (2) pipeline launching an OpenCode playing agent through full games and suites. No evaluation LLM credentials assumed; after setup the user supplies a supported provider API key and runs the documented command. Do not stop at scaffolding.
 
+## Deliberate fidelity exclusions
+
+The adapter follows the live client and production core wherever it can. These divergences are intentional and must stay documented here:
+
+- **Spawn choice.** A live player clicks a spawn tile during the spawn phase. The harness auto-spawns (seeded random on real maps, fixed fixture tile on plains) and force-drives the spawn phase to completion in bounded ticks, so every run on a seed starts identically. Letting the agent pick a spawn is a deliberate exclusion, not a missing tool.
+- **Decision batching.** The live game is real-time (100 ms ticks, continuous orders); the harness pauses the sim and advances exactly 50 ticks per decision. Orders are submitted between advances. This is the measurement construct, not an engine change.
+- **Attack sizing.** The client sends `attackRatio * troops()` raw (float, slider 1-100%); the harness exposes the same percent on `order_attack`/`order_boat_attack` and computes the float. There is no absolute-troop parameter.
+- **Boat targeting.** A live player clicks any reachable tile; the harness offers a bounded list of engine-reachable landing spots (`boat_targets`) because the agent has no terrain view, and rejects entries the engine would treat as no-ops.
+- **Fog of war.** The production core has none; the projection shows full public state (nation troops/tiles, incoming pressure) that a human client also sees.
+- **Diplomacy timing.** Nation AI answers alliance requests on its own production schedule; the harness does not simulate chat or human negotiation.
+
 First read ALL docs/*.md, AGENTS.md, src/, evals/, tests/, pyproject.toml. Read ~/repos/playground/openfront-tick-grid/LLM_AGENT_RESEARCH.md and relevant reference ~/repos/civ6-mcp code. Main is b2e8287; vendor pin 577819ba0e1e13ecdbc8dede2ba33de542c88a67. Leave vendor and pre-existing .opencode/metrics untouched. No git commits/push, global configuration changes or live model evaluations. Work in this checkout. Coding model stays configured default; never pass -m.
 
 TDD is mandatory: write behaviour test, run and record expected failure, minimal implementation, run green, refactor. Keep concise real red/green command evidence in .hermes/tdd-evidence.md. No invented output. Run tests yourself. Mock only the unavailable model boundary, not game/MCP integration.

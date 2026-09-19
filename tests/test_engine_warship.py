@@ -44,7 +44,7 @@ def test_move_warship_sails_to_patrol() -> None:
         # component (production rule): let it sail out first. The no-order
         # drift path ends far from the target, so convergence proves landing.
         engine.advance(400)
-        engine.move_warship(ship["id"], 700, 1000)
+        engine.move_warship([ship["id"]], 700, 1000)
         moved = engine.advance(300)
         now = next(u for u in moved["units"] if u["id"] == ship["id"])
         dist = abs(now["x"] - 700) + abs(now["y"] - 1000)
@@ -55,7 +55,7 @@ def test_move_warship_bad_unit_rejected() -> None:
     with _britannia() as engine:
         _warship(engine)
         with pytest.raises(EngineError):
-            engine.move_warship("99999", 700, 1000)
+            engine.move_warship(["99999"], 700, 1000)
 
 
 def test_move_warship_non_warship_rejected() -> None:
@@ -64,11 +64,18 @@ def test_move_warship_non_warship_rejected() -> None:
         # The port exists but is not a warship: humans cannot patrol it.
         port = next(u for u in engine.advance(1)["units"] if u["type"] == "Port")
         with pytest.raises(EngineError):
-            engine.move_warship(port["id"], 700, 1000)
+            engine.move_warship([port["id"]], 700, 1000)
 
 
 def test_move_warship_bad_coords_rejected() -> None:
     with _britannia() as engine:
         ship = _warship(engine)
         with pytest.raises(EngineError):
-            engine.move_warship(ship["id"], -1, 1000)
+            engine.move_warship([ship["id"]], -1, 1000)
+
+
+def test_move_warship_empty_fleet_rejected() -> None:
+    with _britannia() as engine:
+        _warship(engine)
+        with pytest.raises(EngineError):
+            engine.move_warship([], 700, 1000)

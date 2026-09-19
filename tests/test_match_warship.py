@@ -61,12 +61,17 @@ def test_move_warship_validation() -> None:
 
             # No warships afloat: every id is unknown.
             is_err, _ = await _call(
-                session, "order_move_warship", {"unit_id": "1", "x": 10, "y": 10}
+                session, "order_move_warship", {"unit_ids": ["1"], "x": 10, "y": 10}
+            )
+            assert is_err is True
+            # An empty fleet or a non-list is rejected before the engine.
+            is_err, _ = await _call(
+                session, "order_move_warship", {"unit_ids": [], "x": 10, "y": 10}
             )
             assert is_err is True
             # Bounds reject before touching the engine.
             is_err, _ = await _call(
-                session, "order_move_warship", {"unit_id": "1", "x": -1, "y": 10}
+                session, "order_move_warship", {"unit_ids": ["1"], "x": -1, "y": 10}
             )
             assert is_err is True
 

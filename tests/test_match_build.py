@@ -76,14 +76,32 @@ def test_build_surface_validation_and_acceptance() -> None:
                 assert is_err is True, bad
 
             # Acceptance is the parity bit: the production engine decides
-            # landing (gold, owned land), same as a human click.
+            # landing (gold, owned land), same as a human click. Numeric
+            # strings coerce (small models type them), garbage does not.
             is_err, text = await _call(
-                session, "order_build", {"unit": "city", "x": 100, "y": 100}
+                session, "order_build", {"unit": "city", "x": "100", "y": "100"}
             )
             assert is_err is False, text
             assert json.loads(text)["status"] == "build-ordered"
 
+            is_err, _ = await _call(
+                session,
+                "order_build",
+                {"unit": "atom-bomb", "x": 100, "y": 100, "amount": 0},
+            )
+            assert is_err is True
+            is_err, _ = await _call(
+                session,
+                "order_build",
+                {"unit": "atom-bomb", "x": 100, "y": 100, "amount": 51},
+            )
+            assert is_err is True
+
             is_err, _ = await _call(session, "order_upgrade_unit", {"unit_id": "99999"})
+            assert is_err is True
+            is_err, _ = await _call(
+                session, "order_upgrade_unit", {"unit_id": "99999", "amount": "0"}
+            )
             assert is_err is True
             is_err, _ = await _call(session, "order_delete_unit", {"unit_id": "99999"})
             assert is_err is True

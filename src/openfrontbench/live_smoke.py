@@ -178,13 +178,41 @@ def _extract_step_usage(
     return tokens, cost
 
 
-_OVERVIEW_TOOLS = frozenset(
-    {"game_start_solo_game", "game_get_overview", "game_order_attack"}
+_SNAPSHOT_TOOLS = frozenset(
+    {
+        "game_start_solo_game",
+        "game_get_overview",
+        "game_order_attack",
+        "game_order_boat_attack",
+        "game_end_decision",
+    }
+)
+# Tools whose errors are engine/harness rejections rather than model noise.
+_ORDER_TOOLS = frozenset(
+    {
+        "game_order_attack",
+        "game_order_boat_attack",
+        "game_order_build",
+        "game_order_upgrade_unit",
+        "game_order_cancel_attack",
+        "game_order_cancel_boat",
+        "game_order_alliance_request",
+        "game_order_alliance_reject",
+        "game_order_alliance_extend",
+        "game_order_break_alliance",
+        "game_order_embargo",
+        "game_order_donate_gold",
+        "game_order_donate_troops",
+        "game_order_move_warship",
+        "game_end_decision",
+    }
 )
 
 
 def _summarise_events(stdout: str) -> dict[str, Any]:
     tool_calls = 0
+    tool_errors = 0
+    order_errors = 0
     decisions: list[int] = []
     ticks: list[int] = []
     winner: str | None = None
@@ -200,6 +228,9 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
     tiles_by_decision: dict[int, int] = {}
     gold_end: str | None = None
     last_decision: int | None = None
+    pending_attack_tiles: int | None = None
+    attacks_engaged = 0
+    api_error: str | None = None
     for raw_line in stdout.splitlines():
         event = _parse_event_line(raw_line)
         if event is None:
@@ -216,13 +247,17 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
             tool_calls += 1
             state_raw: Any = part.get("state")
             state: dict[str, Any] = state_raw if isinstance(state_raw, dict) else {}
+            if state.get("status") == "error":
+                tool_errors += 1
+                if tool in _ORDER_TOOLS:
+                    order_errors += 1
             parsed = _unwrap_tool_result(state.get("output"))
             decision, tick = _extract_decision(tool, parsed)
             if decision is not None:
                 decisions.append(decision)
             if tick is not None:
                 ticks.append(tick)
-            if tool in _OVERVIEW_TOOLS and parsed:
+            if tool in _SNAPSHOT_TOOLS and parsed:
                 seen_winner, seen_human, seen_nations = _extract_snapshot(parsed)
                 if seen_winner is not None:
                     winner = seen_winner
@@ -243,14 +278,30 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
                     human_state.get("gold"), str
                 ):
                     gold_end = human_state["gold"]
+            # An attack order that lands (or whose survivors return) moves the
+            # human tile count before the next decision; a silent no-op
+            # (stale target, immunity, no shared border) leaves it flat. Any
+            # later snapshot resolves the oldest pending order.
+            if (
+                pending_attack_tiles is not None
+                and isinstance(human, dict)
+                and isinstance(human.get("tiles"), int)
+                and human["tiles"] != pending_attack_tiles
+            ):
+                attacks_engaged += 1
+                pending_attack_tiles = None
             input_raw: Any = state.get("input")
             inputs: dict[str, Any] = input_raw if isinstance(input_raw, dict) else {}
             if tool == "game_order_attack":
+                if state.get("status") != "error" and isinstance(human, dict):
+                    tiles_now = human.get("tiles")
+                    if isinstance(tiles_now, int):
+                        pending_attack_tiles = tiles_now
                 attacks.append(
                     {
                         "decision": last_decision,
                         "target": inputs.get("target"),
-                        "troops": inputs.get("troops"),
+                        "percent": inputs.get("percent"),
                     }
                 )
             elif tool == "game_order_build":
@@ -265,12 +316,25 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
                 tokens = seen_tokens
             if seen_cost is not None:
                 cost = seen_cost
+        elif etype == "error":
+            error_raw: Any = event.get("error")
+            if isinstance(error_raw, dict):
+                name = error_raw.get("name")
+                data_raw: Any = error_raw.get("data")
+                message = (
+                    data_raw.get("message") if isinstance(data_raw, dict) else None
+                )
+                api_error = str(name or "error") + (
+                    f": {message}" if isinstance(message, str) else ""
+                )
     summary: dict[str, Any] = {
         "tool_calls": tool_calls,
         "decisions": decisions,
         "ticks": ticks,
         "winner": winner,
     }
+    if api_error is not None:
+        summary["api_error"] = api_error
     dec_sorted = sorted(tiles_by_decision)
 
     def tiles_at(decision: int) -> int | None:
@@ -279,6 +343,7 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
 
     summary["metrics"] = {
         "attacks": len(attacks),
+        "attacks_engaged": attacks_engaged,
         "attacks_after_50": sum(
             1
             for a in attacks
@@ -298,6 +363,8 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
         "boats": boats,
         "cities": sum(1 for b in builds if b == "city"),
         "defense_posts": sum(1 for b in builds if b == "defense-post"),
+        "tool_errors": tool_errors,
+        "order_errors": order_errors,
         "tiles_50": tiles_at(50),
         "tiles_100": tiles_at(100),
         "tiles_peak": max(tiles_by_decision.values()) if tiles_by_decision else None,
@@ -421,6 +488,7 @@ def run(
         "duration_s": duration_s,
         "returncode": result.process.returncode,
         "timed_out": result.process.timed_out,
+        "api_error": summary.get("api_error"),
         "summary": summary,
     }
     write_json_atomic(out / "live_result.json", payload)

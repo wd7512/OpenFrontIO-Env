@@ -116,7 +116,7 @@ def test_attack_rejects_bad_target_and_survives():
 def test_attack_rejects_bad_troops_and_survives():
     with EngineWorker() as engine:
         engine.start(nations=1, difficulty="easy")
-        for bad in (0, -5, "many", None, True):
+        for bad in (-5, "many", None, True, float("nan"), float("inf")):
             try:
                 engine.attack(target="expand", troops=bad)  # type: ignore[arg-type]
             except Exception:
@@ -124,3 +124,28 @@ def test_attack_rejects_bad_troops_and_survives():
             else:
                 raise AssertionError(f"attack accepted bad troops {bad!r}")
         assert engine.query()["attacks"] == []
+        # The production schema is zb.float({min: 0}): zero and fractional
+        # values are legal (the live client sends attackRatio * troops()).
+        engine.attack(target="expand", troops=0)
+        engine.attack(target="expand", troops=1234.5)
+        after = engine.advance(5)
+        # Same-target land attacks merge in production; both orders landed.
+        # The merged force is fractional (1234.5 minus combat attrition).
+        assert len(after["attacks"]) == 1
+        assert after["attacks"][0]["troops"] > 1000
+
+
+def test_attack_accepts_large_late_game_armies():
+    """No harness cap: the only upper bound is owner troops (AttackExecution
+    clamps startTroops to owner.troops()). A late-game human orders >1M and
+    the old harness cap rejected exactly that."""
+    with EngineWorker() as engine:
+        engine.start(nations=1, difficulty="easy")
+        state = engine.advance(200)
+        troops = state["human"]["troops"]
+        assert troops > 0
+        engine.attack(target="expand", troops=5_000_000.0)
+        after = engine.advance(5)
+        live = [a for a in after["attacks"] if not a["retreating"]]
+        assert live, "an order above the old 1M cap must not be rejected"
+        assert live[0]["troops"] <= troops + 1, "engine must clamp to owner troops"

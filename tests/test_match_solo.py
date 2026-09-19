@@ -59,7 +59,7 @@ def test_solo_default_matches_online_format() -> None:
             home_tiles = started["human"]["tiles"]
 
             is_err, text = await _call(
-                session, "order_attack", {"target": "expand", "troops": 5000}
+                session, "order_attack", {"target": "expand", "percent": 20}
             )
             assert is_err is False, text
             is_err, text = await _call(session, "end_decision", {"decision": 1})
@@ -107,7 +107,7 @@ def test_europe_ffa_is_the_default_solo() -> None:
             home_tiles = started["human"]["tiles"]
 
             is_err, text = await _call(
-                session, "order_attack", {"target": "expand", "troops": 5000}
+                session, "order_attack", {"target": "expand", "percent": 20}
             )
             assert is_err is False, text
             is_err, text = await _call(session, "end_decision", {"decision": 1})

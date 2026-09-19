@@ -90,19 +90,20 @@ def test_lifecycle_over_real_stdio() -> None:
             start_def = next(t for t in tools if t.name == "start_smoke_game")
             assert start_def.inputSchema.get("properties") in ({}, None)
             end_def = next(t for t in tools if t.name == "end_decision")
-            assert end_def.inputSchema.get("required") == ["decision"]
-            # Attack sizes have no defaults: the player must state a size.
+            # Decision is optional now: stale values are still rejected when
+            # supplied, but a lost counter must not lock the agent out.
+            assert end_def.inputSchema.get("required") in (None, [])
+            # Attack sizing mirrors the human slider: target is required,
+            # percent defaults to 20 (1-100), no absolute-troop parameter.
             attack_def = next(t for t in tools if t.name == "order_attack")
-            assert set(attack_def.inputSchema.get("required", [])) >= {
-                "target",
-                "troops",
-            }
+            assert set(attack_def.inputSchema.get("required", [])) >= {"target"}
+            attack_props = attack_def.inputSchema.get("properties", {})
+            assert "percent" in attack_props and "troops" not in attack_props
+            assert attack_props["percent"].get("default") == 20
             boat_def = next(t for t in tools if t.name == "order_boat_attack")
-            assert set(boat_def.inputSchema.get("required", [])) >= {
-                "x",
-                "y",
-                "troops",
-            }
+            assert set(boat_def.inputSchema.get("required", [])) >= {"x", "y"}
+            boat_props = boat_def.inputSchema.get("properties", {})
+            assert "percent" in boat_props and "troops" not in boat_props
 
             is_err, start_text = await _call(session, "start_smoke_game", {})
             assert is_err is False
@@ -125,10 +126,14 @@ def test_lifecycle_over_real_stdio() -> None:
                     session, "end_decision", {"decision": expected}
                 )
                 assert is_err is False
-                assert json.loads(decision_text) == {
-                    "decision": expected,
-                    "tick": want_tick,
-                }
+                payload = json.loads(decision_text)
+                # Every decision carries a compact human snapshot so the
+                # tape samples tiles/troops exactly once per decision.
+                assert payload["decision"] == expected
+                assert payload["tick"] == want_tick
+                assert set(payload["human"]) == {"troops", "gold", "tiles"}
+                assert payload["in_spawn_phase"] is False
+                assert payload["winner"] is None
 
             is_err, ov_text = await _call(session, "get_overview", {})
             final = json.loads(ov_text)
@@ -214,6 +219,31 @@ def test_end_decision_expected_decisions_reject_stale() -> None:
     asyncio.run(scenario())
 
 
+def test_end_decision_without_expected_recovers_lost_counter() -> None:
+    """An agent that lost its counter must be able to keep playing: the
+    omitted-expected call advances from the session's own counter."""
+
+    async def scenario() -> None:
+        async with _client() as session:
+            await _call(session, "start_smoke_game", {})
+            is_err, text = await _call(session, "end_decision", {})
+            assert is_err is False, text
+            payload = json.loads(text)
+            assert payload["decision"] == 1
+            assert payload["tick"] == START_TICK + END_DECISION_TICKS
+            is_err, text = await _call(session, "end_decision", {})
+            assert is_err is False, text
+            assert json.loads(text)["decision"] == 2
+            # A stale explicit value is still rejected after implicit calls.
+            is_err, text = await _call(session, "end_decision", {"decision": 2})
+            assert is_err is True
+            assert "expected 3" in text
+            is_err, _ = await _call(session, "close_game", {})
+            assert is_err is False
+
+    asyncio.run(scenario())
+
+
 def test_overview_is_controlled_human_state_not_engine_internals() -> None:
     expected_human = {
         "id": "human-1",
@@ -281,10 +311,8 @@ def test_end_decision_rejects_non_integer_payloads_over_real_transport() -> None
             assert is_err is False
 
             for payload in (
-                {"decision": "1"},
                 {"decision": True},
                 {"decision": 1.5},
-                {"decision": "1.5"},
             ):
                 is_err, text = await _call(session, "end_decision", payload)
                 assert is_err is True, (
@@ -300,14 +328,16 @@ def test_end_decision_rejects_non_integer_payloads_over_real_transport() -> None
             assert is_err is False
             assert json.loads(text)["tick"] == START_TICK + END_DECISION_TICKS
 
+            # Numeric strings coerce at the transport layer (a small model
+            # typing "2" should not burn a decision); a non-numeric string
+            # still fails schema validation.
             is_err, text = await _call(session, "end_decision", {"decision": "2"})
-            assert is_err is True, (
-                "a string equal to the expected decision must still be rejected"
-            )
-
-            is_err, text = await _call(session, "end_decision", {"decision": 2})
-            assert is_err is False
+            assert is_err is False, text
+            assert json.loads(text)["decision"] == 2
             assert json.loads(text)["tick"] == START_TICK + 2 * END_DECISION_TICKS
+
+            is_err, text = await _call(session, "end_decision", {"decision": "two"})
+            assert is_err is True
 
     asyncio.run(scenario())
 

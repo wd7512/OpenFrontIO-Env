@@ -105,6 +105,19 @@ def test_donate_bad_amount_rejected() -> None:
             engine.donate_gold("nation-1", 0)
         with pytest.raises(EngineError):
             engine.donate_troops("nation-1", -5)
+        for bad in ("many", None, True, float("nan"), float("inf")):
+            with pytest.raises(EngineError):
+                engine.donate_gold("nation-1", bad)
+
+
+def test_donate_accepts_fractional_amounts() -> None:
+    # The production schema is zb.float({min: 0}); the client's send modal
+    # computes floor(basis * percent / 100), which can be fractional after
+    # troop attrition. Acceptance (no error) is the parity bit here.
+    with _diplo() as engine:
+        _start(engine)
+        engine.donate_troops("nation-1", 1234.5)
+        engine.donate_gold("nation-1", 999.5)
 
 
 def test_reject_unknown_requestor_rejected() -> None:

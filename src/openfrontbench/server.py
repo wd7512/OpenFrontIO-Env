@@ -27,6 +27,26 @@ from openfrontbench.session import (
     SessionError,
 )
 
+
+def _coerce_int(value: object, label: str) -> int | None:
+    """Accept an int or an integer string; reject bools/floats/garbage.
+
+    Small models sometimes type ``"69"`` where the schema wants an integer.
+    StrictInt alone burns a tool call on that; numeric strings are safe to
+    coerce (bools and fractional floats stay rejected).
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = int(value)
+        except ValueError:
+            raise SessionError(f"{label} must be an integer, got {value!r}") from None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SessionError(f"{label} must be an integer, got {value!r}")
+    return value
+
+
 log = logging.getLogger(__name__)
 
 PIN = f"{_pins.VENDOR_TAG} ({_pins.VENDOR_PIN})"
@@ -72,40 +92,43 @@ async def start_smoke_game(ctx: Context) -> str:
 @mcp.tool()
 async def start_1v1_game(
     ctx: Context,
-    nations: StrictInt = 1,
+    nations: StrictInt | str = 1,
     difficulty: str = "easy",
     map: str = "britannia",
 ) -> str:
-    """Start a solo match: one human vs nation opponents (1-4 nations, easy/medium/hard/impossible) on britannia (production Compact board) or plains (fast fixture)."""
-    if isinstance(nations, bool) or not 1 <= nations <= MAX_TOOL_NATIONS:
+    """Start a solo match: one human vs nation opponents (1-4 nations, easy/medium/hard/impossible) on britannia (production Compact board) or plains (fast fixture). map is a map name, never a size like "full"."""
+    count = _coerce_int(nations, "nations")
+    if count is None or not 1 <= count <= MAX_TOOL_NATIONS:
         raise SessionError(
             f"nations must be an integer in [1, {MAX_TOOL_NATIONS}] for a match"
         )
     return json.dumps(
-        await asyncio.to_thread(_session_of(ctx).start, nations, difficulty, map)
+        await asyncio.to_thread(_session_of(ctx).start, count, difficulty, map)
     )
 
 
 @mcp.tool()
 async def start_solo_game(
     ctx: Context,
-    tribes: StrictInt = 400,
-    nations: StrictInt = 52,
+    tribes: StrictInt | str = 400,
+    nations: StrictInt | str = 52,
     difficulty: str = "easy",
     map: str = "europe",
 ) -> str:
-    """Start the default solo format: one human, 400 neutral tribes, 52 nations on full Europe FFA (easy/medium/hard/impossible)."""
-    if isinstance(tribes, bool) or not 0 <= tribes <= MAX_TOOL_TRIBES:
+    """Start the default solo format: one human, 400 neutral tribes, 52 nations on Europe FFA (easy/medium/hard/impossible). map is a map name (europe, world, britannia, plains), never a size like "full" — map size is fixed per map."""
+    tribe_count = _coerce_int(tribes, "tribes")
+    if tribe_count is None or not 0 <= tribe_count <= MAX_TOOL_TRIBES:
         raise SessionError(
             f"tribes must be an integer in [0, {MAX_TOOL_TRIBES}] for a solo game"
         )
-    if isinstance(nations, bool) or not 0 <= nations <= MAX_TOOL_NATIONS:
+    nation_count = _coerce_int(nations, "nations")
+    if nation_count is None or not 0 <= nation_count <= MAX_TOOL_NATIONS:
         raise SessionError(
             f"nations must be an integer in [0, {MAX_TOOL_NATIONS}] for a solo game"
         )
     return json.dumps(
         await asyncio.to_thread(
-            _session_of(ctx).start, nations, difficulty, map, tribes
+            _session_of(ctx).start, nation_count, difficulty, map, tribe_count
         )
     )
 
@@ -117,16 +140,18 @@ async def get_overview(ctx: Context) -> str:
 
 
 @mcp.tool()
-async def end_decision(decision: StrictInt, ctx: Context) -> str:
-    """Advance exactly 50 sim ticks for one decision. Pass the exact next expected decision integer; non-integers and stale values are rejected."""
-    return json.dumps(await asyncio.to_thread(_session_of(ctx).end_decision, decision))
+async def end_decision(ctx: Context, decision: StrictInt | str | None = None) -> str:
+    """Advance exactly 50 sim ticks for one decision and return a compact human snapshot (troops, gold, tiles, spawn phase, winner). Pass the next expected decision integer when you know it (stale values are rejected); omit it to just advance."""
+    expected = _coerce_int(decision, "decision")
+    return json.dumps(await asyncio.to_thread(_session_of(ctx).end_decision, expected))
 
 
 @mcp.tool()
-async def order_attack(ctx: Context, target: str, troops: StrictInt) -> str:
-    """Order the human to expand or attack: target "expand" (adjacent neutral land), "nation-N" or "tribe-N", with a positive integer troop count you size yourself from get_overview (target troops/tiles, your troops). There is no default size — the engine's 20% convention is a fallback for players who do not think. Production rules (immunity, shared border) decide whether the order lands; the result reports live attacks."""
+async def order_attack(ctx: Context, target: str, percent: StrictInt | str = 20) -> str:
+    """Order the human to expand or attack with a percent of current troops — the same attack slider a human uses (1-100, default 20). Target "expand" (adjacent neutral land), "nation-N" or "tribe-N". Size the percent from get_overview (target troops/tiles, your troops): production combat math is what decides the exchange. Production rules (immunity, shared border) decide whether the order lands; the next snapshot shows the result."""
+    share = _coerce_int(percent, "percent")
     return json.dumps(
-        await asyncio.to_thread(_session_of(ctx).order_attack, target, troops)
+        await asyncio.to_thread(_session_of(ctx).order_attack, target, share)
     )
 
 
@@ -140,11 +165,19 @@ async def order_cancel_attack(ctx: Context, attack_id: str = "") -> str:
 
 @mcp.tool()
 async def order_boat_attack(
-    ctx: Context, x: StrictInt, y: StrictInt, troops: StrictInt
+    ctx: Context,
+    x: StrictInt | str,
+    y: StrictInt | str,
+    percent: StrictInt | str = 20,
 ) -> str:
-    """Launch a boat attack at a landing tile (x, y) from get_overview boat_targets, with a positive integer troop count sized from the target's troops/tiles — there is no default size. Bounds are checked; the engine validates the tile (needs shore and water, same as a human order)."""
+    """Launch a boat attack at a landing tile (x, y) from get_overview boat_targets, with a percent of current troops — the same attack slider a human uses (1-100, default 20). Bounds are checked; the engine validates the tile (needs shore and water, same as a human order)."""
+    tile_x = _coerce_int(x, "x")
+    tile_y = _coerce_int(y, "y")
+    share = _coerce_int(percent, "percent")
     return json.dumps(
-        await asyncio.to_thread(_session_of(ctx).order_boat_attack, x, y, troops)
+        await asyncio.to_thread(
+            _session_of(ctx).order_boat_attack, tile_x, tile_y, share
+        )
     )
 
 
@@ -158,17 +191,37 @@ async def order_cancel_boat(ctx: Context, unit_id: str = "") -> str:
 
 @mcp.tool()
 async def order_build(
-    ctx: Context, unit: str = "city", x: StrictInt = 0, y: StrictInt = 0
+    ctx: Context,
+    unit: str = "city",
+    x: StrictInt | str = 0,
+    y: StrictInt | str = 0,
+    rocket_direction_up: bool | None = None,
+    amount: StrictInt | str | None = None,
 ) -> str:
-    """Order a build-menu unit (city, defense-post, sam-launcher, missile-silo, port, factory, atom-bomb, hydrogen-bomb, mirv, warship) at tile (x, y). The engine validates gold, costs and tiles — acceptance, not landing, is the contract."""
-    return json.dumps(await asyncio.to_thread(_session_of(ctx).order_build, unit, x, y))
+    """Order a build-menu unit (city, defense-post, sam-launcher, missile-silo, port, factory, atom-bomb, hydrogen-bomb, mirv, warship) at tile (x, y). rocket_direction_up is the client's rocket toggle (atom-bomb/hydrogen-bomb); amount is the stack amount (1-50) for stackable nukes. The engine validates gold, costs and tiles — acceptance, not landing, is the contract."""
+    tile_x = _coerce_int(x, "x")
+    tile_y = _coerce_int(y, "y")
+    stack = _coerce_int(amount, "amount")
+    return json.dumps(
+        await asyncio.to_thread(
+            _session_of(ctx).order_build,
+            unit,
+            tile_x,
+            tile_y,
+            rocket_direction_up,
+            stack,
+        )
+    )
 
 
 @mcp.tool()
-async def order_upgrade_unit(ctx: Context, unit_id: str = "") -> str:
-    """Upgrade a human unit by its id (from get_overview units). Unknown ids are rejected; only some structures are upgradable in production."""
+async def order_upgrade_unit(
+    ctx: Context, unit_id: str = "", amount: StrictInt | str | None = None
+) -> str:
+    """Upgrade a human unit by its id (from get_overview units); amount (1-50) upgrades several levels at once, as the client's multi-level button does. Unknown ids are rejected; only some structures are upgradable in production."""
+    stack = _coerce_int(amount, "amount")
     return json.dumps(
-        await asyncio.to_thread(_session_of(ctx).order_upgrade_unit, unit_id)
+        await asyncio.to_thread(_session_of(ctx).order_upgrade_unit, unit_id, stack)
     )
 
 
@@ -222,9 +275,9 @@ async def order_embargo(ctx: Context, target: str = "", action: str = "start") -
 
 @mcp.tool()
 async def order_donate_gold(
-    ctx: Context, target: str = "", amount: StrictInt = 1000
+    ctx: Context, target: str = "", amount: float = 1000
 ) -> str:
-    """Donate gold to a nation or tribe. Only friendly (allied) recipients can receive — strangers are refused, same as for a human."""
+    """Donate gold to a nation or tribe (fractional amounts allowed, as the client's send-resource modal computes them). Only friendly (allied) recipients can receive — strangers are refused, same as for a human."""
     return json.dumps(
         await asyncio.to_thread(_session_of(ctx).order_donate_gold, target, amount)
     )
@@ -232,9 +285,9 @@ async def order_donate_gold(
 
 @mcp.tool()
 async def order_donate_troops(
-    ctx: Context, target: str = "", amount: StrictInt = 1000
+    ctx: Context, target: str = "", amount: float = 1000
 ) -> str:
-    """Donate troops to a nation or tribe. Only friendly (allied) recipients can receive."""
+    """Donate troops to a nation or tribe (fractional amounts allowed, as the client's send-resource modal computes them). Only friendly (allied) recipients can receive."""
     return json.dumps(
         await asyncio.to_thread(_session_of(ctx).order_donate_troops, target, amount)
     )
@@ -242,11 +295,18 @@ async def order_donate_troops(
 
 @mcp.tool()
 async def order_move_warship(
-    ctx: Context, unit_id: str = "", x: StrictInt = 0, y: StrictInt = 0
+    ctx: Context,
+    unit_ids: list[str] | None = None,
+    x: StrictInt | str = 0,
+    y: StrictInt | str = 0,
 ) -> str:
-    """Retarget a warship to patrol tile (x, y). The id must be a live human warship; the engine validates the water component, same as a human patrol order."""
+    """Retarget a fleet of warships to patrol tile (x, y); unit_ids is a non-empty list of live human warship ids (the client moves every selected ship in one order). The engine validates the water component, same as a human patrol order."""
+    tile_x = _coerce_int(x, "x")
+    tile_y = _coerce_int(y, "y")
     return json.dumps(
-        await asyncio.to_thread(_session_of(ctx).order_move_warship, unit_id, x, y)
+        await asyncio.to_thread(
+            _session_of(ctx).order_move_warship, unit_ids, tile_x, tile_y
+        )
     )
 
 
