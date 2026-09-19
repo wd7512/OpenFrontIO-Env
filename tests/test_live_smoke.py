@@ -94,17 +94,94 @@ def test_run_auto_cache_missing_means_none(tmp_path):
     assert kwargs["models_cache_source"] is None
 
 
-def _tool_event(tool: str, result: dict) -> str:
+def test_run_records_difficulty_in_payload(tmp_path):
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
+        launch.return_value = SimpleNamespace(
+            process=SimpleNamespace(
+                stdout="", stderr="", returncode=0, timed_out=False
+            ),
+            run=SimpleNamespace(),
+            config={},
+            resolved_config=None,
+        )
+        run(env, tmp_path / "output", 10, difficulty="hard")
+    payload = json.loads((tmp_path / "output" / "live_result.json").read_text())
+    assert payload["difficulty"] == "hard"
+    assert payload["scenario"] == "solo"
+
+
+def _tool_event(tool: str, result: dict, inputs: dict | None = None) -> str:
+    state: dict = {"output": json.dumps({"result": json.dumps(result)})}
+    if inputs is not None:
+        state["input"] = inputs
     return json.dumps(
         {
             "type": "tool_use",
             "timestamp": 1000,
-            "part": {
-                "tool": tool,
-                "state": {"output": json.dumps({"result": json.dumps(result)})},
-            },
+            "part": {"tool": tool, "state": state},
         }
     )
+
+
+def test_summarise_metrics_track_passivity_and_builds():
+    from openfrontbench.live_smoke import _summarise_events
+
+    def overview(decision: int, tiles: int, gold: str) -> str:
+        return _tool_event(
+            "game_get_overview",
+            {"decision": decision, "human": {"tiles": tiles, "gold": gold}},
+        )
+
+    stdout = "\n".join(
+        [
+            _tool_event(
+                "game_start_solo_game",
+                {"decision": 0, "human": {"tiles": 52, "gold": "0"}},
+            ),
+            _tool_event(
+                "game_order_attack",
+                {"decision": 0},
+                {"target": "tribe-1", "troops": 5000},
+            ),
+            _tool_event(
+                "game_order_attack",
+                {"decision": 0},
+                {"target": "expand", "troops": 2000},
+            ),
+            _tool_event("game_order_build", {"decision": 1}, {"unit": "city"}),
+            overview(50, 900, "1000"),
+            overview(100, 2000, "2500"),
+            _tool_event(
+                "game_order_attack",
+                {"decision": 100},
+                {"target": "nation-3", "troops": 40000},
+            ),
+            _tool_event(
+                "game_order_boat_attack",
+                {"decision": 100},
+                {"x": 1, "y": 2, "troops": 3000},
+            ),
+            overview(120, 1500, "9000"),
+        ]
+    )
+    metrics = _summarise_events(stdout)["metrics"]
+    assert metrics["attacks"] == 3
+    assert metrics["attacks_after_50"] == 1
+    assert metrics["expand_attacks"] == 1
+    assert metrics["tribe_attacks"] == 1
+    assert metrics["nation_attacks"] == 1
+    assert metrics["boats"] == 1
+    assert metrics["cities"] == 1
+    assert metrics["tiles_50"] == 900
+    assert metrics["tiles_100"] == 2000
+    assert metrics["tiles_peak"] == 2000
+    assert metrics["gold_end"] == "9000"
 
 
 def test_summarise_captures_winner_from_overviews():
@@ -134,7 +211,7 @@ def test_summarise_winner_is_null_when_never_declared():
     assert _summarise_events(stdout)["winner"] is None
 
 
-def test_build_solo_prompt_names_solo_game_and_cap():
+def test_build_solo_prompt_is_win_focused_and_minimal():
     from openfrontbench.live_smoke import build_solo_prompt
 
     prompt = build_solo_prompt(20)
@@ -142,14 +219,13 @@ def test_build_solo_prompt_names_solo_game_and_cap():
     assert "400 tribes" in prompt
     assert "52 nations" in prompt
     assert "20" in prompt
-    assert "tribes_list" in prompt
-    assert "game_order_build" in prompt
-    assert "game_order_cancel_attack" in prompt
     assert '"easy"' in prompt
     # Win-or-die: the only acceptable end is victory or elimination, never
     # an early close (the agent twice closed healthy games to "report").
-    # Full Civ parity: no close tool exists — the match ends server-side.
-    assert "WIN" in prompt and "DIE" in prompt
+    assert "win" in prompt and "eliminated" in prompt
+    # Stripped down: tool docs live on the MCP server, not in the prompt.
+    assert "tribes_list" not in prompt
+    assert "game_order_build" not in prompt
     assert "game_close_game" not in prompt
 
 

@@ -37,6 +37,23 @@ def test_solo_boots_world_full_with_400_tribes():
         assert advanced["tribes"] == 400
 
 
+def test_solo_exposes_boat_targets_with_coordinates():
+    # The agent has no terrain view, so the engine must hand it landing
+    # spots: coordinates plus the owner label and, for players, strength.
+    with _world() as engine:
+        started = engine.start(tribes=400, spawn=None)
+        targets = started["boat_targets"]
+        assert isinstance(targets, list)
+        for target in targets:
+            assert isinstance(target["x"], int)
+            assert isinstance(target["y"], int)
+            assert isinstance(target["owner"], str)
+            assert target["troops"] is None or isinstance(target["troops"], int)
+            assert target["tiles"] is None or isinstance(target["tiles"], int)
+        advanced = engine.advance(50)
+        assert isinstance(advanced["boat_targets"], list)
+
+
 def test_solo_is_deterministic():
     first = second = None
     with _world() as engine:

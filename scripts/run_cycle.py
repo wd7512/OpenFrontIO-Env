@@ -13,7 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
-from openfrontbench.cycle import run_cycle
+from openfrontbench.cycle import CAP_HIT_THRESHOLD, cap_after_cap_hits, run_cycle
 from openfrontbench.live_smoke import (
     KEY_ENV_BY_PROVIDER,
     _default_models_cache,
@@ -34,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-decisions", type=int, default=150)
     parser.add_argument("--difficulty", default="easy")
     parser.add_argument("--coach-timeout", type=float, default=900)
+    parser.add_argument(
+        "--memory-version",
+        type=int,
+        default=None,
+        help="pin the played playbook to a version (variance/A-B runs); "
+        "coaching still appends the next version",
+    )
     parser.add_argument("--out-prefix", default=None)
     parser.add_argument(
         "--retro-only",
@@ -69,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"memory-v{version}.md written")
         return 0
+    cap = args.max_decisions
+    cap_hits = 0
     for _ in range(args.cycles):
         import time
 
@@ -85,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                 "env_file": args.env_file,
                 "output": out,
                 "timeout_s": 30000,
-                "max_decisions": args.max_decisions,
+                "max_decisions": cap,
                 "difficulty": args.difficulty,
                 "models_cache_source": cache,
             },
@@ -96,11 +105,25 @@ def main(argv: list[str] | None = None) -> int:
             api_key=api_key,
             coach_timeout_s=args.coach_timeout,
             models_cache_source=cache,
+            memory_version=args.memory_version,
         )
         logging.getLogger(__name__).info("cycle done: %s", row)
         if row.get("winner"):
             logging.getLogger(__name__).info("winner declared; stopping")
             break
+        # Only a live player that ran out of ceiling earns a longer game;
+        # a run eliminated at the ceiling proves nothing about stamina.
+        if (row.get("decisions") or 0) >= cap and (row.get("tiles") or 0) > 0:
+            cap_hits += 1
+        new_cap, cap_hits = cap_after_cap_hits(cap_hits, cap)
+        if new_cap != cap:
+            logging.getLogger(__name__).info(
+                "decision cap raised from %s to %s after %s ceiling finishes",
+                cap,
+                new_cap,
+                CAP_HIT_THRESHOLD,
+            )
+            cap = new_cap
     return 0
 
 

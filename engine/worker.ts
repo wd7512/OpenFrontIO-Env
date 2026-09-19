@@ -18,6 +18,7 @@ import {
   GameMode,
   GameType,
   Nation,
+  Player,
   PlayerInfo,
   PlayerType,
   UnitType,
@@ -64,12 +65,19 @@ interface NationState {
   alive: boolean;
   immune: boolean;
   borders_human: boolean;
+  incoming_troops: number;
 }
 
 interface AttackState {
   id: string;
   attacker: string;
   target: string | null;
+  troops: number;
+  retreating: boolean;
+}
+
+interface IncomingAttackState {
+  attacker: string;
   troops: number;
   retreating: boolean;
 }
@@ -82,11 +90,20 @@ interface TribeState {
   tiles: number;
   alive: boolean;
   borders_human: boolean;
+  incoming_troops: number;
 }
 
 interface BoatState {
   id: string;
   troops: number;
+}
+
+interface BoatTargetState {
+  x: number;
+  y: number;
+  owner: string;
+  troops: number | null;
+  tiles: number | null;
 }
 
 interface UnitState {
@@ -135,11 +152,13 @@ interface Snapshot {
   tribes: number;
   tribe_list: TribeState[];
   boats: BoatState[];
+  boat_targets: BoatTargetState[];
   units: UnitState[];
   alliances: AllianceState[];
   alliance_requests: { incoming: string[]; outgoing: string[] };
   embargoes: EmbargoState[];
   attacks: AttackState[];
+  incoming_attacks: IncomingAttackState[];
   nations: NationState[];
   human: {
     id: string;
@@ -1023,6 +1042,66 @@ class EngineSession {
     );
   }
 
+  // Coastal landing spots reachable by transport ship. Derived from a sample
+  // of the human's own shore tiles: trace each cardinal direction across
+  // water and report the first foreign or neutral land hit. The agent has no
+  // map/terrain coordinates at all, so without this list boat orders would
+  // be unaimable guesses. Only the first landfall per ray is reported, so
+  // every entry sits on a straight, water-only line from human territory.
+  private boatTargets(game: Game, player: Player): BoatTargetState[] {
+    const shores = Array.from(player.borderTiles()).filter((t) =>
+      game.isShore(t),
+    );
+    if (shores.length === 0) return [];
+    const directions: [number, number][] = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ];
+    const targets: BoatTargetState[] = [];
+    const seen = new Set<number>();
+    const step = Math.max(1, Math.ceil(shores.length / 40));
+    const maxRange = 30;
+    for (let i = 0; i < shores.length && targets.length < 8; i += step) {
+      const shore = shores[i];
+      const sx = game.x(shore);
+      const sy = game.y(shore);
+      for (const [dx, dy] of directions) {
+        let crossedWater = false;
+        for (let d = 1; d <= maxRange; d++) {
+          const x = sx + dx * d;
+          const y = sy + dy * d;
+          if (!game.isValidCoord(x, y)) break;
+          const tile = game.ref(x, y);
+          if (game.isWater(tile)) {
+            crossedWater = true;
+            continue;
+          }
+          if (!crossedWater) break; // same shoreline, no crossing here
+          if (game.isImpassable(tile) || game.hasFallout(tile)) break;
+          if (seen.has(tile)) break;
+          const owner = game.owner(tile);
+          if (owner === player) break;
+          if (owner.isPlayer() && player.isFriendly(owner)) break;
+          const playerOwner = owner.isPlayer() ? (owner as Player) : null;
+          seen.add(tile);
+          targets.push({
+            x,
+            y,
+            owner: playerOwner
+              ? this.labelForPlayerID(playerOwner.id())
+              : "neutral",
+            troops: playerOwner ? playerOwner.troops() : null,
+            tiles: playerOwner ? playerOwner.numTilesOwned() : null,
+          });
+          break;
+        }
+      }
+    }
+    return targets;
+  }
+
   private snapshot(status: string): Snapshot {
     const game = this.requireGame();
     const player = game.player(this.humanID);
@@ -1060,6 +1139,7 @@ class EngineSession {
             tiles: 0,
             alive: false,
             borders_human: false,
+            incoming_troops: 0,
           };
         }
         const tribe = game.player(id);
@@ -1071,12 +1151,16 @@ class EngineSession {
           tiles: tribe.numTilesOwned(),
           alive: tribe.isAlive(),
           borders_human: player.sharesBorderWith(tribe),
+          incoming_troops: tribe
+            .incomingAttacks()
+            .reduce((sum, attack) => sum + attack.troops(), 0),
         };
       }),
       boats: player.units([UnitType.TransportShip]).map((boat) => ({
         id: String(boat.id()),
         troops: boat.troops(),
       })),
+      boat_targets: this.boatTargets(game, player),
       // All human units except transport ships (those live under boats, and
       // humans manage them through the boat UI, not the build menu).
       units: player
@@ -1130,6 +1214,11 @@ class EngineSession {
           retreating: attack.retreating(),
         };
       }),
+      incoming_attacks: player.incomingAttacks().map((attack) => ({
+        attacker: attack.attacker().name(),
+        troops: attack.troops(),
+        retreating: attack.retreating(),
+      })),
       nations: this.nationIDs.map((id) => {
         const nation = game.player(id);
         return {
@@ -1142,6 +1231,9 @@ class EngineSession {
           alive: nation.isAlive(),
           immune: nation.isImmune(),
           borders_human: player.sharesBorderWith(nation),
+          incoming_troops: nation
+            .incomingAttacks()
+            .reduce((sum, attack) => sum + attack.troops(), 0),
         };
       }),
       human: {

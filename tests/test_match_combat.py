@@ -133,6 +133,40 @@ def test_boat_attack_validation() -> None:
     asyncio.run(scenario())
 
 
+def test_overview_boat_targets_are_orderable() -> None:
+    async def scenario() -> None:
+        async with _client() as session:
+            is_err, text = await _call(
+                session,
+                "start_solo_game",
+                {"map": "britannia", "tribes": 0, "nations": 0},
+            )
+            assert is_err is False, text
+            targets = json.loads(text)["boat_targets"]
+            assert targets, text
+            target = targets[0]
+            assert set(target) == {"x", "y", "owner", "troops", "tiles"}
+
+            is_err, text = await _call(
+                session,
+                "order_boat_attack",
+                {"x": target["x"], "y": target["y"], "troops": 1000},
+            )
+            assert is_err is False, text
+            is_err, text = await _call(session, "end_decision", {"decision": 1})
+            assert is_err is False, text
+            is_err, text = await _call(session, "get_overview", {})
+            # By decision 1 the launch shows as an en-route boat, and a close
+            # target may already have become a landing attack.
+            overview = json.loads(text)
+            assert overview["boats"] or overview["attacks"], text
+
+            is_err, _ = await _call(session, "close_game", {})
+            assert is_err is False
+
+    asyncio.run(scenario())
+
+
 def test_tribes_projection_lists_only_bordering() -> None:
     from openfrontbench.session import GameSession
 
@@ -163,6 +197,7 @@ def test_tribes_projection_lists_only_bordering() -> None:
                 "tiles": 50,
                 "alive": True,
                 "borders_human": True,
+                "incoming_troops": 300,
             },
             {
                 "id": "tribe-2",
@@ -171,17 +206,47 @@ def test_tribes_projection_lists_only_bordering() -> None:
                 "tiles": 50,
                 "alive": True,
                 "borders_human": False,
+                "incoming_troops": 900,
             },
         ],
         "boats": [],
+        "boat_targets": [
+            {
+                "x": 5,
+                "y": 6,
+                "owner": "neutral",
+                "troops": None,
+                "tiles": None,
+            },
+            {
+                "x": 9,
+                "y": 9,
+                "owner": "nation-1",
+                "troops": 500,
+                "tiles": 40,
+            },
+        ],
         "units": [],
         "alliances": [],
         "alliance_requests": {"incoming": [], "outgoing": []},
         "embargoes": [],
         "attacks": [],
+        "incoming_attacks": [
+            {"attacker": "Nation One", "troops": 1234, "retreating": False}
+        ],
     }
     projected = session._project("started")
     assert projected["tribes"] == 2
     assert [t["id"] for t in projected["tribes_list"]] == ["tribe-1"]
+    # Dogpile and defense timing: incoming pressure is visible both ways.
+    assert projected["incoming_attacks"] == [
+        {"attacker": "Nation One", "troops": 1234, "retreating": False}
+    ]
+    assert projected["tribes_list"][0]["incoming_troops"] == 300
+    # Boat landing spots carry coordinates and owner strength for targeting.
+    assert projected["boat_targets"] == [
+        {"x": 5, "y": 6, "owner": "neutral", "troops": None, "tiles": None},
+        {"x": 9, "y": 9, "owner": "nation-1", "troops": 500, "tiles": 40},
+    ]
     # Addressing still covers the hidden tribe (full worker list).
     assert "tribe-2" in session._valid_targets()

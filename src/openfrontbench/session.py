@@ -252,8 +252,10 @@ class GameSession:
     def order_boat_attack(self, x: object, y: object, troops: object) -> dict[str, Any]:
         """Launch a boat attack at tile (``x``, ``y``) with ``troops``.
 
-        Rides the production boat intent (TransportShipExecution); integer
-        bounds are checked here, the engine validates the tile itself.
+        ``x``/``y`` come from ``get_overview`` ``boat_targets`` (the agent
+        cannot see terrain). Rides the production boat intent
+        (TransportShipExecution); integer bounds are checked here, the
+        engine validates the tile itself.
         """
         with self._lock:
             self._require_running()
@@ -588,6 +590,7 @@ class GameSession:
                 "alive": nation.get("alive", True),
                 "immune": nation.get("immune", False),
                 "borders_human": nation.get("borders_human", False),
+                "incoming_troops": nation.get("incoming_troops", 0),
             }
             for index, nation in enumerate(self._snapshot.get("nations", []))
         ]
@@ -600,6 +603,15 @@ class GameSession:
             }
             for attack in self._snapshot.get("attacks", [])
         ]
+        incoming_attacks = [
+            {
+                "attacker": attack.get("attacker"),
+                "troops": attack.get("troops"),
+                "retreating": attack.get("retreating", False),
+            }
+            for attack in self._snapshot.get("incoming_attacks", [])
+            if isinstance(attack, dict)
+        ]
         tribes_list = [
             {
                 "id": tribe["id"],
@@ -608,6 +620,7 @@ class GameSession:
                 "tiles": tribe["tiles"],
                 "alive": tribe.get("alive", True),
                 "borders_human": tribe.get("borders_human", False),
+                "incoming_troops": tribe.get("incoming_troops", 0),
             }
             # Only bordering tribes are listed: distant ones are unactionable
             # (attacks without shared border retreat silent), and 400 full
@@ -620,6 +633,17 @@ class GameSession:
         boats = [
             {"id": boat["id"], "troops": boat["troops"]}
             for boat in self._snapshot.get("boats", [])
+        ]
+        boat_targets = [
+            {
+                "x": target.get("x"),
+                "y": target.get("y"),
+                "owner": target.get("owner"),
+                "troops": target.get("troops"),
+                "tiles": target.get("tiles"),
+            }
+            for target in self._snapshot.get("boat_targets", [])
+            if isinstance(target, dict)
         ]
         units = [
             {
@@ -669,9 +693,11 @@ class GameSession:
             "nations": nations,
             "tribes_list": tribes_list,
             "boats": boats,
+            "boat_targets": boat_targets,
             "units": units,
             "alliances": alliances,
             "alliance_requests": alliance_requests,
             "embargoes": embargoes,
             "attacks": attacks,
+            "incoming_attacks": incoming_attacks,
         }

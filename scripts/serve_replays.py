@@ -16,9 +16,11 @@ tape through the real engine renderer. Have the client running first
 (``npm run start:client`` in vendor/OpenFrontIO, serves :9000).
 
 raw/ is never modified: conversion output is moved away and only record
-bytes are served from memory. Colliding gameIDs (every engine run tapes
-ENGINE01) are remapped to unique OF00000N form, which satisfies the
-production gameID schema.
+bytes are served from memory. Every engine run tapes gameID ENGINE01, so
+route IDs (OF000001, ...) only select which pristine record to serve: the
+record bytes are NEVER rewritten, because the engine seeds its RNG from
+``simpleHash(gameID)`` and any rewrite would reseed the replay into a
+different world than the live game.
 """
 
 from __future__ import annotations
@@ -32,10 +34,11 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from openfrontbench.paths import REPO_ROOT
 
@@ -58,7 +61,12 @@ def find_runs(raw_dir: Path) -> list[Path]:
 
 
 def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
-    """Unique 8-char gameID per run; keeps originals that are already unique."""
+    """Unique route ID per run; originals are only used to detect collisions.
+
+    Route IDs select which record to serve and never rewrite it: every run
+    tapes ENGINE01, so colliding originals get OF00000N routes while the
+    served bytes keep the live gameID (and its RNG seed) intact.
+    """
     counts = Counter(original.values())
     out: dict[str, str] = {}
     n = 0
@@ -72,24 +80,23 @@ def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
     return out
 
 
-def remap_game_id(record: dict[str, Any], game_id: str) -> dict[str, Any]:
-    """Return a copy of a game record addressed under game_id."""
-    staged = dict(record)
-    staged["info"] = {**record.get("info", {}), "gameID": game_id}
-    return staged
-
-
 def load_summary(run_dir: Path) -> dict[str, Any]:
     """Best-effort index card facts from live_result.json + record.json."""
     summary: dict[str, Any] = {"name": run_dir.name}
-    try:
-        live = json.loads((run_dir / "live_result.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        live = {}
-    if isinstance(live, dict):
+    live: Any = {}
+    if (run_dir / "live_result.json").is_file():
+        try:
+            live = json.loads(
+                (run_dir / "live_result.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            live = {}
+    if isinstance(live, dict) and live:
         summary["model"] = live.get("model")
         summary["scenario"] = live.get("scenario")
+        summary["difficulty"] = live.get("difficulty")
         summary["max_decisions"] = live.get("max_decisions")
+        summary["duration_s"] = live.get("duration_s")
         inner = live.get("summary", {})
         if isinstance(inner, dict):
             summary["decisions"] = len(inner.get("decisions", []) or [])
@@ -100,6 +107,9 @@ def load_summary(run_dir: Path) -> dict[str, Any]:
             summary["winner"] = inner.get("winner")
             summary["tool_calls"] = inner.get("tool_calls")
             summary["cost"] = inner.get("cost")
+            metrics = inner.get("metrics")
+            if isinstance(metrics, dict):
+                summary["metrics"] = metrics
             human = inner.get("final_human", {})
             if isinstance(human, dict):
                 summary["tiles"] = human.get("tiles")
@@ -115,6 +125,14 @@ def load_summary(run_dir: Path) -> dict[str, Any]:
         summary["tape_ticks"] = tape.get("ticks")
         summary["tape_game_id"] = tape.get("gameId")
     return summary
+
+
+def _file_stamp(path: Path) -> tuple[int, int]:
+    try:
+        st = path.stat()
+    except OSError:
+        return (0, 0)
+    return (st.st_mtime_ns, st.st_size)
 
 
 def bundle_converter(dst: Path) -> Path:
@@ -176,7 +194,7 @@ def convert_run(run_dir: Path, bundle: Path) -> dict[str, Any]:
 def stage_records(
     runs: list[Path], bundle: Path
 ) -> tuple[dict[str, bytes], dict[str, dict[str, Any]]]:
-    """Convert every run; return ({gameID: record bytes}, {name: summary})."""
+    """Convert every run; return ({routeID: pristine record bytes}, summaries)."""
     converted: dict[str, dict[str, Any]] = {}
     originals: dict[str, str] = {}
     for run_dir in runs:
@@ -190,13 +208,87 @@ def stage_records(
     records: dict[str, bytes] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for run_dir in runs:
-        game_id = ids[run_dir.name]
-        staged = remap_game_id(converted[run_dir.name], game_id)
-        records[game_id] = json.dumps(staged).encode("utf-8")
+        route_id = ids[run_dir.name]
+        records[route_id] = json.dumps(converted[run_dir.name]).encode("utf-8")
         summary = load_summary(run_dir)
-        summary["game_id"] = game_id
+        summary["game_id"] = route_id
         summaries[run_dir.name] = summary
     return records, summaries
+
+
+class Registry:
+    """Live view over ``raw/``: new and still-growing runs join without restart.
+
+    Cycles write a fresh run every attempt, and the engine rewrites
+    ``record.json`` after every decision, so a run is re-converted whenever
+    its tape changes. Route IDs are pinned per run the moment it is first
+    staged, keeping already-shared watch links stable. A tape caught mid-write
+    fails conversion and is simply retried on the next refresh.
+    """
+
+    def __init__(
+        self,
+        raw_dir: Path,
+        bundle: Path,
+        client_base: str,
+        convert: Callable[[Path, Path], dict[str, Any]] = convert_run,
+    ) -> None:
+        self._raw = raw_dir
+        self._bundle = bundle
+        self._client_base = client_base
+        self._convert = convert
+        self._lock = threading.Lock()
+        self._stamps: dict[str, tuple[int, int, int, int]] = {}
+        self._route_ids: dict[str, str] = {}
+        self._records: dict[str, bytes] = {}
+        self._summaries: dict[str, dict[str, Any]] = {}
+        self._index = render_index({}, client_base)
+
+    def _next_route_id(self) -> str:
+        used = set(self._route_ids.values())
+        n = 1
+        while f"OF{n:06d}" in used:
+            n += 1
+        return f"OF{n:06d}"
+
+    def refresh(self) -> bool:
+        """Stage new or changed runs; returns True when the view changed."""
+        changed = False
+        with self._lock:
+            for run_dir in find_runs(self._raw):
+                # Both files matter: the tape grows per decision, the result
+                # file appears only when the attempt finishes.
+                record_stamp = _file_stamp(run_dir / "record.json")
+                live_stamp = _file_stamp(run_dir / "live_result.json")
+                stamp = (record_stamp[0], record_stamp[1], live_stamp[0], live_stamp[1])
+                if self._stamps.get(run_dir.name) == stamp:
+                    continue
+                try:
+                    record = self._convert(run_dir, self._bundle)
+                except Exception as exc:
+                    log.debug("run %s not stageable yet: %s", run_dir.name, exc)
+                    continue
+                route_id = self._route_ids.get(run_dir.name)
+                if route_id is None:
+                    route_id = self._next_route_id()
+                    self._route_ids[run_dir.name] = route_id
+                self._records[route_id] = json.dumps(record).encode("utf-8")
+                summary = load_summary(run_dir)
+                summary["game_id"] = route_id
+                self._summaries[run_dir.name] = summary
+                self._stamps[run_dir.name] = stamp
+                changed = True
+            if changed:
+                self._index = render_index(self._summaries, self._client_base)
+        return changed
+
+    def snapshot(self) -> tuple[dict[str, bytes], bytes]:
+        with self._lock:
+            return dict(self._records), self._index
+
+    def summaries(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            return {name: dict(s) for name, s in self._summaries.items()}
 
 
 def _cell(value: Any) -> str:
@@ -215,16 +307,28 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
             if s.get("tick_first") is not None
             else None
         )
+        duration = s.get("duration_s")
+        wall = f"{duration:.0f}s" if isinstance(duration, (int, float)) else None
+        metrics = s.get("metrics") or {}
         rows.append(
             "<tr>"
             f"<td>{html.escape(name)}</td>"
             f'<td><a href="{html.escape(link)}">{html.escape(str(s["game_id"]))} &#9654;</a></td>'
+            f"{_cell(s.get('model'))}"
             f"{_cell(s.get('scenario'))}"
+            f"{_cell(s.get('difficulty'))}"
+            f"{_cell(s.get('max_decisions'))}"
             f"{_cell(s.get('decisions'))}"
             f"<td>{ticks or '&mdash;'}</td>"
             f"{_cell(s.get('winner'))}"
             f"{_cell(s.get('tiles'))}"
             f"{_cell(s.get('troops'))}"
+            f"{_cell(s.get('tool_calls'))}"
+            f"{_cell(metrics.get('cities'))}"
+            f"{_cell(metrics.get('attacks'))}"
+            f"{_cell(metrics.get('attacks_after_50'))}"
+            f"{_cell(metrics.get('tiles_peak'))}"
+            f"{_cell(wall)}"
             f"{_cell(s.get('cost'))}"
             "</tr>"
         )
@@ -240,15 +344,24 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
         '<p class="note">Links open the real client straight into the engine replay. '
         "Client must be running (<code>npm run start:client</code> in "
         "vendor/OpenFrontIO).</p>\n"
-        + "<table><tr><th>run</th><th>watch</th><th>scenario</th><th>decisions</th>\n"
-        "<th>ticks</th><th>winner</th><th>tiles</th><th>troops</th><th>cost</th></tr>\n"
+        + "<table><tr><th>run</th><th>watch</th><th>model</th><th>scenario</th>"
+        "<th>difficulty</th><th>max decisions</th><th>decisions</th><th>ticks</th>"
+        "<th>winner</th><th>tiles</th><th>troops</th><th>tool calls</th>"
+        "<th>cities</th><th>atk</th><th>atk&gt;50</th><th>peak tiles</th>"
+        "<th>wall</th><th>cost</th></tr>\n"
         + "".join(rows)
         + "\n</table></body></html>\n"
     )
     return page.encode("utf-8")
 
 
-def make_handler(records: dict[str, bytes], index: bytes):
+def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes]]):
+    """Serve the index and tape archive from a live ``(records, index)`` view.
+
+    The view is called per request, which is how the live ``Registry`` lets
+    new runs appear without a restart.
+    """
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):  # noqa: A002 - stdlib signature
             pass
@@ -257,18 +370,20 @@ def make_handler(records: dict[str, bytes], index: bytes):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(length))
             self.end_headers()
 
         def do_GET(self):
+            live_records, live_index = view()
             if self.path == "/" or self.path == "/index.html":
-                self._cors(200, len(index), "text/html; charset=utf-8")
-                self.wfile.write(index)
+                self._cors(200, len(live_index), "text/html; charset=utf-8")
+                self.wfile.write(live_index)
                 return
             parts = self.path.strip("/").split("/")
             data = None
             if len(parts) == 2 and parts[0] == "game":
-                data = records.get(parts[1])
+                data = live_records.get(parts[1])
             if data is None:
                 self._cors(404, 0, "text/plain")
                 return
@@ -295,17 +410,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--client-port", type=int, default=9000)
     args = parser.parse_args(argv)
 
-    runs = find_runs(Path(args.raw))
-    if not runs:
+    raw_dir = Path(args.raw)
+    if not find_runs(raw_dir):
         log.error("no runs with record.json under %s", args.raw)
         return 2
     client_base = f"http://localhost:{args.client_port}"
     with tempfile.TemporaryDirectory(prefix="openfront-replays-") as tmp:
         bundle = bundle_converter(Path(tmp))
-        records, summaries = stage_records(runs, bundle)
-        index = render_index(summaries, client_base)
-        for name in sorted(summaries):
-            s = summaries[name]
+        registry = Registry(raw_dir, bundle, client_base)
+        registry.refresh()
+        for name in sorted(registry.summaries()):
+            s = registry.summaries()[name]
             log.info(
                 "%s -> gameID %s tiles=%s troops=%s",
                 name,
@@ -313,12 +428,28 @@ def main(argv: list[str] | None = None) -> int:
                 s.get("tiles"),
                 s.get("troops"),
             )
+        stop = threading.Event()
+
+        def watch() -> None:
+            # Fast enough that an attempt shows up while it is still being
+            # played; the stamp check keeps unchanged tapes free.
+            while not stop.wait(5.0):
+                try:
+                    if registry.refresh():
+                        log.info(
+                            "replay index refreshed: %d games",
+                            len(registry.snapshot()[0]),
+                        )
+                except Exception:
+                    log.exception("replay refresh failed")
+
+        threading.Thread(target=watch, daemon=True).start()
         server = ThreadingHTTPServer(
-            ("127.0.0.1", args.port), make_handler(records, index)
+            ("127.0.0.1", args.port), make_handler(registry.snapshot)
         )
         log.info(
-            "replay index for %d games on http://127.0.0.1:%d",
-            len(records),
+            "replay index for %d games on http://127.0.0.1:%d (auto-refresh)",
+            len(registry.snapshot()[0]),
             args.port,
         )
         try:
@@ -326,6 +457,7 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             pass
         finally:
+            stop.set()
             server.server_close()
     return 0
 

@@ -30,6 +30,67 @@ def test_memory_store_rejects_empty(tmp_path: Path) -> None:
         store.save("   ")
 
 
+def test_memory_store_read_pins_version(tmp_path: Path) -> None:
+    import pytest
+
+    store = cy.MemoryStore(tmp_path / "memories")
+    store.save("one")
+    store.save("two")
+    assert store.read(1) == "one\n"
+    assert store.latest_version() == 2
+    with pytest.raises(ValueError, match="not found"):
+        store.read(9)
+
+
+def test_run_cycle_pins_memory_version_and_records_metrics(tmp_path: Path) -> None:
+    root = tmp_path / "cycles"
+    memories = root / "memories"
+    memories.mkdir(parents=True)
+    (memories / "memory-v21.md").write_text("old\n")
+    (memories / "memory-v22.md").write_text("pinned playbook\n")
+    (memories / "memory-v23.md").write_text("latest\n")
+    seen: dict = {}
+
+    def play_fn(**kwargs):
+        seen.update(kwargs)
+        return {
+            "summary": {
+                "decisions": [1, 2],
+                "winner": None,
+                "final_human": {"tiles": 42, "troops": 7},
+                "metrics": {
+                    "attacks": 3,
+                    "attacks_after_50": 1,
+                    "nation_attacks": 2,
+                    "cities": 4,
+                    "defense_posts": 5,
+                    "tiles_peak": 99,
+                    "gold_end": "123",
+                },
+            }
+        }
+
+    row = cy.run_cycle(
+        cycles_root=root,
+        play_fn=play_fn,
+        play_kwargs={"output": tmp_path / "never-created"},
+        model="m",
+        provider="p",
+        key_env_var="K",
+        base_url=None,
+        api_key="k",
+        memory_version=22,
+    )
+    assert seen["memory"] == "pinned playbook\n"
+    assert row["memory_used"] == 22
+    assert row["memory_version"] is None  # no output dir, no coach
+    assert row["cycle"] == 23
+    assert row["attacks_after_50"] == 1
+    assert row["cities"] == 4
+    assert row["tiles_peak"] == 99
+    assert row["gold_end"] == "123"
+
+
 def test_solo_prompt_carries_memory_when_given() -> None:
     from openfrontbench.live_smoke import build_solo_prompt
 
@@ -71,10 +132,43 @@ def test_coach_bundle_assembles_report_tape_and_sources(tmp_path: Path) -> None:
     assert (bundle / "live_result.json").read_text() == '{"summary": {}}'
 
 
-def test_coach_prompt_names_bundle_and_output(tmp_path: Path) -> None:
-    prompt = cy.build_coach_prompt(["report.txt", "record.json"], "memory.md")
-    assert "report.txt" in prompt and "memory.md" in prompt
-    assert "game" not in prompt.lower().replace("endgame", "")
+def test_coach_prompt_asks_for_ethos_from_engine_sources(tmp_path: Path) -> None:
+    prompt = cy.build_coach_prompt(["record.json", "Config.ts"], "memory.md")
+    assert "record.json" in prompt and "memory.md" in prompt
+    assert "ethos" in prompt
+    assert "attackLogic" in prompt and "TransportShip" in prompt
+    # Timing and explicit sizing are mandatory sections, not optional colour.
+    assert "When to act" in prompt and "Attack sizing" in prompt
+    assert "incoming_troops" in prompt and "incoming attacks" in prompt
+    # No playbook bundled: nothing tells the coach to evolve one.
+    assert "previous_playbook.md" not in prompt
+
+    evolved = cy.build_coach_prompt(
+        ["record.json", "previous_playbook.md"], "memory.md", has_previous=True
+    )
+    assert "previous_playbook.md" in evolved
+
+
+def test_cap_escalates_after_five_ceiling_finishes() -> None:
+    assert cy.cap_after_cap_hits(0, 200) == (200, 0)
+    assert cy.cap_after_cap_hits(4, 200) == (200, 4)
+    assert cy.cap_after_cap_hits(5, 200) == (300, 0)
+    assert cy.cap_after_cap_hits(5, 300) == (400, 0)
+
+
+def test_coach_bundle_shares_budget_by_source_size(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    small = tmp_path / "small.py"
+    small.write_text("tiny\n")
+    big = tmp_path / "big.py"
+    big.write_text("x" * 50_000)
+    bundle = tmp_path / "bundle"
+    files = cy.assemble_coach_bundle(run_dir, [small, big], bundle, max_chars=10_000)
+    assert files == ["small.py", "big.py"]
+    # The short source is whole; the long one takes the rest of the budget.
+    assert (bundle / "small.py").read_text() == "tiny\n"
+    assert len((bundle / "big.py").read_text()) < 50_000
 
 
 def test_ledger_appends_jsonl(tmp_path: Path) -> None:
@@ -99,12 +193,24 @@ def _git_repo(path: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "init"], cwd=str(path), check=True)
 
 
-def test_check_repo_clean_ignores_baseline_and_cycles(tmp_path: Path) -> None:
+def test_check_repo_clean_ignores_baseline_only(tmp_path: Path) -> None:
     _git_repo(tmp_path)
     (tmp_path / "old-dirt.txt").write_text("pre-existing")
     baseline = cy._git_status_lines(tmp_path)
-    (tmp_path / "cycles" / "memory-v1.md").write_text("notes")
     cy.check_repo_clean(tmp_path, baseline)  # must not raise
+
+
+def test_check_repo_clean_fails_on_new_cycles_touch(tmp_path: Path) -> None:
+    import pytest
+
+    _git_repo(tmp_path)
+    baseline = cy._git_status_lines(tmp_path)
+    # Even cycles/ is guarded: a stray coach write there could silently
+    # rewrite a memory file or the ledger. The next version is saved only
+    # after this check passes.
+    (tmp_path / "cycles" / "memory-v9.md").write_text("coach was here")
+    with pytest.raises(cy.CycleSafetyError, match="coach touched the repository"):
+        cy.check_repo_clean(tmp_path, baseline)
 
 
 def test_check_repo_clean_fails_on_new_src_touch(tmp_path: Path) -> None:
@@ -113,7 +219,7 @@ def test_check_repo_clean_fails_on_new_src_touch(tmp_path: Path) -> None:
     _git_repo(tmp_path)
     baseline = cy._git_status_lines(tmp_path)
     (tmp_path / "tracked.txt").write_text("coach was here")
-    with pytest.raises(cy.CycleSafetyError, match="outside cycles/"):
+    with pytest.raises(cy.CycleSafetyError, match="coach touched the repository"):
         cy.check_repo_clean(tmp_path, baseline)
 
 

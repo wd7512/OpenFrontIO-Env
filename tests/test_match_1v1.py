@@ -84,6 +84,7 @@ def test_1v1_lifecycle_through_tools() -> None:
                 "tribes",
                 "tribes_list",
                 "boats",
+                "boat_targets",
                 "units",
                 "alliances",
                 "alliance_requests",
@@ -91,6 +92,7 @@ def test_1v1_lifecycle_through_tools() -> None:
                 "human",
                 "nations",
                 "attacks",
+                "incoming_attacks",
             }
             assert set(overview["nations"][0]) == {
                 "id",
@@ -101,6 +103,7 @@ def test_1v1_lifecycle_through_tools() -> None:
                 "alive",
                 "immune",
                 "borders_human",
+                "incoming_troops",
             }
 
             is_err, text = await _call(session, "close_game", {})
@@ -147,6 +150,7 @@ def test_britannia_solo_default_through_tools() -> None:
                 "alive",
                 "immune",
                 "borders_human",
+                "incoming_troops",
             }
             home_tiles = started["human"]["tiles"]
 

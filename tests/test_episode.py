@@ -91,6 +91,18 @@ def test_lifecycle_over_real_stdio() -> None:
             assert start_def.inputSchema.get("properties") in ({}, None)
             end_def = next(t for t in tools if t.name == "end_decision")
             assert end_def.inputSchema.get("required") == ["decision"]
+            # Attack sizes have no defaults: the player must state a size.
+            attack_def = next(t for t in tools if t.name == "order_attack")
+            assert set(attack_def.inputSchema.get("required", [])) >= {
+                "target",
+                "troops",
+            }
+            boat_def = next(t for t in tools if t.name == "order_boat_attack")
+            assert set(boat_def.inputSchema.get("required", [])) >= {
+                "x",
+                "y",
+                "troops",
+            }
 
             is_err, start_text = await _call(session, "start_smoke_game", {})
             assert is_err is False
@@ -229,6 +241,7 @@ def test_overview_is_controlled_human_state_not_engine_internals() -> None:
                 "tribes",
                 "tribes_list",
                 "boats",
+                "boat_targets",
                 "units",
                 "alliances",
                 "alliance_requests",
@@ -236,10 +249,12 @@ def test_overview_is_controlled_human_state_not_engine_internals() -> None:
                 "human",
                 "nations",
                 "attacks",
+                "incoming_attacks",
             }
             assert start["human"] == expected_human
             assert start["nations"] == []
             assert start["attacks"] == []
+            assert start["incoming_attacks"] == []
             assert start["tribes"] == 0
             assert start["winner"] is None
 
