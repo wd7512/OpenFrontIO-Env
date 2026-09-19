@@ -73,39 +73,6 @@ def test_load_job_yaml_rejects_bad_name(tmp_path: Path) -> None:
         load_job_yaml(bad)
 
 
-def test_regex_fallback_parses_generic_tasks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import sys
-
-    from openfront_harbor.config.job_spec import load_job_yaml
-
-    monkeypatch.setitem(sys.modules, "yaml", None)
-    job = tmp_path / "job.yaml"
-    job.write_text(
-        "job_name: generic-job\n"
-        "n_attempts: 2\n"
-        "datasets:\n"
-        "  - path: tasks\n"
-        "    task_names:\n"
-        "      - alpha-task\n"
-        "      - beta-task\n"
-        "agents:\n"
-        "  - name: agent-a\n"
-        "    kwargs:\n"
-        "      proxy_base_url: http://proxy.local:9101/api\n"
-        "  - name: agent-b\n"
-        "    kwargs:\n"
-        "      proxy_base_url: http://proxy.local:9102/api\n",
-        encoding="utf-8",
-    )
-    spec = load_job_yaml(job)
-    assert spec.job_name == "generic-job"
-    assert spec.n_attempts == 2
-    assert spec.datasets == ("alpha-task", "beta-task")
-    assert spec.ports == (9101, 9102)
-
-
 def test_cache_dir_and_is_complete_tmp(tmp_path: Path) -> None:
     from openfront_harbor.execution.docker_extract import cache_dir, is_complete
 

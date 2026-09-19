@@ -1323,6 +1323,7 @@ source = { editable = "." }
 dependencies = [
     { name = "harbor" },
     { name = "mcp" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -1336,6 +1337,7 @@ dev = [
 requires-dist = [
     { name = "harbor", specifier = "==0.21.0" },
     { name = "mcp", specifier = ">=1.0,<2" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [package.metadata.requires-dev]

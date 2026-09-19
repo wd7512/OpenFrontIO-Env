@@ -27,6 +27,7 @@ class EpisodeDriver(Protocol):
     completion_reason: str
     winner: Any
     metrics: dict[str, Any]
+    metrics_note: str
     engine_bundle_rel: str
     engine_bundle_path: Path
     map_assets: tuple[tuple[str, Path], ...]

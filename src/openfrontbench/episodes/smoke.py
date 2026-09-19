@@ -58,17 +58,12 @@ class SmokeDriver:
     source: str = "scripted_not_llm"
     completion_reason: str = "scripted maximum decisions reached"
     winner: Any = None
-    metrics: dict[str, Any] = field(
-        default_factory=lambda: {
-            "PMR": None,
-            "RAG_at_10": None,
-            "unavailable_reason": (
-                "unavailable in smoke: the scripted controller records no "
-                "strategic-query or commitment events, so PMR (proactive "
-                "monitoring rate) and RAG@10 (reflection-action gap) cannot be "
-                "scored from this trace"
-            ),
-        }
+    metrics: dict[str, Any] = field(default_factory=dict)
+    metrics_note: str = (
+        "unavailable in smoke: the scripted controller records no "
+        "strategic-query or commitment events, so PMR (proactive "
+        "monitoring rate) and RAG@10 (reflection-action gap) cannot be "
+        "scored from this trace"
     )
     engine_bundle_rel: str = ENGINE_BUNDLE_REL
     engine_bundle_path: Path = DEFAULT_ENGINE_DIR / "dist" / "worker.mjs"

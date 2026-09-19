@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
+
+from openfrontbench.atomic import write_json_atomic
 
 log = logging.getLogger(__name__)
 
@@ -40,9 +41,7 @@ def write_ready(ledger_dir: Path | str, payload: dict[str, Any]) -> Path:
         raise ValueError("ready payload must be a dict")
     out = Path(ledger_dir) / READY_FILE_NAME
     out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(tmp, out)
+    write_json_atomic(out, payload)
     log.info("ledger ready written to %s", out)
     return out
 

@@ -252,3 +252,69 @@ def test_summarise_unwraps_nested_result_envelope():
     assert summary["tool_calls"] == 2
     assert summary["decisions"] == [1, 2]
     assert summary["ticks"] == [52, 102]
+
+
+def test_summarise_skips_framing_noise():
+    from openfrontbench.live_smoke import _summarise_events
+
+    stdout = "\n".join(
+        [
+            "",
+            "   ",
+            "not-json",
+            json.dumps([1, 2, 3]),
+            json.dumps({"type": "tool_use", "timestamp": 1000, "part": "nope"}),
+            _tool_event("game_start_solo_game", {"tick": 3, "winner": None}),
+        ]
+    )
+    summary = _summarise_events(stdout)
+    assert summary["tool_calls"] == 1
+    assert summary["winner"] is None
+
+
+def test_summarise_captures_human_nations_tokens_cost_wall():
+    from openfrontbench.live_smoke import _summarise_events
+
+    def event_with_ts(tool, result, ts):
+        base = json.loads(_tool_event(tool, result))
+        base["timestamp"] = ts
+        return json.dumps(base)
+
+    stdout = "\n".join(
+        [
+            event_with_ts(
+                "game_get_overview",
+                {
+                    "tick": 53,
+                    "winner": None,
+                    "human": {"tiles": 10, "troops": 5, "extra": "x"},
+                    "nations": [
+                        {
+                            "name": "A",
+                            "tiles": 3,
+                            "troops": 2,
+                            "alive": True,
+                            "junk": 1,
+                        },
+                        "not-a-dict",
+                    ],
+                },
+                1000,
+            ),
+            json.dumps(
+                {
+                    "type": "step_finish",
+                    "timestamp": 3000,
+                    "part": {"tokens": {"input": 1, "output": 2}, "cost": 0.5},
+                }
+            ),
+        ]
+    )
+    summary = _summarise_events(stdout)
+    assert summary["final_human"] == {"tiles": 10, "troops": 5}
+    assert summary["final_nations"] == [
+        {"name": "A", "tiles": 3, "troops": 2, "alive": True}
+    ]
+    assert summary["tokens"] == {"input": 1, "output": 2}
+    assert summary["cost"] == 0.5
+    assert summary["wall_ms"] == 2000

@@ -10,6 +10,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from openfrontbench.atomic import (
+    ensure_fresh_dir,
+    write_json_atomic,
+    write_text_atomic,
+)
 from openfrontbench.opencode_launcher import (
     McpServerSpec,
     PROVIDER_BASE_URLS,
@@ -89,6 +94,95 @@ def build_solo_prompt(
     )
 
 
+def _parse_event_line(line: str) -> dict[str, Any] | None:
+    """Parse one JSONL line; return None for framing noise."""
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    return event if isinstance(event, dict) else None
+
+
+def _unwrap_tool_result(output: Any) -> dict[str, Any] | None:
+    """Unwrap the double `result`-in-`result` envelope; None if unusable."""
+    if not isinstance(output, str):
+        return None
+    try:
+        maybe = json.loads(output)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(maybe, dict):
+        return None
+    parsed = maybe
+    inner_raw = parsed.get("result")
+    if isinstance(inner_raw, str):
+        try:
+            inner = json.loads(inner_raw)
+        except json.JSONDecodeError:
+            inner = None
+        if isinstance(inner, dict):
+            parsed = {**parsed, **inner}
+    return parsed
+
+
+def _extract_decision(
+    tool: str, parsed: dict[str, Any] | None
+) -> tuple[int | None, int | None]:
+    """Return (decision, tick) for end-decision events, else (None, None)."""
+    if tool != "game_end_decision" or not parsed:
+        return None, None
+    decision = parsed.get("decision")
+    tick = parsed.get("tick")
+    return (
+        decision if isinstance(decision, int) else None,
+        tick if isinstance(tick, int) else None,
+    )
+
+
+def _extract_snapshot(
+    parsed: dict[str, Any],
+) -> tuple[str | None, dict[str, Any] | None, list[dict[str, Any]] | None]:
+    """Extract winner/human/nations from an overview payload."""
+    seen = parsed.get("winner")
+    winner = seen if isinstance(seen, str) and seen else None
+    human: dict[str, Any] | None = None
+    human_raw = parsed.get("human")
+    if isinstance(human_raw, dict):
+        human = {
+            k: human_raw[k]
+            for k in ("tiles", "troops")
+            if isinstance(human_raw.get(k), int)
+        } or None
+    nations: list[dict[str, Any]] | None = None
+    nations_raw = parsed.get("nations")
+    if isinstance(nations_raw, list):
+        nations = [
+            {k: n[k] for k in ("name", "tiles", "troops", "alive") if k in n}
+            for n in nations_raw
+            if isinstance(n, dict)
+        ] or None
+    return winner, human, nations
+
+
+def _extract_step_usage(
+    part: dict[str, Any],
+) -> tuple[dict[str, Any] | None, float | None]:
+    """Extract tokens/cost from a step_finish part."""
+    tokens_raw: Any = part.get("tokens")
+    tokens = tokens_raw if isinstance(tokens_raw, dict) else None
+    cost_raw: Any = part.get("cost")
+    cost = float(cost_raw) if isinstance(cost_raw, (int, float)) else None
+    return tokens, cost
+
+
+_OVERVIEW_TOOLS = frozenset(
+    {"game_start_solo_game", "game_get_overview", "game_order_attack"}
+)
+
+
 def _summarise_events(stdout: str) -> dict[str, Any]:
     tool_calls = 0
     decisions: list[int] = []
@@ -100,15 +194,9 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
     cost: float | None = None
     start_ms: float | None = None
     end_ms: float | None = None
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(event, dict):
+    for raw_line in stdout.splitlines():
+        event = _parse_event_line(raw_line)
+        if event is None:
             continue
         etype = event.get("type")
         part_raw: Any = event.get("part")
@@ -118,68 +206,30 @@ def _summarise_events(stdout: str) -> dict[str, Any]:
             start_ms = ts if start_ms is None else min(start_ms, ts)
             end_ms = ts if end_ms is None else max(end_ms, ts)
         if etype == "tool_use" and isinstance(part.get("tool"), str):
+            tool = str(part["tool"])
             tool_calls += 1
             state_raw: Any = part.get("state")
             state: dict[str, Any] = state_raw if isinstance(state_raw, dict) else {}
-            output: Any = state.get("output")
-            parsed: dict[str, Any] | None = None
-            if isinstance(output, str):
-                try:
-                    maybe = json.loads(output)
-                except json.JSONDecodeError:
-                    maybe = None
-                if isinstance(maybe, dict):
-                    parsed = maybe
-                    inner_raw = parsed.get("result")
-                    if isinstance(inner_raw, str):
-                        try:
-                            inner = json.loads(inner_raw)
-                        except json.JSONDecodeError:
-                            inner = None
-                        if isinstance(inner, dict):
-                            parsed = {**parsed, **inner}
-            if part["tool"] == "game_end_decision" and parsed:
-                if isinstance(parsed.get("decision"), int):
-                    decisions.append(parsed["decision"])
-                if isinstance(parsed.get("tick"), int):
-                    ticks.append(parsed["tick"])
-            if (
-                part["tool"]
-                in (
-                    "game_start_solo_game",
-                    "game_get_overview",
-                    "game_order_attack",
-                )
-                and parsed
-            ):
-                seen = parsed.get("winner")
-                if isinstance(seen, str) and seen:
-                    winner = seen
-                human_raw = parsed.get("human")
-                if isinstance(human_raw, dict):
-                    human = {
-                        k: human_raw[k]
-                        for k in ("tiles", "troops")
-                        if isinstance(human_raw.get(k), int)
-                    } or None
-                nations_raw = parsed.get("nations")
-                if isinstance(nations_raw, list):
-                    nations = [
-                        {
-                            k: n[k]
-                            for k in ("name", "tiles", "troops", "alive")
-                            if k in n
-                        }
-                        for n in nations_raw
-                        if isinstance(n, dict)
-                    ] or None
-        if etype == "step_finish":
-            tokens_raw: Any = part.get("tokens")
-            if isinstance(tokens_raw, dict):
-                tokens = tokens_raw
-            cost_raw: Any = part.get("cost")
-            if isinstance(cost_raw, (int, float)):
-                cost = float(cost_raw)
+            parsed = _unwrap_tool_result(state.get("output"))
+            decision, tick = _extract_decision(tool, parsed)
+            if decision is not None:
+                decisions.append(decision)
+            if tick is not None:
+                ticks.append(tick)
+            if tool in _OVERVIEW_TOOLS and parsed:
+                seen_winner, seen_human, seen_nations = _extract_snapshot(parsed)
+                if seen_winner is not None:
+                    winner = seen_winner
+                if isinstance(parsed.get("human"), dict):
+                    human = seen_human
+                if isinstance(parsed.get("nations"), list):
+                    nations = seen_nations
+        elif etype == "step_finish":
+            seen_tokens, seen_cost = _extract_step_usage(part)
+            if seen_tokens is not None:
+                tokens = seen_tokens
+            if seen_cost is not None:
+                cost = seen_cost
     summary: dict[str, Any] = {
         "tool_calls": tool_calls,
         "decisions": decisions,
@@ -248,10 +298,7 @@ def run(
     if not api_key:
         raise ValueError(f"missing key for {key_env!r}; refusing to start the agent")
 
-    out = Path(output)
-    if out.exists():
-        raise ValueError(f"output path already exists (refusing to overwrite): {out}")
-    out.mkdir(parents=True)
+    out = ensure_fresh_dir(output)
 
     python_bin = sys.executable
     if not Path(python_bin).is_absolute():
@@ -308,11 +355,9 @@ def run(
         "timed_out": result.process.timed_out,
         "summary": summary,
     }
-    (out / "live_result.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    )
-    (out / "live_events_redacted.jsonl").write_text(
-        redact(result.process.stdout, secrets), encoding="utf-8"
+    write_json_atomic(out / "live_result.json", payload)
+    write_text_atomic(
+        out / "live_events_redacted.jsonl", redact(result.process.stdout, secrets)
     )
     log.info("live smoke complete: %s", json.dumps(summary, sort_keys=True))
     return payload

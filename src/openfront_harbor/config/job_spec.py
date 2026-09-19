@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-log = logging.getLogger(__name__)
+import yaml
 
 _JOB_NAME_RE = re.compile(r"[A-Za-z0-9_.-]+")
 
@@ -23,30 +22,6 @@ class JobSpec:
     image_manifest: dict[str, Any] = field(default_factory=dict)
     datasets: tuple[str, ...] = ()
     ports: tuple[int, ...] = ()
-
-
-def _regex_fallback(text: str) -> JobSpec:
-    """Tiny parser for the known keys when pyyaml is unavailable."""
-    name_match = re.search(r"^job_name\s*:\s*(\S+)", text, re.MULTILINE)
-    attempts_match = re.search(r"^n_attempts\s*:\s*(\d+)", text, re.MULTILINE)
-    job_name = name_match.group(1).strip().strip("\"'") if name_match else "unknown"
-    n_attempts = int(attempts_match.group(1)) if attempts_match else 1
-    ports = tuple(
-        int(m.group(1)) for m in re.finditer(r"proxy_base_url\s*:\s*\S+:(\d+)", text)
-    )
-    tasks = tuple(
-        m.group(1).strip()
-        for line in text.splitlines()
-        if (m := re.match(r"\s*-\s*([A-Za-z0-9_][A-Za-z0-9_.\-/]*)\s*$", line))
-    )
-    log.warning("pyyaml unavailable; used regex fallback for job config")
-    return JobSpec(
-        job_name=job_name,
-        n_attempts=n_attempts,
-        image_manifest={},
-        datasets=tasks,
-        ports=ports,
-    )
 
 
 def _extract_datasets(data: dict[str, Any]) -> tuple[str, ...]:
@@ -91,10 +66,6 @@ def _extract_ports(data: dict[str, Any]) -> tuple[int, ...]:
 def load_job_yaml(path: Path) -> JobSpec:
     """Parse a minimal harbor job YAML file into a JobSpec."""
     text = Path(path).read_text(encoding="utf-8")
-    try:
-        import yaml  # type: ignore[import-not-found]
-    except ImportError:
-        return _regex_fallback(text)
     try:
         data = yaml.safe_load(text)
     except Exception as exc:

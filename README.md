@@ -26,7 +26,8 @@ uv run python -m openfrontbench.benchmark --config examples/smoke.json --output 
 Exits 0 and writes three artifacts into `<fresh-dir>`:
 
 - `result.json` — outcome (`decision_cap`), ticks, tool stats, `winner: null`,
-  metrics (`PMR`/`RAG@10` are `null` in smoke — see the `unavailable_reason`).
+  empty `metrics` plus a `metrics_note` (`PMR`/`RAG@10` are unscored in
+  smoke — the scripted trace carries no strategic-query events).
 - `trace.jsonl` — order-preserving trace of every tool request/result/error
   with decision id and sim tick.
 - `manifest.json` — hash of the engine bundle, pinned map assets, config, trace

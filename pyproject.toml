@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "harbor==0.21.0",
     "mcp>=1.0,<2",
+    "pyyaml>=6",
 ]
 
 [project.scripts]

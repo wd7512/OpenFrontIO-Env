@@ -8,6 +8,7 @@ synthetic; nothing touches the engine, the vendor tree, or the network.
 from __future__ import annotations
 
 import dataclasses
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ class FakeDriver:
     completion_reason: str = "fake cap reached"
     winner: Any = "nobody"
     metrics: dict[str, Any] = field(default_factory=lambda: {"custom": 1})
+    metrics_note: str = "fake note"
     engine_bundle_rel: str = "fake/worker.bin"
     engine_bundle_path: Path = Path("/nonexistent/worker.bin")
     map_assets: tuple[tuple[str, Path], ...] = ()
@@ -99,6 +101,7 @@ def test_build_result_uses_driver_record() -> None:
     assert result["winner"] == "nobody"
     assert result["metrics"] == {"custom": 1}
     assert result["metrics"] is not FAKE.metrics
+    assert result["metrics_note"] == "fake note"
 
 
 def test_build_result_error_path_uses_first_problem() -> None:
@@ -150,3 +153,39 @@ def test_smoke_driver_builds_bounded_steps() -> None:
     assert names.count(SMOKE_DRIVER.decision_tool) == 2
     assert names[0] == "start_smoke_game"
     assert names[-1] == "close_game"
+
+
+def test_record_tick_ignores_missing_or_non_int() -> None:
+    stats = benchmark._new_stats()
+    benchmark._record_tick(stats, None, "other_tool", FAKE)
+    benchmark._record_tick(stats, {"unparsed": "x"}, "other_tool", FAKE)
+    benchmark._record_tick(stats, {"tick": "52"}, "other_tool", FAKE)
+    assert (stats["tick_start"], stats["tick_end"]) == (None, None)
+    assert stats["decisions_taken"] == 0
+
+
+def test_record_tick_tracks_first_last_and_decisions() -> None:
+    stats = benchmark._new_stats()
+    benchmark._record_tick(stats, {"tick": 52}, "take_turn", FAKE)
+    benchmark._record_tick(stats, {"tick": 102}, "other_tool", FAKE)
+    assert (stats["tick_start"], stats["tick_end"]) == (52, 102)
+    assert stats["decisions_taken"] == 1
+
+
+def test_open_session_scrubs_empty_path_segments() -> None:
+    params = benchmark._open_session(FAKE)
+    assert params.args == ["-m", "fake_server"]
+    assert params.env is not None
+    assert "" not in params.env["PATH"].split(os.pathsep)
+
+
+def test_new_stats_starts_clean() -> None:
+    stats = benchmark._new_stats()
+    assert stats == {
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "decisions_taken": 0,
+        "tick_start": None,
+        "tick_end": None,
+        "errors": [],
+    }

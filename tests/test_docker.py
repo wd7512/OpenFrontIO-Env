@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +42,14 @@ def test_build_script_guards() -> None:
     assert "--platform linux/amd64" in text
     assert "docker inspect" in text
     assert "--push" not in text
+
+
+def test_build_script_refuses_push_without_daemon() -> None:
+    """Push refusal happens during arg parsing — no daemon, git, or vendor needed."""
+    proc = subprocess.run([str(BUILD_SCRIPT), "--push"], capture_output=True, text=True)
+    assert proc.returncode == 1
+    assert "refusing" in proc.stderr
+    assert "local-only" in proc.stderr
 
 
 def test_build_script_is_executable() -> None:

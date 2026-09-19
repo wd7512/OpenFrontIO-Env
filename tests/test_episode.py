@@ -409,10 +409,9 @@ def test_cli_full_scripted_episode_writes_artifact_trio(tmp_path: Path) -> None:
     assert result["tool_calls"] == 7
     assert result["tool_errors"] == 0
     metrics = result["metrics"]
-    assert metrics["PMR"] is None
-    assert metrics["RAG_at_10"] is None
-    assert "unavailable in smoke" in metrics["unavailable_reason"]
-    assert "LLM" not in metrics["unavailable_reason"], (
+    assert metrics == {}
+    assert "unavailable in smoke" in result["metrics_note"]
+    assert "LLM" not in result["metrics_note"], (
         "PMR/RAG are scoreable from scripted traces; smoke simply lacks "
         "strategic-query and commitment instrumentation"
     )
@@ -734,8 +733,14 @@ def test_run_episode_exits_nonzero_on_manifest_failure(
     )
     assert outcome.exit_code != 0
     result = _read_json(output / "result.json")
-    assert result["outcome"] == "error"
-    assert "manifest build failed" in result["reason"]
+    # The sealed result is frozen: a manifest failure must not rewrite it.
+    # The episode itself succeeded, so outcome stays decision_cap and the
+    # trace's episode_end agrees (no trio contradiction).
+    assert result["outcome"] == "decision_cap"
+    trace = _read_jsonl(output / "trace.jsonl")
+    episode_end = [line for line in trace if line["event"] == "episode_end"]
+    assert len(episode_end) == 1
+    assert episode_end[0]["outcome"] == result["outcome"]
     manifest = _read_json(output / "manifest.json")
     assert manifest["schema_version"] == 1
     assert "manifest asset not found" in manifest["error"]

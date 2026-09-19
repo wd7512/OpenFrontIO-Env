@@ -31,6 +31,12 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
+from openfrontbench.atomic import (
+    OutputExistsError,
+    ensure_fresh_dir,
+    write_json_atomic as _write_json_atomic,
+    write_text_atomic as _write_text_atomic,
+)
 from openfrontbench.episodes import EpisodeDriver
 from openfrontbench.episodes.smoke import SMOKE_DRIVER
 from openfrontbench.paths import REPO_ROOT
@@ -48,8 +54,14 @@ class ConfigError(ValueError):
     """The episode config violates the strict JSON schema."""
 
 
-class OutputError(RuntimeError):
-    """The requested output path is unusable."""
+class OutputError(OutputExistsError):
+    """The requested output path is unusable.
+
+    Migration note: this was a ``RuntimeError`` before the atomic-write
+    dedup; it is now a ``FileExistsError`` (via ``OutputExistsError``),
+    so ``except RuntimeError`` no longer catches fresh-dir refusals —
+    catch ``OutputError``, ``OSError``, or ``ValueError`` instead.
+    """
 
 
 class EpisodeError(RuntimeError):
@@ -152,18 +164,21 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def write_text_atomic(path: Path, text: str) -> None:
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+def write_text_atomic(path: Path, text: str) -> Path:
+    return _write_text_atomic(path, text)
 
 
-def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    write_text_atomic(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
+    return _write_json_atomic(path, payload)
 
 
 class TraceWriter:
-    """Appends one JSON object per line to an atomic trace file."""
+    """Appends one JSON object per line to an atomic trace file.
+
+    Streaming variant of :func:`openfrontbench.atomic.write_text_atomic`:
+    same hidden-tmp + flush/fsync + ``os.replace`` scheme, kept separate
+    because the trace is written incrementally, not in one shot.
+    """
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -274,14 +289,9 @@ def _trace_tool_write(
     )
 
 
-async def _run_scripted(
-    config: EpisodeConfig,
-    trace: TraceWriter,
-    tool_timeout: float,
-    connect_timeout: float,
-    driver: EpisodeDriver,
-) -> dict[str, Any]:
-    stats: dict[str, Any] = {
+def _new_stats() -> dict[str, Any]:
+    """Fresh per-episode counters (no shared mutable state)."""
+    return {
         "tool_calls": 0,
         "tool_errors": 0,
         "decisions_taken": 0,
@@ -289,45 +299,87 @@ async def _run_scripted(
         "tick_end": None,
         "errors": [],
     }
+
+
+def _open_session(driver: EpisodeDriver) -> StdioServerParameters:
+    """Build stdio params for the driver's server module (no side effects)."""
     env = dict(os.environ)
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if p)
-    params = StdioServerParameters(
+    return StdioServerParameters(
         command=sys.executable,
         args=["-m", driver.server_module],
         env=env,
         cwd=str(REPO_ROOT),
     )
+
+
+def _record_tick(
+    stats: dict[str, Any],
+    parsed: dict[str, Any] | None,
+    name: str,
+    driver: EpisodeDriver,
+) -> None:
+    """Fold one tool result's tick/decision counts into *stats*."""
+    if not parsed:
+        return
+    tick = parsed.get("tick")
+    if isinstance(tick, int):
+        if stats["tick_start"] is None:
+            stats["tick_start"] = tick
+        stats["tick_end"] = tick
+    if name == driver.decision_tool:
+        stats["decisions_taken"] += 1
+
+
+async def _execute_step(
+    session: ClientSession,
+    trace: TraceWriter,
+    stats: dict[str, Any],
+    name: str,
+    args: dict[str, Any],
+    tool_timeout: float,
+    driver: EpisodeDriver,
+) -> bool:
+    """Run one scripted tool step; return False when the episode must stop."""
+    _trace_tool_read(trace, name, args)
+    stats["tool_calls"] += 1
+    try:
+        parsed = await _call_tool(session, name, args, tool_timeout)
+    except EpisodeError as error:
+        stats["tool_errors"] += 1
+        stats["errors"].append(str(error))
+        trace.emit(
+            event="tool_error",
+            tool=name,
+            decision=args.get("decision"),
+            tick=None,
+            error=str(error),
+        )
+        return False
+    _trace_tool_write(trace, name, parsed)
+    _record_tick(stats, parsed, name, driver)
+    return True
+
+
+async def _run_scripted(
+    config: EpisodeConfig,
+    trace: TraceWriter,
+    tool_timeout: float,
+    connect_timeout: float,
+    driver: EpisodeDriver,
+) -> dict[str, Any]:
+    stats = _new_stats()
+    params = _open_session(driver)
     steps = driver.build_steps(config.max_decisions)
 
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await asyncio.wait_for(session.initialize(), connect_timeout)
             for name, args in steps:
-                _trace_tool_read(trace, name, args)
-                stats["tool_calls"] += 1
-                try:
-                    parsed = await _call_tool(session, name, args, tool_timeout)
-                except EpisodeError as error:
-                    stats["tool_errors"] += 1
-                    stats["errors"].append(str(error))
-                    trace.emit(
-                        event="tool_error",
-                        tool=name,
-                        decision=args.get("decision"),
-                        tick=None,
-                        error=str(error),
-                    )
+                if not await _execute_step(
+                    session, trace, stats, name, args, tool_timeout, driver
+                ):
                     break
-                _trace_tool_write(trace, name, parsed)
-                if not parsed:
-                    continue
-                tick = parsed.get("tick")
-                if isinstance(tick, int):
-                    if stats["tick_start"] is None:
-                        stats["tick_start"] = tick
-                    stats["tick_end"] = tick
-                if name == driver.decision_tool:
-                    stats["decisions_taken"] += 1
     return stats
 
 
@@ -355,6 +407,7 @@ def _build_result(
         "reason": reason,
         "winner": driver.winner,
         "metrics": dict(driver.metrics),
+        "metrics_note": driver.metrics_note,
         "source": driver.source,
         "scenario": config.scenario,
         "controller": config.controller,
@@ -371,6 +424,62 @@ def _write_result(output: Path, result: dict[str, Any]) -> None:
     write_text_atomic(
         output / "result.json", json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
+
+
+def _ensure_output(output: Path, config_path: Path) -> bytes:
+    """Create a fresh output dir; return the config bytes.
+
+    Only raises ``OutputError``.
+    """
+    try:
+        ensure_fresh_dir(output)
+        return config_path.read_bytes()
+    except OutputExistsError as error:
+        raise OutputError(str(error)) from error
+    except OSError as error:
+        raise OutputError(f"cannot prepare output {output}: {error}") from error
+
+
+def _finalize_episode(
+    config: EpisodeConfig,
+    stats: dict[str, Any],
+    probe_problems: list[str],
+    trace: TraceWriter,
+    output: Path,
+    config_bytes: bytes,
+    driver: EpisodeDriver,
+    actual_pin: str | None,
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """Build result, seal trace, write artifacts; result is frozen once.
+
+    A manifest failure appends to *problems* (for the exit code) and yields
+    an error manifest — it never rebuilds an already-sealed ``result.json``,
+    so ``trace.jsonl`` and ``result.json`` cannot contradict each other.
+    """
+    problems = list(probe_problems)
+    result = _build_result(config, stats, problems, driver)
+    trace.emit(
+        event="episode_end",
+        outcome=result["outcome"],
+        decision=result["decisions_taken"],
+        tick=result["tick_end"],
+    )
+    trace.finalize()
+    _write_result(output, result)
+    try:
+        manifest = build_manifest(
+            config_bytes,
+            output / "trace.jsonl",
+            output / "result.json",
+            driver,
+            actual_pin,
+        )
+    except EpisodeError as error:
+        log.error("manifest error: %s", error)
+        problems.append(f"manifest build failed: {error}")
+        manifest = {"schema_version": SCHEMA_VERSION, "error": str(error)}
+    write_json_atomic(output / "manifest.json", manifest)
+    return result, manifest, problems
 
 
 def run_episode(
@@ -391,25 +500,10 @@ def run_episode(
         raise ValueError(
             "tool_timeout and connect_timeout must be finite positive numbers"
         )
-    if output.exists():
-        raise OutputError(
-            f"output path already exists (refusing to overwrite): {output}"
-        )
-    try:
-        output.mkdir(parents=True)
-        config_bytes = config_path.read_bytes()
-    except OSError as error:
-        raise OutputError(f"cannot prepare output {output}: {error}") from error
+    config_bytes = _ensure_output(output, config_path)
 
     trace = TraceWriter(output / "trace.jsonl")
-    stats: dict[str, Any] = {
-        "tool_calls": 0,
-        "tool_errors": 0,
-        "decisions_taken": 0,
-        "tick_start": None,
-        "tick_end": None,
-        "errors": [],
-    }
+    stats: dict[str, Any] = _new_stats()
     result: dict[str, Any] = {"outcome": "error"}
     try:
         trace.emit(
@@ -428,31 +522,16 @@ def run_episode(
             trace.emit(event="episode_error", error=f"unexpected failure: {error}")
     finally:
         actual_pin, probe_issues = driver.probe_issues()
-        problems = list(probe_issues)
-        result = _build_result(config, stats, problems, driver)
-        trace.emit(
-            event="episode_end",
-            outcome=result["outcome"],
-            decision=result["decisions_taken"],
-            tick=result["tick_end"],
+        result, _manifest, problems = _finalize_episode(
+            config,
+            stats,
+            list(probe_issues),
+            trace,
+            output,
+            config_bytes,
+            driver,
+            actual_pin,
         )
-        trace.finalize()
-        _write_result(output, result)
-        try:
-            manifest = build_manifest(
-                config_bytes,
-                output / "trace.jsonl",
-                output / "result.json",
-                driver,
-                actual_pin,
-            )
-        except EpisodeError as error:
-            log.error("manifest error: %s", error)
-            problems.append(f"manifest build failed: {error}")
-            result = _build_result(config, stats, problems, driver)
-            _write_result(output, result)
-            manifest = {"schema_version": SCHEMA_VERSION, "error": str(error)}
-        write_json_atomic(output / "manifest.json", manifest)
 
     healthy = (
         result["outcome"] == "decision_cap"
