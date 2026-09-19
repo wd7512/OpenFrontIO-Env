@@ -13,15 +13,15 @@ import logging
 import sys
 from pathlib import Path
 
-from openfront_mcp.cycle import CAP_HIT_THRESHOLD, cap_after_cap_hits, run_cycle
-from openfront_mcp.live_smoke import (
+from openfrontbench.cycle import CAP_HIT_THRESHOLD, cap_after_cap_hits, run_cycle
+from openfrontbench.live_smoke import (
     KEY_ENV_BY_PROVIDER,
     _default_models_cache,
     load_settings,
     run,
 )
-from openfront_mcp.opencode_launcher import PROVIDER_BASE_URLS
-from openfront_mcp.paths import REPO_ROOT
+from openfrontbench.opencode_launcher import PROVIDER_BASE_URLS
+from openfrontbench.paths import REPO_ROOT
 
 logging.basicConfig(level=logging.INFO)
 
@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root = Path(args.cycles_root)
     if args.retro_only:
-        from openfront_mcp.cycle import coach_only
+        from openfrontbench.cycle import coach_only
 
         version = coach_only(
             cycles_root=root,

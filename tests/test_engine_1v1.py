@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from openfront_mcp.engine import EngineError, EngineWorker
+from openfrontbench.engine import EngineError, EngineWorker
 
 
 def _nation(snapshot: dict) -> dict:

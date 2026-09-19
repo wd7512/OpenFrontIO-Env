@@ -207,6 +207,11 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Harbor run outputs: never commit run artefacts.
+runs/
+evidence/
+.cache/
+
 # Worktrees live ONLY here; everything ignored except the committed marker.
 .worktrees/*
 !.worktrees/.gitkeep

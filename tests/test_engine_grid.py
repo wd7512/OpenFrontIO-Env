@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from openfront_mcp.engine import (
+from openfrontbench.engine import (
     BRITANNIA_MAP_DIR,
     EngineError,
     EngineWorker,

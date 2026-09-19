@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from openfront_mcp import opencode_launcher as ol
+from openfrontbench import opencode_launcher as ol
 
 # A fake secret used to prove values never leak into configs, events or logs.
 SECRET = "sk-super-secret-value-1234567890"
@@ -51,7 +51,7 @@ def _mcp(tmp_path: Path) -> ol.McpServerSpec:
     work.mkdir(exist_ok=True)
     return ol.McpServerSpec(
         name="game",
-        command=(sys.executable, "-m", "openfront_mcp"),
+        command=(sys.executable, "-m", "openfrontbench"),
         cwd=str(work),
         environment={"OPENFRONT_RUN": "scripted"},
     )
@@ -457,7 +457,7 @@ def test_run_bounded_escapes_when_leader_dies_on_term_but_descendant_holds_stdou
     )
     code = (
         "import json, os, sys\n"
-        "from openfront_mcp import opencode_launcher as ol\n"
+        "from openfrontbench import opencode_launcher as ol\n"
         f"res = ol.run_bounded([sys.executable, '-c', {leader!r}], env=dict(os.environ), cwd={str(tmp_path)!r}, timeout_s=1.0)\n"
         "sys.stdout.write(json.dumps({'returncode': res.returncode, 'timed_out': res.timed_out, 'duration_s': res.duration_s}))\n"
     )
@@ -489,7 +489,7 @@ def test_run_bounded_escapes_when_leader_exits_naturally_leaving_descendant(
     )
     code = (
         "import json, os, sys\n"
-        "from openfront_mcp import opencode_launcher as ol\n"
+        "from openfrontbench import opencode_launcher as ol\n"
         f"res = ol.run_bounded([sys.executable, '-c', {leader!r}], env=dict(os.environ), cwd={str(tmp_path)!r}, timeout_s=1.0)\n"
         "sys.stdout.write(json.dumps({'returncode': res.returncode, 'timed_out': res.timed_out, 'duration_s': res.duration_s}))\n"
     )

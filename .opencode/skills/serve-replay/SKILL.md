@@ -1,31 +1,40 @@
 ---
 name: serve-replay
-description: Use when the user wants to watch a finished game replay, serve a run in the real game client, or view a match through the engine replay.
+description: Use when the user wants to watch a finished game replay, serve runs in the real game client, or view matches through the engine replay.
 ---
 
 # Serve Replay
 
-Serve a finished run through the real engine replay (`createGameRunner`, the browser worker path) in the actual game client, without writing anything into the run dir.
+Serve finished runs through the replay index (`scripts/serve_replays.py`): one
+page with a click-to-watch card per game, each opening the real client
+straight into the engine replay. Nothing is written into the run dirs.
 
 ## Steps
 
-1. Pick the run dir under `raw/` (canonical home for experiment data; latest `openfront-cycle-*` unless told otherwise). Done when: it holds `record.json` + `live_result.json`.
-2. Bundle the converter with an **absolute** resources alias (relative alias fails to resolve), run it on the run dir, then move the record out to `/tmp` staging. Done when: the run dir is byte-identical and staging holds `game_record.json`.
+1. Pick the source dir (default `raw/`, canonical home for experiment data).
+   Done when: it holds at least one run dir containing `record.json`
+   (`live_result.json` alongside gives richer index cards).
+2. Start the vendor client (`vendor/OpenFrontIO`, `npm run start:client`,
+   serves :9000) in the background. Done when: `:9000` returns 200.
+3. Start the replay index in the background. Done when: the log line
+   `replay index for N games on http://127.0.0.1:8787` appears.
    ```bash
-   engine/node_modules/.bin/esbuild scripts/build_game_record.ts --bundle --platform=node --format=esm --alias:resources=$PWD/vendor/OpenFrontIO/resources --outfile=/tmp/replay/build_game_record.mjs
-   node /tmp/replay/build_game_record.mjs <run-dir>   # validates against production GameRecordSchema
-   mv <run-dir>/game_record.json /tmp/replay-view/game_record.json
+   nohup uv run python scripts/serve_replays.py [--raw raw/] [--port 8787] [--client-port 9000] > /tmp/replays/index.log 2>&1 &
    ```
-3. Start the archive stub (unmodified repo script) on 8787 in the background. Done when: `curl http://127.0.0.1:8787/game/<gameID>` returns 200 with matching `gameID`.
-   ```bash
-   nohup uv run python scripts/serve_archive.py /tmp/replay-view 8787 > /tmp/replay-view/archive.log 2>&1 &
-   ```
-4. Start the vendor client (`vendor/OpenFrontIO`, `npm run start:client`, serves :9000) in the background. Done when: `:9000` returns 200.
-5. View: open `http://localhost:9000`, join the private lobby with `<gameID>` (`ENGINE01` for engine runs). No live lobby exists, so the client falls through to `checkArchivedGame` and replays the full tape in the real renderer.
+   The script bundles the TS converter itself, converts every tape to a
+   schema-valid `game_record.json` in temp space (run dirs untouched), and
+   serves the index plus the `/game/<id>` archive endpoint (CORS open).
+4. View: open `http://127.0.0.1:8787`, click a game's watch link
+   (`http://localhost:9000/w0/game/<id>?spectate`). No live lobby exists, so
+   the client falls through to the archive record and replays the full tape
+   in the real renderer.
 
 ## Reference
 
-- No client config needed: `getApiBase()` on localhost defaults to `http://localhost:8787`.
-- `gameID` must match `GAME_ID_REGEX` (`^[A-Za-z0-9]{8}$`); read it from `record.json`'s `gameId`.
-- `ws proxy ECONNREFUSED` in the client log is harmless (no multiplayer server); `checkActiveLobby` returns false and the archive path runs.
-- Cleanup: kill both PIDs, `rm -rf /tmp/replay /tmp/replay-view`.
+- `gameID` must match `^[A-Za-z0-9]{8}$`; colliding engine IDs (every engine
+  run tapes `ENGINE01`) are remapped to unique `OF00000N` form by the server.
+- `ws proxy ECONNREFUSED` in the client log is harmless (no multiplayer
+  server); the archive path runs.
+- No `record.json` under the source dir → the server exits 2 (`no runs ...`).
+- Cleanup: kill the server PID (Ctrl-C if foreground); temp conversion space
+  removes itself.

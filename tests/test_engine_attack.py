@@ -12,7 +12,7 @@ Production facts these tests pin:
   init (canAttackPlayer), so live orders belong after tick 50.
 """
 
-from openfront_mcp.engine import EngineWorker
+from openfrontbench.engine import EngineWorker
 
 
 def test_expand_conquers_neutral_land():

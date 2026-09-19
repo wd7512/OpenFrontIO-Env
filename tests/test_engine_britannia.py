@@ -10,7 +10,7 @@ Britannia is the benchmark board.
 
 from pathlib import Path
 
-from openfront_mcp.engine import EngineWorker
+from openfrontbench.engine import EngineWorker
 
 BRITANNIA = (
     Path(__file__).resolve().parent.parent

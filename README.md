@@ -1,9 +1,9 @@
-# python-template
+# OpenFrontBench
 
-OpenFront OpenFrontIO-Env: a keyless MCP benchmark harness over a pinned
+OpenFrontIO-Env: a keyless MCP benchmark harness over a pinned
 OpenFrontIO engine core.
 
-It uses Python 3.11, `uv`, `ruff`, `ty`, `pytest`, and optional agent support for
+It uses Python 3.12, `uv`, `ruff`, `ty`, `pytest`, and optional agent support for
 AI-assisted development.
 
 ## Setup (exact)
@@ -20,13 +20,14 @@ in `docs/pins.md` and verified by the manifest at runtime.
 ## Smoke episode CLI (no LLM, no API key)
 
 ```bash
-uv run python -m openfront_mcp.benchmark --config examples/smoke.json --output <fresh-dir>
+uv run python -m openfrontbench.benchmark --config examples/smoke.json --output <fresh-dir>
 ```
 
 Exits 0 and writes three artifacts into `<fresh-dir>`:
 
 - `result.json` — outcome (`decision_cap`), ticks, tool stats, `winner: null`,
-  metrics (`PMR`/`RAG@10` are `null` in smoke — see the `unavailable_reason`).
+  empty `metrics` plus a `metrics_note` (`PMR`/`RAG@10` are unscored in
+  smoke — the scripted trace carries no strategic-query events).
 - `trace.jsonl` — order-preserving trace of every tool request/result/error
   with decision id and sim tick.
 - `manifest.json` — hash of the engine bundle, pinned map assets, config, trace
@@ -77,6 +78,10 @@ AI coding agents, the repository also includes:
 
 Optional telemetry plugins live in `.opencode/plugins-available/`. Copy one into
 `.opencode/plugins/` and restart OpenCode to enable it.
+
+## Overhaul tracks
+
+Docker via `docs/docker-runbook.md`, harbor runs via `docs/evidence-run-folders-runbook.md`, lit-review via `docs/lit-review/README.md`.
 
 ## Limitations
 

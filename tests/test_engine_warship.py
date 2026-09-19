@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from openfront_mcp.engine import EngineWorker, EngineError
+from openfrontbench.engine import EngineWorker, EngineError
 
 
 def _britannia() -> EngineWorker:
-    from openfront_mcp.engine import BRITANNIA_MAP_DIR
+    from openfrontbench.engine import BRITANNIA_MAP_DIR
 
     return EngineWorker(map_dir=BRITANNIA_MAP_DIR)
 

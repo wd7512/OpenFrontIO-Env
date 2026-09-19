@@ -1,16 +1,20 @@
 [project]
-name = "python-template"
+name = "openfrontbench"
 version = "0.1.0"
-description = "A minimal Python project template with uv, ruff, pytest, and optional agent support."
+description = "OpenFrontBench: a keyless MCP benchmark harness over the pinned OpenFrontIO engine."
 readme = "README.md"
 authors = [
     { name = "William Dennis", email = "wwdennis.home@gmail.com" }
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
+    "harbor==0.21.0",
     "mcp>=1.0,<2",
-    "pillow>=12.3.0",
+    "pyyaml>=6",
 ]
+
+[project.scripts]
+openfront-harbor = "openfront_harbor.cli:main"
 
 [dependency-groups]
 dev = [
@@ -21,7 +25,7 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

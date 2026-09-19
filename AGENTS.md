@@ -1,6 +1,8 @@
 # Agent Instructions
 
-This is a generic Python project template using `uv`, `ruff`, `ty`, and `pytest`.
+OpenFrontBench: a keyless MCP benchmark harness over the pinned OpenFrontIO engine, using `uv`, `ruff`, `ty`, and `pytest`.
+
+Requires Python 3.12 (`uv` reads `.python-version`); `harbor==0.21.0` is a required runtime dependency.
 
 ## Commands
 
@@ -9,6 +11,7 @@ This is a generic Python project template using `uv`, `ruff`, `ty`, and `pytest`
 - Lint: `uv run ruff check`
 - Type check: `uv run ty check`
 - Test: `uv run pytest`
+- Hygiene: `uv run openfront-harbor dev-tools check`
 - Build: `uv build`
 
 ## Rules
@@ -34,3 +37,7 @@ This is a generic Python project template using `uv`, `ruff`, `ty`, and `pytest`
 - `.opencode/skills-available/brooks/` contains the full opt-in brooks-lint review suite.
 - `.opencode/plugins/write-size-guard.ts` prevents oversized generated writes.
 - `.opencode/plugins-available/` contains optional telemetry plugins that can be copied into `.opencode/plugins/` when desired.
+
+## Tracks
+
+- Docker, harbor gates, and lit-review are keyless/dry-run only — see each track's README or runbook. Details live with the code, not here.

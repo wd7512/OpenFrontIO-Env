@@ -1,0 +1,30 @@
+# lit-watch seen-list — dedup ledger (2026-09-18)
+# Source: every arXiv ID + DOI extracted from docs/lit-review/references.bib
+# and docs/lit-review/iter_1/seed.bib (same 13-work seed set). One identifier per
+# line, sorted. Never re-report anything listed here. Append new verified
+# IDs sorted; never drop baseline IDs.
+10.1126/science.ade9097
+10.48550/arxiv.2310.06770
+10.48550/arxiv.2401.10568
+10.48550/arxiv.2402.12348
+10.48550/arxiv.2406.06613
+10.48550/arxiv.2411.13543
+10.48550/arxiv.2502.15840
+10.48550/arxiv.2502.20807
+10.48550/arxiv.2512.18564
+10.48550/arxiv.2512.24565
+10.48550/arxiv.2604.07733
+10.48550/arxiv.2609.02459
+10.52202/075280-1634
+2212.07489
+2310.06770
+2401.10568
+2402.12348
+2406.06613
+2411.13543
+2502.15840
+2502.20807
+2512.18564
+2512.24565
+2604.07733
+2609.02459

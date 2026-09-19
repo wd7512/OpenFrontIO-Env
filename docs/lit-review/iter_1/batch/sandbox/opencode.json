@@ -1,0 +1,34 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "_note": "Sandbox lock: keyless docs-grounded sessions only. Set a primary model before any live run; document the fallback here when you do.",
+  "model": "TODO-set-primary-model",
+  "_mcp_note": "Optional research MCP pointers (crossref/openalex/pubmed). Disabled by default; enable per-session only for a future live runner.",
+  "mcp": {
+    "crossref": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/crossref-mcp-server"]
+    },
+    "openalex": {
+      "type": "local",
+      "command": ["npx", "-y", "openalex-research-mcp"]
+    },
+    "pubmed": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/pubmed-mcp-server"]
+    }
+  },
+  "tools": {
+    "crossref_*": false,
+    "openalex_*": false,
+    "pubmed_*": false
+  },
+  "_permission_note": "Sandbox sessions may read the brief only. Deny network fetch tools (curl/wget) and all writes outside the assigned report file.",
+  "permission": {
+    "read": "allow",
+    "edit": "deny",
+    "bash": "deny",
+    "curl *": "deny",
+    "wget *": "deny",
+    "skill": "allow"
+  }
+}

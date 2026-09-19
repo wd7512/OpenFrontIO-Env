@@ -5,7 +5,7 @@ Two real integration surfaces, no engine mocks:
 1. The four lifecycle tools (start_smoke_game / get_overview / end_decision /
    close_game) are driven over a real stdio MCP session against the packaged
    server, with a real pinned-engine worker behind the server lifespan.
-2. The keyless episode CLI (`python -m openfront_mcp.benchmark --config
+2. The keyless episode CLI (`python -m openfrontbench.benchmark --config
    examples/smoke.json --output <dir>`) drives that same MCP server over real
    stdio and writes result.json / trace.jsonl / manifest.json atomically into
    a fresh directory. No LLM, no API key, no engine import in the CLI: it
@@ -30,7 +30,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
-from openfront_mcp import benchmark
+from openfrontbench import benchmark
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_CONFIG = REPO_ROOT / "examples" / "smoke.json"
@@ -50,7 +50,7 @@ def _server_params() -> StdioServerParameters:
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if p)
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "openfront_mcp"],
+        args=["-m", "openfrontbench"],
         env=env,
         cwd=str(REPO_ROOT),
     )
@@ -382,7 +382,7 @@ def _cli(
         [
             sys.executable,
             "-m",
-            "openfront_mcp.benchmark",
+            "openfrontbench.benchmark",
             "--config",
             str(config),
             "--output",
@@ -424,10 +424,9 @@ def test_cli_full_scripted_episode_writes_artifact_trio(tmp_path: Path) -> None:
     assert result["tool_calls"] == 7
     assert result["tool_errors"] == 0
     metrics = result["metrics"]
-    assert metrics["PMR"] is None
-    assert metrics["RAG_at_10"] is None
-    assert "unavailable in smoke" in metrics["unavailable_reason"]
-    assert "LLM" not in metrics["unavailable_reason"], (
+    assert metrics == {}
+    assert "unavailable in smoke" in result["metrics_note"]
+    assert "LLM" not in result["metrics_note"], (
         "PMR/RAG are scoreable from scripted traces; smoke simply lacks "
         "strategic-query and commitment instrumentation"
     )
@@ -710,7 +709,9 @@ def _tiny_smoke_config(tmp_path: Path) -> Path:
 def test_run_episode_exits_nonzero_on_vendor_pin_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(benchmark, "_actual_vendor_pin", lambda: "0" * 40)
+    monkeypatch.setattr(
+        "openfrontbench.episodes.smoke._actual_vendor_pin", lambda: "0" * 40
+    )
     cfg = _tiny_smoke_config(tmp_path)
     output = tmp_path / "out"
     outcome = benchmark.run_episode(
@@ -747,8 +748,14 @@ def test_run_episode_exits_nonzero_on_manifest_failure(
     )
     assert outcome.exit_code != 0
     result = _read_json(output / "result.json")
-    assert result["outcome"] == "error"
-    assert "manifest build failed" in result["reason"]
+    # The sealed result is frozen: a manifest failure must not rewrite it.
+    # The episode itself succeeded, so outcome stays decision_cap and the
+    # trace's episode_end agrees (no trio contradiction).
+    assert result["outcome"] == "decision_cap"
+    trace = _read_jsonl(output / "trace.jsonl")
+    episode_end = [line for line in trace if line["event"] == "episode_end"]
+    assert len(episode_end) == 1
+    assert episode_end[0]["outcome"] == result["outcome"]
     manifest = _read_json(output / "manifest.json")
     assert manifest["schema_version"] == 1
     assert "manifest asset not found" in manifest["error"]

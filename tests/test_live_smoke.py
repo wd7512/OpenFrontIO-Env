@@ -6,14 +6,14 @@ from unittest.mock import patch
 
 import pytest
 
-from openfront_mcp.live_smoke import load_settings, run
-from openfront_mcp.live_mcp import AuditedSession
+from openfrontbench.live_smoke import load_settings, run
+from openfrontbench.live_mcp import AuditedSession
 
 
 def test_missing_key_before_launch(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text("OPENFRONT_MODEL=openrouter/stealth/union-alpha\n")
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         with pytest.raises(ValueError, match="key"):
             run(env, tmp_path / "output", 10)
         launch.assert_not_called()
@@ -56,7 +56,7 @@ def test_run_forwards_models_cache_source(tmp_path):
     )
     cache = tmp_path / "models.json"
     cache.write_text("{}", encoding="utf-8")
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         launch.return_value = SimpleNamespace(
             process=SimpleNamespace(
                 stdout="", stderr="", returncode=0, timed_out=False
@@ -70,28 +70,6 @@ def test_run_forwards_models_cache_source(tmp_path):
     assert kwargs["models_cache_source"] == cache
 
 
-def test_run_records_difficulty_in_payload(tmp_path):
-    env = tmp_path / ".env.local"
-    env.write_text(
-        "OPENROUTER_API_KEY=fake-test-only\n"
-        "OPENFRONT_PROVIDER=openrouter\n"
-        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
-    )
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
-        launch.return_value = SimpleNamespace(
-            process=SimpleNamespace(
-                stdout="", stderr="", returncode=0, timed_out=False
-            ),
-            run=SimpleNamespace(),
-            config={},
-            resolved_config=None,
-        )
-        run(env, tmp_path / "output", 10, difficulty="hard")
-    payload = json.loads((tmp_path / "output" / "live_result.json").read_text())
-    assert payload["difficulty"] == "hard"
-    assert payload["scenario"] == "solo"
-
-
 def test_run_auto_cache_missing_means_none(tmp_path):
     env = tmp_path / ".env.local"
     env.write_text(
@@ -100,8 +78,8 @@ def test_run_auto_cache_missing_means_none(tmp_path):
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
     with (
-        patch("openfront_mcp.live_smoke.launch_playing_agent") as launch,
-        patch("openfront_mcp.live_smoke._default_models_cache", return_value=None),
+        patch("openfrontbench.live_smoke.launch_playing_agent") as launch,
+        patch("openfrontbench.live_smoke._default_models_cache", return_value=None),
     ):
         launch.return_value = SimpleNamespace(
             process=SimpleNamespace(
@@ -114,6 +92,28 @@ def test_run_auto_cache_missing_means_none(tmp_path):
         run(env, tmp_path / "output", 10)
     _, kwargs = launch.call_args
     assert kwargs["models_cache_source"] is None
+
+
+def test_run_records_difficulty_in_payload(tmp_path):
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
+        launch.return_value = SimpleNamespace(
+            process=SimpleNamespace(
+                stdout="", stderr="", returncode=0, timed_out=False
+            ),
+            run=SimpleNamespace(),
+            config={},
+            resolved_config=None,
+        )
+        run(env, tmp_path / "output", 10, difficulty="hard")
+    payload = json.loads((tmp_path / "output" / "live_result.json").read_text())
+    assert payload["difficulty"] == "hard"
+    assert payload["scenario"] == "solo"
 
 
 def _tool_event(tool: str, result: dict, inputs: dict | None = None) -> str:
@@ -130,7 +130,7 @@ def _tool_event(tool: str, result: dict, inputs: dict | None = None) -> str:
 
 
 def test_summarise_metrics_track_passivity_and_builds():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     def overview(decision: int, tiles: int, gold: str) -> str:
         return _tool_event(
@@ -185,7 +185,7 @@ def test_summarise_metrics_track_passivity_and_builds():
 
 
 def test_summarise_captures_winner_from_overviews():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     stdout = "\n".join(
         [
@@ -200,7 +200,7 @@ def test_summarise_captures_winner_from_overviews():
 
 
 def test_summarise_winner_is_null_when_never_declared():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     stdout = "\n".join(
         [
@@ -212,7 +212,7 @@ def test_summarise_winner_is_null_when_never_declared():
 
 
 def test_build_solo_prompt_is_win_focused_and_minimal():
-    from openfront_mcp.live_smoke import build_solo_prompt
+    from openfrontbench.live_smoke import build_solo_prompt
 
     prompt = build_solo_prompt(20)
     assert "game_start_solo_game" in prompt
@@ -230,13 +230,13 @@ def test_build_solo_prompt_is_win_focused_and_minimal():
 
 
 def test_build_solo_prompt_impossible_names_difficulty():
-    from openfront_mcp.live_smoke import build_solo_prompt
+    from openfrontbench.live_smoke import build_solo_prompt
 
     assert '"impossible"' in build_solo_prompt(40, "impossible")
 
 
 def test_prompts_live_in_md_files():
-    from openfront_mcp.live_smoke import PROMPTS_DIR, load_prompt
+    from openfrontbench.live_smoke import PROMPTS_DIR, load_prompt
 
     assert (PROMPTS_DIR / "solo.md").is_file()
     rendered = load_prompt("solo", difficulty="easy", max_decisions=20, memory_block="")
@@ -245,10 +245,16 @@ def test_prompts_live_in_md_files():
 
 
 def test_run_rejects_bad_difficulty(tmp_path):
-    from openfront_mcp.live_smoke import run
+    from openfrontbench.live_smoke import run
 
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "OPENROUTER_API_KEY=fake-test-only\n"
+        "OPENFRONT_PROVIDER=openrouter\n"
+        "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
+    )
     with pytest.raises(ValueError, match="difficulty must be one of"):
-        run(".env.local", tmp_path / "x", 10, difficulty="brutal")
+        run(env, tmp_path / "x", 10, difficulty="brutal")
 
 
 def test_run_rejects_bad_bounds(tmp_path):
@@ -258,7 +264,7 @@ def test_run_rejects_bad_bounds(tmp_path):
         "OPENFRONT_PROVIDER=openrouter\n"
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         with pytest.raises(ValueError, match="max_decisions"):
             run(env, tmp_path / "o2", 10, max_decisions=0)
         with pytest.raises(ValueError, match="max_decisions"):
@@ -273,7 +279,7 @@ def test_run_solo_uses_solo_prompt(tmp_path):
         "OPENFRONT_PROVIDER=openrouter\n"
         "OPENFRONT_MODEL=openrouter/stealth/union-alpha\n"
     )
-    with patch("openfront_mcp.live_smoke.launch_playing_agent") as launch:
+    with patch("openfrontbench.live_smoke.launch_playing_agent") as launch:
         launch.return_value = SimpleNamespace(
             process=SimpleNamespace(
                 stdout="", stderr="", returncode=0, timed_out=False
@@ -288,7 +294,7 @@ def test_run_solo_uses_solo_prompt(tmp_path):
 
 
 def test_summarise_unwraps_nested_result_envelope():
-    from openfront_mcp.live_smoke import _summarise_events
+    from openfrontbench.live_smoke import _summarise_events
 
     def tool_event(tool, payload, start, end):
         inner = json.dumps({"result": json.dumps(payload)})
@@ -322,3 +328,69 @@ def test_summarise_unwraps_nested_result_envelope():
     assert summary["tool_calls"] == 2
     assert summary["decisions"] == [1, 2]
     assert summary["ticks"] == [52, 102]
+
+
+def test_summarise_skips_framing_noise():
+    from openfrontbench.live_smoke import _summarise_events
+
+    stdout = "\n".join(
+        [
+            "",
+            "   ",
+            "not-json",
+            json.dumps([1, 2, 3]),
+            json.dumps({"type": "tool_use", "timestamp": 1000, "part": "nope"}),
+            _tool_event("game_start_solo_game", {"tick": 3, "winner": None}),
+        ]
+    )
+    summary = _summarise_events(stdout)
+    assert summary["tool_calls"] == 1
+    assert summary["winner"] is None
+
+
+def test_summarise_captures_human_nations_tokens_cost_wall():
+    from openfrontbench.live_smoke import _summarise_events
+
+    def event_with_ts(tool, result, ts):
+        base = json.loads(_tool_event(tool, result))
+        base["timestamp"] = ts
+        return json.dumps(base)
+
+    stdout = "\n".join(
+        [
+            event_with_ts(
+                "game_get_overview",
+                {
+                    "tick": 53,
+                    "winner": None,
+                    "human": {"tiles": 10, "troops": 5, "extra": "x"},
+                    "nations": [
+                        {
+                            "name": "A",
+                            "tiles": 3,
+                            "troops": 2,
+                            "alive": True,
+                            "junk": 1,
+                        },
+                        "not-a-dict",
+                    ],
+                },
+                1000,
+            ),
+            json.dumps(
+                {
+                    "type": "step_finish",
+                    "timestamp": 3000,
+                    "part": {"tokens": {"input": 1, "output": 2}, "cost": 0.5},
+                }
+            ),
+        ]
+    )
+    summary = _summarise_events(stdout)
+    assert summary["final_human"] == {"tiles": 10, "troops": 5}
+    assert summary["final_nations"] == [
+        {"name": "A", "tiles": 3, "troops": 2, "alive": True}
+    ]
+    assert summary["tokens"] == {"input": 1, "output": 2}
+    assert summary["cost"] == 0.5
+    assert summary["wall_ms"] == 2000

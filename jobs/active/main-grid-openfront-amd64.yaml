@@ -1,0 +1,29 @@
+# 3-cell OpenFront smoke grid (T4 dry-run only, keyless).
+#
+# 3 agents x keyless openfront smoke, each on its own proxy port
+# (8766-8768) with proxy_base_url, following the 9-version grid pattern.
+# The 9v full grid is a T9 scale-up (live wiring, resume/retry, provenance).
+
+job_name: main-grid-openfront
+n_attempts: 1
+n_concurrent_trials: 1
+timeout_multiplier: 1.0
+
+datasets:
+  - path: tasks
+    task_names:
+      - plains-smoke
+
+agents:
+  - name: openfront-smoke
+    model_name: openfront/smoke
+    kwargs:
+      proxy_base_url: http://host.docker.internal:8766/v1
+  - name: openfront-smoke
+    model_name: openfront/smoke
+    kwargs:
+      proxy_base_url: http://host.docker.internal:8767/v1
+  - name: openfront-smoke
+    model_name: openfront/smoke
+    kwargs:
+      proxy_base_url: http://host.docker.internal:8768/v1

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openfront_mcp import cycle as cy
+from openfrontbench import cycle as cy
 
 
 def test_memory_store_versions_and_latest(tmp_path: Path) -> None:
@@ -92,7 +92,7 @@ def test_run_cycle_pins_memory_version_and_records_metrics(tmp_path: Path) -> No
 
 
 def test_solo_prompt_carries_memory_when_given() -> None:
-    from openfront_mcp.live_smoke import build_solo_prompt
+    from openfrontbench.live_smoke import build_solo_prompt
 
     prompt = build_solo_prompt(20, memory="LESSON: strike decisively, never drizzle.")
     assert "LESSON: strike decisively" in prompt
@@ -101,7 +101,7 @@ def test_solo_prompt_carries_memory_when_given() -> None:
 
 
 def test_build_config_without_mcp_is_coach_shaped(tmp_path: Path) -> None:
-    from openfront_mcp import opencode_launcher as ol
+    from openfrontbench import opencode_launcher as ol
 
     cfg = ol.build_config(
         model="opencode-go/muse-spark-1.3-contributor",

@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from openfront_mcp import core_queries
-from openfront_mcp.__main__ import main
-from openfront_mcp.diary import append_diary, read_diary
-from openfront_mcp.metrics import pmr, rag_at_k
-from openfront_mcp.narrate import narrate_overview
-from openfront_mcp.server import TOOLS, get_pin
+from openfrontbench import core_queries
+from openfrontbench.__main__ import main
+from openfrontbench.diary import append_diary, read_diary
+from openfrontbench.metrics import pmr, rag_at_k
+from openfrontbench.narrate import narrate_overview
+from openfrontbench.server import TOOLS, get_pin
 
 
 def test_pin_names_version() -> None:

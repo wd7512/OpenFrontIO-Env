@@ -17,6 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check out vendor engine sources
+        run: git submodule update --init --recursive vendor/OpenFrontIO
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Build engine worker
+        run: npm ci && npm run build
+        working-directory: engine
       - name: Install uv
         uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
@@ -31,9 +40,18 @@ jobs:
         run: uv run ruff format --check
       - name: Lint
         run: uv run ruff check
+      - name: Hygiene (dev-tools check)
+        run: uv run openfront-harbor dev-tools check
       - name: Type check
         run: uv run ty check
       - name: Test
         run: uv run pytest
+      - name: Harbor + docker skeleton checks (guarded)
+        run: |
+          if [ -f scripts/build-openfront.sh ]; then bash scripts/build-openfront.sh --dry-run; fi
+          if [ -f pyproject.toml ] && grep -q openfront-harbor pyproject.toml; then uv run openfront-harbor preflight; fi
+      - name: Lit-review structure (guarded)
+        run: |
+          for t in tests/test_lit_review.py tests/test_lit_batch.py tests/test_lit_watch.py; do if [ -f "$t" ]; then uv run pytest "$t" -q; fi; done
       - name: Build
         run: uv build

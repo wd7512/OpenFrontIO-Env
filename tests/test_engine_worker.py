@@ -6,7 +6,7 @@ Node/TS worker process. Nothing here is mocked: the worker boots the vendor
 production ``SpawnExecution``, and advances the real production tick loop
 (``PlayerExecution`` production included).
 
-The Python wrapper (``openfront_mcp.engine.EngineWorker``) owns the subprocess
+The Python wrapper (``openfrontbench.engine.EngineWorker``) owns the subprocess
 boundary: bounded reads, JSONL request/response, and an actionable error when
 the engine bundle or its Node dependencies are missing.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from openfront_mcp.engine import EngineError, EngineWorker
+from openfrontbench.engine import EngineError, EngineWorker
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

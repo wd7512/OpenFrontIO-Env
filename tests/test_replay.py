@@ -13,7 +13,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from openfront_mcp.engine import EUROPE_MAP_DIR, EngineWorker
+from openfrontbench.engine import EUROPE_MAP_DIR, EngineWorker
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ESBUILD = REPO_ROOT / "engine" / "node_modules" / ".bin" / "esbuild"
