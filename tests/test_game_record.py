@@ -2,7 +2,8 @@
 
 Builds a real tape with the pinned engine, converts it with the node
 script (which validates against the production GameRecordSchema), and
-pins the production archive shape (empty turns dropped, humans only).
+pins the production archive shape (empty turns without hashes dropped,
+humans only, hash turns preserved as the replay tripwire).
 """
 
 from __future__ import annotations
@@ -72,8 +73,15 @@ def test_converter_builds_valid_record(tmp_path, monkeypatch) -> None:
     assert record["info"]["gameID"] == "ENGINE01"
     assert len(record["info"]["players"]) == 1
     assert record["info"]["players"][0]["username"] == "Agent"
-    # Production archive shape: empty turns dropped, non-empty kept.
+    # Production archive shape: turns with intents or hashes kept.
     tape = json.loads((tmp_path / "record.json").read_text())
+    hash_turns = [t for t in tape["turns"] if t.get("hash") is not None]
+    assert [t["turnNumber"] for t in hash_turns] == [0, 50, 100]
+    assert all(isinstance(t["hash"], (int, float)) for t in hash_turns)
     non_empty = sum(1 for t in tape["turns"] if t["intents"])
-    assert len(record["turns"]) == non_empty > 0
+    hash_only = sum(
+        1 for t in tape["turns"] if not t["intents"] and t.get("hash") is not None
+    )
+    assert len(record["turns"]) == non_empty + hash_only > 0
     assert any(i.get("type") == "attack" for t in record["turns"] for i in t["intents"])
+    assert any(t.get("hash") is not None for t in record["turns"])

@@ -84,6 +84,9 @@ class GameSession:
         difficulty: str = "easy",
         map: str = "plains",
         tribes: int = 0,
+        spawn: tuple[int, int] | list[int] | None = None,
+        game_id: str | None = None,
+        policy_path: str | None = None,
     ) -> dict[str, Any]:
         """Spawn the engine worker and boot the scenario.
 
@@ -94,6 +97,16 @@ class GameSession:
         Normal) or ``"europe"`` (solo default). Map sizes (``"full"`` /
         ``"compact"``) are chosen per map, never passed here. ``tribes``
         spawns that many neutral tribes (online solo default 400).
+        ``spawn`` overrides the per-map boot tile with an explicit
+        ``(x, y)`` pair (used by the code-evo evaluator's fixed-spawn
+        registry); ``None`` keeps the boot default (fixed fixture tile on
+        plains, seeded random land on real maps). The engine validates the
+        tile — water or out-of-bounds spawns fail closed. ``game_id``
+        overrides the legacy ``ENGINE01`` constant for every seeded RNG
+        (pass one per spawn for distinct-but-reproducible worlds);
+        ``None`` keeps the legacy constant. ``policy_path`` is the path
+        to a bundled in-engine TS policy loaded by the worker at boot
+        (``None`` for no policy); it is passed through to the engine.
         """
         with self._lock:
             self._require_open()
@@ -127,6 +140,14 @@ class GameSession:
                     f"tribes must be an integer in [0, {MAX_TOOL_TRIBES}]"
                 )
             boot = MAP_BOOT[map]
+            default_spawn = boot["spawn"]
+            spawn_xy: tuple[int, int] | None = (
+                (default_spawn[0], default_spawn[1])
+                if isinstance(default_spawn, tuple)
+                else None
+            )
+            if spawn is not None:
+                spawn_xy = self._check_spawn(spawn)
             engine = self._engine_factory(map_dir=MAPS[map])
             engine.__enter__()
             try:
@@ -134,8 +155,10 @@ class GameSession:
                     nations=nations,
                     difficulty=difficulty,
                     map_size=boot["map_size"],
-                    spawn=boot["spawn"],
+                    spawn=spawn_xy,
                     tribes=tribes,
+                    game_id=game_id,
+                    policy_path=policy_path,
                 )
             except BaseException:
                 engine.close()
@@ -209,14 +232,15 @@ class GameSession:
         """Persist the replay tape alongside grid frames.
 
         Only when ``OPENFRONT_RECORD_DIR`` is set (live runner sets it to
-        the run dir): the worker rewrites record.json itself; failures are
-        swallowed — capture must never break a game.
+        the run dir): the worker rewrites record.json itself via the
+        metadata-only flush (the full tape never crosses the pipe);
+        failures are swallowed — capture must never break a game.
         """
         if not os.environ.get("OPENFRONT_RECORD_DIR", ""):
             return
         try:
             assert self._engine is not None
-            self._engine.save_record()
+            self._engine.flush_record()
         except Exception as exc:
             log.debug("record capture skipped: %s", exc)
 
@@ -270,6 +294,21 @@ class GameSession:
             payload = self._project("attack-ordered")
             payload["order"] = {"percent": share, "troops": troops}
             return payload
+
+    def run_policy_decision(self) -> dict[str, Any]:
+        """Run one in-engine TS policy decision, then project the result.
+
+        The worker executes the bundled policy against the live game and
+        returns the post-order snapshot; bookkeeping mirrors
+        :meth:`order_attack` without an order payload.
+        """
+        with self._lock:
+            self._require_running()
+            assert self._engine is not None
+            snapshot = self._engine.decide()
+            self._snapshot = snapshot
+            self._tick = int(snapshot["tick"])
+            return self._project("policy-decided")
 
     def order_cancel_attack(self, attack_id: object) -> dict[str, Any]:
         """Retreat a live outgoing attack by its id, then project.
@@ -367,6 +406,23 @@ class GameSession:
                 f"got {amount!r}"
             )
         return amount
+
+    def _check_spawn(self, spawn: object) -> tuple[int, int]:
+        """Validate an explicit spawn override as an (x, y) integer pair."""
+        if not isinstance(spawn, (tuple, list)) or len(spawn) != 2:
+            raise SessionError(
+                f"spawn must be an (x, y) integer pair or None, got {spawn!r}"
+            )
+        x_raw, y_raw = spawn[0], spawn[1]
+        if isinstance(x_raw, bool) or not isinstance(x_raw, int):
+            raise SessionError(
+                f"spawn must be an (x, y) integer pair or None, got {spawn!r}"
+            )
+        if isinstance(y_raw, bool) or not isinstance(y_raw, int):
+            raise SessionError(
+                f"spawn must be an (x, y) integer pair or None, got {spawn!r}"
+            )
+        return (x_raw, y_raw)
 
     def _check_tile(self, label: str, value: object, maximum: int) -> int:
         if isinstance(value, bool) or not isinstance(value, int):

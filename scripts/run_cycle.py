@@ -11,9 +11,11 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from pathlib import Path
 
 from openfrontbench.cycle import CAP_HIT_THRESHOLD, cap_after_cap_hits, run_cycle
+from openfrontbench.experiment import write_experiment
 from openfrontbench.live_smoke import (
     KEY_ENV_BY_PROVIDER,
     _default_models_cache,
@@ -85,15 +87,25 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     cap = args.max_decisions
     cap_hits = 0
-    for _ in range(args.cycles):
-        import time
-
+    exp_stamp = time.strftime("%Y%m%d-%H%M")
+    if args.out_prefix:
+        exp_dir = Path(args.out_prefix)
+    else:
+        exp_dir = REPO_ROOT / "raw" / f"openfront-cycles-{exp_stamp}"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    write_experiment(
+        exp_dir,
+        name=exp_dir.name,
+        kind="live-cycles",
+        config={
+            "cycles": args.cycles,
+            "difficulty": args.difficulty,
+            "max_decisions": args.max_decisions,
+        },
+    )
+    for attempt in range(args.cycles):
         stamp = time.strftime("%Y%m%d-%H%M")
-        out = (
-            Path(args.out_prefix).parent / f"{Path(args.out_prefix).name}-{stamp}"
-            if args.out_prefix
-            else REPO_ROOT / "raw" / f"openfront-cycle-{stamp}"
-        )
+        out = exp_dir / f"attempt-{attempt + 1}-{stamp}"
         row = run_cycle(
             cycles_root=root,
             play_fn=run,
@@ -104,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
                 "max_decisions": cap,
                 "difficulty": args.difficulty,
                 "models_cache_source": cache,
+                "experiment": exp_dir.name,
             },
             model=model,
             provider=provider,

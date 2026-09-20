@@ -1,19 +1,22 @@
-"""Tiny replay website: direct links to view every raw/ game in the real client.
+"""Two-level replay website: experiments, then games.
 
 Usage: uv run python scripts/serve_replays.py [--raw RAW] [--port PORT]
     [--client-port CLIENT_PORT]
 
-Scans <raw>/ for run dirs (each holding record.json), converts every tape to
-a schema-valid game_record.json with the repo's node converter, and serves:
+Scans <raw>/ for experiment dirs (each holding experiment.json) plus
+legacy flat run dirs, converts every tape to a schema-valid
+game_record.json with the repo's node converter, and serves:
 
-  GET /            index page: one card per game with a direct replay link
+  GET /            experiment list: one card per experiment with game
+                   count, kind and best score
+  GET /exp/<name>  suite page: one card per game with a direct replay link
   GET /game/<id>   archive endpoint the real client fetches (CORS open)
 
 Direct links open the vendor client straight into the replay
 (``http://localhost:<client-port>/w0/game/<id>?spectate``); with no live
 lobby the client falls through to the archive record and replays the full
 tape through the real engine renderer. Have the client running first
-(``npm run start:client`` in vendor/OpenFrontIO, serves :9000).
+(``npm run start:client`` in vendor/OpenFrontIO).
 
 raw/ is never modified: conversion output is moved away and only record
 bytes are served from memory. Every engine run tapes gameID ENGINE01, so
@@ -36,13 +39,18 @@ import sys
 import tempfile
 import threading
 from collections import Counter
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
+from openfrontbench.experiment import read_experiment
 from openfrontbench.paths import REPO_ROOT
+from openfrontbench.run_summary import read_summary
 
 log = logging.getLogger(__name__)
+
+LEGACY_EXPERIMENT = "legacy-runs"
 
 GAME_ID_RE = re.compile(r"^[A-Za-z0-9]{8}$")
 ESBUILD = REPO_ROOT / "engine" / "node_modules" / ".bin" / "esbuild"
@@ -51,13 +59,99 @@ VENDOR_RES = REPO_ROOT / "vendor" / "OpenFrontIO" / "resources"
 
 
 def find_runs(raw_dir: Path) -> list[Path]:
-    """Run dirs under raw_dir holding a record.json, oldest first."""
+    """Run dirs under raw_dir holding a record.json, oldest first.
+
+    Legacy flat scan kept for back-compat; new code prefers
+    :func:`find_experiments`.
+    """
     if not raw_dir.is_dir():
         return []
     return sorted(
         (c for c in raw_dir.iterdir() if c.is_dir() and (c / "record.json").is_file()),
         key=lambda c: c.name,
     )
+
+
+@dataclass
+class Experiment:
+    """One experiment: named dir, optional manifest, nested game dirs."""
+
+    name: str
+    meta: dict[str, Any]
+    game_dirs: list[Path]
+
+
+def _nearest_experiment(
+    game_dir: Path, raw_dir: Path, cache: dict[Path, dict[str, Any] | None]
+) -> tuple[str, dict[str, Any]] | None:
+    """Nearest ancestor (up to raw root) holding ``experiment.json``."""
+    parent = game_dir.parent
+    while parent != raw_dir and raw_dir in parent.parents:
+        if parent not in cache:
+            cache[parent] = read_experiment(parent)
+        meta = cache[parent]
+        if meta is not None:
+            return parent.relative_to(raw_dir).as_posix(), meta
+        parent = parent.parent
+    return None
+
+
+def find_experiments(raw_dir: Path, max_depth: int = 4) -> list[Experiment]:
+    """Group game dirs by nearest experiment manifest; leftovers go legacy.
+
+    Any depth up to *max_depth* is scanned, so ``<exp>/attempt-N/`` and
+    ``<exp>/iter-N-eval/games/<spawn>/`` layouts group correctly.
+    """
+    if not raw_dir.is_dir():
+        return []
+    groups: dict[str, Experiment] = {}
+    order: list[str] = []
+    cache: dict[Path, dict[str, Any] | None] = {}
+    seen: set[Path] = set()
+    for dirpath, dirnames, filenames in os.walk(raw_dir, followlinks=True):
+        current = Path(dirpath)
+        try:
+            resolved = current.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            dirnames[:] = []
+            continue
+        seen.add(resolved)
+        current = Path(dirpath)
+        try:
+            depth = len(current.relative_to(raw_dir).parts)
+        except ValueError:
+            continue
+        if current == raw_dir:
+            depth = 0
+        if depth > max_depth:
+            dirnames[:] = []
+            continue
+        dirnames.sort()
+        if "record.json" not in filenames and "summary.json" not in filenames:
+            continue
+        found = _nearest_experiment(current, raw_dir, cache)
+        if found is None:
+            name: str = LEGACY_EXPERIMENT
+            meta: dict[str, Any] = {"name": LEGACY_EXPERIMENT, "kind": "legacy"}
+        else:
+            name, meta = found
+        if name not in groups:
+            groups[name] = Experiment(name=name, meta=meta, game_dirs=[])
+            order.append(name)
+        groups[name].game_dirs.append(current)
+    named = sorted(
+        (groups[n] for n in order if n != LEGACY_EXPERIMENT),
+        key=lambda e: e.name,
+    )
+    for exp in named:
+        exp.game_dirs.sort(key=lambda p: p.name)
+    if LEGACY_EXPERIMENT in groups:
+        legacy = groups[LEGACY_EXPERIMENT]
+        legacy.game_dirs.sort(key=lambda p: p.name)
+        named.append(legacy)
+    return named
 
 
 def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
@@ -80,40 +174,79 @@ def assign_ids(names: list[str], original: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def _short_sha(value: Any) -> str | None:
+    if isinstance(value, str) and len(value) >= 8:
+        return value[:8]
+    return None
+
+
 def load_summary(run_dir: Path) -> dict[str, Any]:
-    """Best-effort index card facts from live_result.json + record.json."""
+    """Best-effort index card facts from summary.json, else live_result.json."""
     summary: dict[str, Any] = {"name": run_dir.name}
-    live: Any = {}
-    if (run_dir / "live_result.json").is_file():
-        try:
-            live = json.loads(
-                (run_dir / "live_result.json").read_text(encoding="utf-8")
-            )
-        except (OSError, ValueError):
-            live = {}
-    if isinstance(live, dict) and live:
-        summary["model"] = live.get("model")
-        summary["scenario"] = live.get("scenario")
-        summary["difficulty"] = live.get("difficulty")
-        summary["max_decisions"] = live.get("max_decisions")
-        summary["duration_s"] = live.get("duration_s")
-        inner = live.get("summary", {})
-        if isinstance(inner, dict):
-            summary["decisions"] = len(inner.get("decisions", []) or [])
-            ticks = inner.get("ticks", []) or []
-            if ticks:
-                summary["tick_first"] = ticks[0]
-                summary["tick_last"] = ticks[-1]
-            summary["winner"] = inner.get("winner")
-            summary["tool_calls"] = inner.get("tool_calls")
-            summary["cost"] = inner.get("cost")
-            metrics = inner.get("metrics")
-            if isinstance(metrics, dict):
-                summary["metrics"] = metrics
-            human = inner.get("final_human", {})
-            if isinstance(human, dict):
-                summary["tiles"] = human.get("tiles")
-                summary["troops"] = human.get("troops")
+    unified = read_summary(run_dir)
+    if unified:
+        summary["experiment"] = unified.get("experiment")
+        summary["pipeline"] = unified.get("pipeline")
+        summary["model"] = unified.get("model")
+        summary["policy"] = _short_sha(unified.get("policy_sha256"))
+        config = unified.get("config")
+        config = config if isinstance(config, dict) else {}
+        scenario = unified.get("extra")
+        scenario = scenario if isinstance(scenario, dict) else {}
+        summary["scenario"] = (
+            scenario.get("scenario") or unified.get("map") or config.get("scenario")
+        )
+        summary["spawn"] = unified.get("spawn_id")
+        summary["difficulty"] = unified.get("difficulty")
+        summary["max_decisions"] = config.get("max_decisions", config.get("max_ticks"))
+        summary["decisions"] = unified.get("decisions")
+        summary["tick_first"] = unified.get("tick_first")
+        summary["tick_last"] = unified.get("tick_last")
+        summary["winner"] = unified.get("winner")
+        summary["tiles"] = unified.get("tiles_final")
+        summary["troops"] = unified.get("troops_final")
+        summary["tiles_peak"] = unified.get("tiles_peak")
+        summary["score"] = unified.get("score")
+        summary["wall"] = unified.get("wall_s")
+        summary["tool_calls"] = unified.get("tool_calls")
+        summary["cost"] = unified.get("cost")
+        extra_metrics = scenario.get("metrics")
+        summary["metrics"] = (
+            extra_metrics if isinstance(extra_metrics, dict) else dict(config)
+        )
+        summary["tool_errors"] = unified.get("tool_errors")
+    else:
+        live: Any = {}
+        if (run_dir / "live_result.json").is_file():
+            try:
+                live = json.loads(
+                    (run_dir / "live_result.json").read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError):
+                live = {}
+        if isinstance(live, dict) and live:
+            summary["model"] = live.get("model")
+            summary["scenario"] = live.get("scenario")
+            summary["difficulty"] = live.get("difficulty")
+            summary["max_decisions"] = live.get("max_decisions")
+            summary["duration_s"] = live.get("duration_s")
+            inner = live.get("summary", {})
+            if isinstance(inner, dict):
+                summary["decisions"] = len(inner.get("decisions", []) or [])
+                ticks = inner.get("ticks", []) or []
+                if ticks:
+                    summary["tick_first"] = ticks[0]
+                    summary["tick_last"] = ticks[-1]
+                summary["winner"] = inner.get("winner")
+                summary["tool_calls"] = inner.get("tool_calls")
+                summary["cost"] = inner.get("cost")
+                metrics = inner.get("metrics")
+                if isinstance(metrics, dict):
+                    summary["metrics"] = metrics
+                human = inner.get("final_human", {})
+                if isinstance(human, dict):
+                    summary["tiles"] = human.get("tiles")
+                    summary["troops"] = human.get("troops")
     try:
         tape = json.loads((run_dir / "record.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -217,13 +350,13 @@ def stage_records(
 
 
 class Registry:
-    """Live view over ``raw/``: new and still-growing runs join without restart.
+    """Live view over ``raw/``: experiments, each a suite of games.
 
-    Cycles write a fresh run every attempt, and the engine rewrites
-    ``record.json`` after every decision, so a run is re-converted whenever
-    its tape changes. Route IDs are pinned per run the moment it is first
-    staged, keeping already-shared watch links stable. A tape caught mid-write
-    fails conversion and is simply retried on the next refresh.
+    New and still-growing runs join without restart: a game is
+    re-converted whenever its tape or summary changes, and route IDs
+    stay pinned per game once first staged, keeping shared watch links
+    stable. A tape caught mid-write fails conversion and is retried on
+    the next refresh.
     """
 
     def __init__(
@@ -240,9 +373,11 @@ class Registry:
         self._lock = threading.Lock()
         self._stamps: dict[str, tuple[int, int, int, int]] = {}
         self._route_ids: dict[str, str] = {}
+        self._exp_of: dict[str, str] = {}
         self._records: dict[str, bytes] = {}
         self._summaries: dict[str, dict[str, Any]] = {}
-        self._index = render_index({}, client_base)
+        self._exp_index = render_experiments({})
+        self._suites: dict[str, bytes] = {}
 
     def _next_route_id(self) -> str:
         used = set(self._route_ids.values())
@@ -251,40 +386,88 @@ class Registry:
             n += 1
         return f"OF{n:06d}"
 
+    def _game_key(self, exp_name: str, game_dir: Path) -> str:
+        if exp_name == LEGACY_EXPERIMENT:
+            return game_dir.name
+        try:
+            return game_dir.relative_to(self._raw).as_posix()
+        except ValueError:
+            return game_dir.name
+
     def refresh(self) -> bool:
-        """Stage new or changed runs; returns True when the view changed."""
+        """Stage new or changed games; returns True when the view changed."""
         changed = False
         with self._lock:
-            for run_dir in find_runs(self._raw):
-                # Both files matter: the tape grows per decision, the result
-                # file appears only when the attempt finishes.
-                record_stamp = _file_stamp(run_dir / "record.json")
-                live_stamp = _file_stamp(run_dir / "live_result.json")
-                stamp = (record_stamp[0], record_stamp[1], live_stamp[0], live_stamp[1])
-                if self._stamps.get(run_dir.name) == stamp:
-                    continue
-                try:
-                    record = self._convert(run_dir, self._bundle)
-                except Exception as exc:
-                    log.debug("run %s not stageable yet: %s", run_dir.name, exc)
-                    continue
-                route_id = self._route_ids.get(run_dir.name)
-                if route_id is None:
-                    route_id = self._next_route_id()
-                    self._route_ids[run_dir.name] = route_id
-                self._records[route_id] = json.dumps(record).encode("utf-8")
-                summary = load_summary(run_dir)
-                summary["game_id"] = route_id
-                self._summaries[run_dir.name] = summary
-                self._stamps[run_dir.name] = stamp
-                changed = True
+            for exp in find_experiments(self._raw):
+                for game_dir in exp.game_dirs:
+                    key = self._game_key(exp.name, game_dir)
+                    self._exp_of[key] = exp.name
+                    record_stamp = _file_stamp(game_dir / "record.json")
+                    summary_stamp = _file_stamp(game_dir / "summary.json")
+                    live_stamp = _file_stamp(game_dir / "live_result.json")
+                    stamp = (
+                        record_stamp[0],
+                        record_stamp[1],
+                        summary_stamp[0] + live_stamp[0],
+                        summary_stamp[1] + live_stamp[1],
+                    )
+                    if self._stamps.get(key) == stamp:
+                        continue
+                    if not (game_dir / "record.json").is_file():
+                        summary = load_summary(game_dir)
+                        summary["game_id"] = self._route_ids.get(key, "")
+                        self._summaries[key] = summary
+                        self._stamps[key] = stamp
+                        changed = True
+                        continue
+                    try:
+                        record = self._convert(game_dir, self._bundle)
+                    except Exception as exc:
+                        log.debug("run %s not stageable yet: %s", key, exc)
+                        continue
+                    route_id = self._route_ids.get(key)
+                    if route_id is None:
+                        route_id = self._next_route_id()
+                        self._route_ids[key] = route_id
+                    self._records[route_id] = json.dumps(record).encode("utf-8")
+                    summary = load_summary(game_dir)
+                    summary["game_id"] = route_id
+                    self._summaries[key] = summary
+                    self._stamps[key] = stamp
+                    changed = True
             if changed:
-                self._index = render_index(self._summaries, self._client_base)
+                self._rebuild_indexes()
         return changed
 
-    def snapshot(self) -> tuple[dict[str, bytes], bytes]:
+    def _rebuild_indexes(self) -> None:
+        by_exp: dict[str, dict[str, dict[str, Any]]] = {}
+        for key, summary in self._summaries.items():
+            exp_name = self._exp_of.get(key, LEGACY_EXPERIMENT)
+            by_exp.setdefault(exp_name, {})[key] = summary
+        suites: dict[str, bytes] = {}
+        overview: dict[str, dict[str, Any]] = {}
+        for exp in find_experiments(self._raw):
+            games = by_exp.get(exp.name, {})
+            suites[exp.name] = render_index(games, self._client_base)
+            scores = [
+                s.get("score")
+                for s in games.values()
+                if isinstance(s.get("score"), (int, float))
+            ]
+            overview[exp.name] = {
+                "kind": exp.meta.get("kind"),
+                "games": len(games),
+                "best_score": max(scores) if scores else None,
+                "created": exp.meta.get("created_at"),
+            }
+        self._suites = suites
+        self._exp_index = render_experiments(overview)
+
+    def snapshot(
+        self,
+    ) -> tuple[dict[str, bytes], bytes, dict[str, bytes]]:
         with self._lock:
-            return dict(self._records), self._index
+            return dict(self._records), self._exp_index, dict(self._suites)
 
     def summaries(self) -> dict[str, dict[str, Any]]:
         with self._lock:
@@ -297,25 +480,43 @@ def _cell(value: Any) -> str:
     return f"<td>{html.escape(str(value))}</td>"
 
 
+def _fmt_score(value: Any) -> str | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return f"{value:,.0f}"
+
+
 def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> bytes:
     rows = []
     for name in sorted(summaries):
         s = summaries[name]
-        link = f"{client_base}/w0/game/{s['game_id']}?spectate"
+        game_id = s.get("game_id") or ""
+        if game_id:
+            link = f"{client_base}/w0/game/{game_id}?spectate"
+            watch = (
+                f'<td><a href="{html.escape(link)}">'
+                f"{html.escape(str(game_id))} &#9654;</a></td>"
+            )
+        else:
+            # No tape (ran before capture, or convert pending): no link at
+            # all, so nothing looks watchable that is not.
+            watch = "<td>&mdash;</td>"
         ticks = (
             f"{s['tick_first']}&ndash;{s['tick_last']}"
             if s.get("tick_first") is not None
             else None
         )
-        duration = s.get("duration_s")
+        duration = s.get("duration_s", s.get("wall"))
         wall = f"{duration:.0f}s" if isinstance(duration, (int, float)) else None
         metrics = s.get("metrics") or {}
         rows.append(
             "<tr>"
             f"<td>{html.escape(name)}</td>"
-            f'<td><a href="{html.escape(link)}">{html.escape(str(s["game_id"]))} &#9654;</a></td>'
+            f"{watch}"
             f"{_cell(s.get('model'))}"
+            f"{_cell(s.get('policy'))}"
             f"{_cell(s.get('scenario'))}"
+            f"{_cell(s.get('spawn'))}"
             f"{_cell(s.get('difficulty'))}"
             f"{_cell(s.get('max_decisions'))}"
             f"{_cell(s.get('decisions'))}"
@@ -323,13 +524,14 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
             f"{_cell(s.get('winner'))}"
             f"{_cell(s.get('tiles'))}"
             f"{_cell(s.get('troops'))}"
+            f"{_cell(_fmt_score(s.get('score')))}"
             f"{_cell(s.get('tool_calls'))}"
             f"{_cell(metrics.get('cities'))}"
             f"{_cell(metrics.get('attacks'))}"
             f"{_cell(metrics.get('attacks_engaged'))}"
             f"{_cell(metrics.get('attacks_after_50'))}"
             f"{_cell(metrics.get('tool_errors'))}"
-            f"{_cell(metrics.get('tiles_peak'))}"
+            f"{_cell(s.get('tiles_peak', metrics.get('tiles_peak')))}"
             f"{_cell(wall)}"
             f"{_cell(s.get('cost'))}"
             "</tr>"
@@ -346,9 +548,11 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
         '<p class="note">Links open the real client straight into the engine replay. '
         "Client must be running (<code>npm run start:client</code> in "
         "vendor/OpenFrontIO).</p>\n"
-        + "<table><tr><th>run</th><th>watch</th><th>model</th><th>scenario</th>"
+        + "<table><tr><th>run</th><th>watch</th><th>model</th><th>policy</th>"
+        "<th>scenario</th><th>spawn</th>"
         "<th>difficulty</th><th>max decisions</th><th>decisions</th><th>ticks</th>"
-        "<th>winner</th><th>tiles</th><th>troops</th><th>tool calls</th>"
+        "<th>winner</th><th>tiles</th><th>troops</th><th>score</th>"
+        "<th>tool calls</th>"
         "<th>cities</th><th>atk</th><th>atk land</th><th>atk&gt;50</th>"
         "<th>tool errs</th><th>peak tiles</th>"
         "<th>wall</th><th>cost</th></tr>\n"
@@ -358,11 +562,47 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
     return page.encode("utf-8")
 
 
-def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes]]):
-    """Serve the index and tape archive from a live ``(records, index)`` view.
+def render_experiments(
+    overview: dict[str, dict[str, Any]], base_path: str = ""
+) -> bytes:
+    """Top-level page: one row per experiment linking to its suite."""
+    rows = []
+    for name in sorted(overview):
+        info = overview[name]
+        link = f"{base_path}/exp/{html.escape(name)}"
+        rows.append(
+            "<tr>"
+            f'<td><a href="{link}">{html.escape(name)}</a></td>'
+            f"{_cell(info.get('kind'))}"
+            f"{_cell(info.get('games'))}"
+            f"{_cell(_fmt_score(info.get('best_score')))}"
+            f"{_cell(info.get('created'))}"
+            "</tr>"
+        )
+    page = (
+        "<!doctype html>\n"
+        '<html lang="en"><head><meta charset="utf-8">\n'
+        "<title>OpenFrontBench experiments</title>\n"
+        "<style>body{background:#111;color:#eee;font-family:sans-serif;margin:2em}\n"
+        "table{border-collapse:collapse}td,th{border:1px solid #444;padding:.4em .7em}\n"
+        "a{color:#7fd4ff}p.note{color:#aaa}</style>\n"
+        "</head><body>\n"
+        f"<h2>OpenFrontBench experiments ({len(rows)})</h2>\n"
+        '<p class="note">Click an experiment to open its suite of runs. '
+        "Watch links open the real client straight into the engine replay.</p>\n"
+        + "<table><tr><th>experiment</th><th>kind</th><th>games</th>"
+        "<th>best score</th><th>created</th></tr>\n"
+        + "".join(rows)
+        + "\n</table></body></html>\n"
+    )
+    return page.encode("utf-8")
 
-    The view is called per request, which is how the live ``Registry`` lets
-    new runs appear without a restart.
+
+def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes, dict[str, bytes]]]):
+    """Serve experiments, suites and the tape archive from a live view.
+
+    The view is called per request, which is how the live ``Registry``
+    lets new runs appear without a restart.
     """
 
     class Handler(BaseHTTPRequestHandler):
@@ -378,19 +618,23 @@ def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes]]):
             self.end_headers()
 
         def do_GET(self):
-            live_records, live_index = view()
+            live_records, live_index, live_suites = view()
             if self.path == "/" or self.path == "/index.html":
                 self._cors(200, len(live_index), "text/html; charset=utf-8")
                 self.wfile.write(live_index)
                 return
             parts = self.path.strip("/").split("/")
             data = None
-            if len(parts) == 2 and parts[0] == "game":
+            ctype = "application/json"
+            if len(parts) == 2 and parts[0] == "exp":
+                data = live_suites.get(parts[1])
+                ctype = "text/html; charset=utf-8"
+            elif len(parts) == 2 and parts[0] == "game":
                 data = live_records.get(parts[1])
             if data is None:
                 self._cors(404, 0, "text/plain")
                 return
-            self._cors(200, len(data), "application/json")
+            self._cors(200, len(data), ctype)
             self.wfile.write(data)
 
         def do_OPTIONS(self):
@@ -414,8 +658,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     raw_dir = Path(args.raw)
-    if not find_runs(raw_dir):
-        log.error("no runs with record.json under %s", args.raw)
+    if not find_experiments(raw_dir):
+        log.error("no experiments or runs under %s", args.raw)
         return 2
     client_base = f"http://localhost:{args.client_port}"
     with tempfile.TemporaryDirectory(prefix="openfront-replays-") as tmp:
@@ -431,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
                 s.get("tiles"),
                 s.get("troops"),
             )
+        log.info("staged %d games", len(registry.summaries()))
         stop = threading.Event()
 
         def watch() -> None:

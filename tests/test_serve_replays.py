@@ -13,10 +13,13 @@ from typing import Any
 
 
 def _mod() -> Any:
+    import sys
+
     path = Path(__file__).resolve().parent.parent / "scripts" / "serve_replays.py"
     spec = importlib.util.spec_from_file_location("serve_replays", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
+    sys.modules["serve_replays"] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -58,7 +61,7 @@ def _run(tmp_path: Path, name: str, game_id: str = "ENGINE01") -> Path:
 def _serve(records: dict[str, bytes], index: bytes):
     mod = _mod()
     server = ThreadingHTTPServer(
-        ("127.0.0.1", 0), mod.make_handler(lambda: (records, index))
+        ("127.0.0.1", 0), mod.make_handler(lambda: (records, index, {}))
     )
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -83,16 +86,26 @@ def test_handler_picks_up_runs_after_start(tmp_path: Path) -> None:
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as res:
-            assert "0 games" in res.read().decode()
+            assert "experiments (0)" in res.read().decode()
         # The cycle drops a run into raw/ mid-batch: it must appear without
-        # restarting the server.
+        # restarting the server, grouped under the legacy experiment.
         _run(raw, "a-run")
         assert registry.refresh() is True
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as res:
+            body = res.read().decode()
+            assert "experiments (1)" in body
+            assert "legacy-runs" in body
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/exp/legacy-runs") as res:
             assert "1 games" in res.read().decode()
         gid = registry.summaries()["a-run"]["game_id"]
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/game/{gid}") as res:
             assert json.loads(res.read())["info"]["gameID"] == "ENGINE01"
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/exp/nope")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("/exp/nope should 404")
     finally:
         server.shutdown()
 
@@ -114,8 +127,8 @@ def test_registry_picks_up_new_and_growing_runs(tmp_path: Path) -> None:
 
     run_a = _run(raw, "a-run")
     assert registry.refresh() is True
-    records, index = registry.snapshot()
-    assert b"1 games" in index
+    records, _exp_index, suites = registry.snapshot()
+    assert b"1 games" in suites["legacy-runs"]
     id_a = registry.summaries()["a-run"]["game_id"]
     assert json.loads(records[id_a])["info"]["gameID"] == "ENGINE01"
 
@@ -138,7 +151,7 @@ def test_registry_picks_up_new_and_growing_runs(tmp_path: Path) -> None:
 
     _run(raw, "b-run")
     assert registry.refresh() is True
-    assert b"2 games" in registry.snapshot()[1]
+    assert b"2 games" in registry.snapshot()[2]["legacy-runs"]
     assert registry.summaries()["a-run"]["game_id"] == id_a
     assert registry.summaries()["b-run"]["game_id"] != id_a
 
@@ -213,6 +226,18 @@ def test_index_links_every_game_to_client(tmp_path: Path) -> None:
         assert f"http://localhost:9000/w0/game/{gid}?spectate" in index
 
 
+def test_index_shows_no_link_without_tape() -> None:
+    mod = _mod()
+    summaries = {
+        "staged": {"name": "staged", "game_id": "OF000001", "score": 10},
+        "tapeless": {"name": "tapeless", "game_id": "", "score": 5},
+    }
+    index = mod.render_index(summaries, "http://localhost:9000").decode()
+    assert "http://localhost:9000/w0/game/OF000001?spectate" in index
+    assert "/w0/game/?spectate" not in index
+    assert index.count("/w0/game/") == 1
+
+
 def test_load_summary_reads_difficulty(tmp_path: Path) -> None:
     mod = _mod()
     run = _run(tmp_path, "a-run")
@@ -274,3 +299,88 @@ def test_archive_serves_records_and_404s(tmp_path: Path) -> None:
                 raise AssertionError(f"{path} should 404")
     finally:
         server.shutdown()
+
+
+def _experiment(raw: Path, name: str, games: list[str], kind: str = "code-evo") -> Path:
+    exp = raw / name
+    (exp / "games").mkdir(parents=True)
+    (exp / "experiment.json").write_text(
+        json.dumps({"name": name, "kind": kind, "created_at": "2026-01-01"})
+    )
+    for game in games:
+        game_dir = exp / "games" / game
+        game_dir.mkdir()
+        (game_dir / "record.json").write_text(
+            json.dumps({"gameId": "ENGINE01", "ticks": 100, "turns": []})
+        )
+    return exp
+
+
+def test_find_experiments_groups_games_and_legacy(tmp_path: Path) -> None:
+    mod = _mod()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _experiment(raw, "exp-a", ["g1", "g2"])
+    _run(raw, "flat-run")
+    found = mod.find_experiments(raw)
+    assert [e.name for e in found] == ["exp-a", "legacy-runs"]
+    assert [p.name for p in found[0].game_dirs] == ["g1", "g2"]
+    assert [p.name for p in found[1].game_dirs] == ["flat-run"]
+    assert mod.find_experiments(tmp_path / "missing") == []
+
+
+def test_registry_serves_experiment_suites(tmp_path: Path) -> None:
+    mod = _mod()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _experiment(raw, "exp-a", ["g1"])
+
+    def fake_convert(run_dir: Path, bundle: Path) -> dict[str, Any]:
+        return {"info": {"gameID": "ENGINE01"}, "turns": []}
+
+    registry = mod.Registry(
+        raw, Path("bundle.mjs"), "http://localhost:9000", convert=fake_convert
+    )
+    assert registry.refresh() is True
+    records, exp_index, suites = registry.snapshot()
+    assert b"experiments (1)" in exp_index
+    assert b"exp-a" in exp_index
+    assert b"1 games" in suites["exp-a"]
+    gid = registry.summaries()["exp-a/games/g1"]["game_id"]
+    assert json.loads(records[gid])["info"]["gameID"] == "ENGINE01"
+
+
+def test_find_experiments_groups_nested_evo_layout(tmp_path: Path) -> None:
+    mod = _mod()
+    raw = tmp_path / "raw"
+    exp = raw / "evo-run"
+    (exp / "iter_1_eval" / "games" / "NW").mkdir(parents=True)
+    (exp / "experiment.json").write_text(json.dumps({"name": "evo-run"}))
+    (exp / "iter_1_eval" / "games" / "NW" / "record.json").write_text(
+        json.dumps({"gameId": "ENGINE01", "ticks": 10, "turns": []})
+    )
+    found = mod.find_experiments(raw)
+    assert [e.name for e in found] == ["evo-run"]
+    assert [p.name for p in found[0].game_dirs] == ["NW"]
+
+
+def test_load_summary_prefers_unified_summary(tmp_path: Path) -> None:
+    mod = _mod()
+    run = _run(tmp_path, "a-run")
+    (run / "summary.json").write_text(
+        json.dumps(
+            {
+                "game": "a-run",
+                "pipeline": "code-evo",
+                "policy_sha256": "abcdef1234567890",
+                "spawn_id": "NW",
+                "score": 53274.0,
+                "tiles_final": 5,
+            }
+        )
+    )
+    summary = mod.load_summary(run)
+    assert summary["pipeline"] == "code-evo"
+    assert summary["policy"] == "abcdef12"
+    assert summary["spawn"] == "NW"
+    assert summary["score"] == 53274.0

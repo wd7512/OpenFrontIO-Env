@@ -242,6 +242,7 @@ def build_config(
     provider: str | None = DEFAULT_PROVIDER,
     key_env_var: str | None = DEFAULT_KEY_ENV_VAR,
     base_url: str | None = None,
+    extra_allow: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Return the isolated OpenCode config as a plain dict.
 
@@ -263,6 +264,8 @@ def build_config(
             "edit": "allow",
             "write": "allow",
         }
+        for tool in extra_allow:
+            permission[str(tool)] = "allow"
     else:
         permission = {"*": "deny", f"{mcp.name}_*": "allow"}
     permission = dict[str, Any](permission)
