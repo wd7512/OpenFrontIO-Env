@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import tempfile
 import time
@@ -22,6 +23,7 @@ from openfrontbench.opencode_launcher import (
     redact,
 )
 from openfrontbench.paths import REPO_ROOT
+from openfrontbench.run_summary import from_live_result, write_summary
 
 log = logging.getLogger(__name__)
 DEFAULT_PROVIDER = "openrouter"
@@ -92,6 +94,15 @@ def build_solo_prompt(
         max_decisions=max_decisions,
         memory_block=memory_block,
     )
+
+
+def run_summary_from_live(
+    game: str, payload: dict[str, Any], experiment: str | None = None
+) -> dict[str, Any]:
+    """Map a ``live_result.json`` payload onto the unified summary schema."""
+    summary = from_live_result(game, payload)
+    summary["experiment"] = experiment
+    return summary
 
 
 def _parse_event_line(line: str) -> dict[str, Any] | None:
@@ -404,6 +415,7 @@ def run(
     max_decisions: int = 100,
     difficulty: str = "easy",
     memory: str | None = None,
+    experiment: str | None = None,
 ) -> dict[str, Any]:
     """Run one bounded live solo session. Key check happens before any launch.
 
@@ -446,7 +458,9 @@ def run(
         # the wrapper only scrubs credential keys, so this passes through,
         # and it is never shown to the agent.
         environment={
-            "OPENFRONT_RECORD_DIR": str(out),
+            # Absolute: the worker runs with its own cwd, so a relative
+            # dir would land the tape in the wrong place (or fail).
+            "OPENFRONT_RECORD_DIR": os.path.abspath(out),
         },
     )
     prompt = build_solo_prompt(max_decisions, difficulty, memory=memory)
@@ -495,5 +509,7 @@ def run(
     write_text_atomic(
         out / "live_events_redacted.jsonl", redact(result.process.stdout, secrets)
     )
+    unified = run_summary_from_live(out.name, payload, experiment=experiment)
+    write_summary(out, unified)
     log.info("live smoke complete: %s", json.dumps(summary, sort_keys=True))
     return payload

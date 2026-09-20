@@ -6,7 +6,8 @@
   "description": "Persistent JSONL worker over the pinned OpenFrontIO production core (no vendor edits).",
   "scripts": {
     "build": "node build.mjs",
-    "start": "node dist/worker.mjs"
+    "start": "node dist/worker.mjs",
+    "test": "node --test ../policies/evolve_me.test.ts"
   },
   "dependencies": {
     "dompurify": "3.4.15",

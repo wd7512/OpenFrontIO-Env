@@ -51,8 +51,13 @@ function main(): void {
     process.exit(2);
   }
   const start = tape.startedAt ?? end;
+  // Native keep rule (createPartialGameRecord): turns with intents OR a
+  // state hash survive. Hash-only turns are the replay tripwire — the
+  // client verifies them and raises desync on skew instead of silently
+  // simulating the wrong world.
   const turns = (tape.turns ?? []).filter(
-    (t: { intents: unknown[] }) => t.intents.length > 0,
+    (t: { intents: unknown[]; hash?: unknown }) =>
+      t.intents.length > 0 || t.hash !== undefined,
   );
   const record = {
     info: {

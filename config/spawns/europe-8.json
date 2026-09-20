@@ -1,0 +1,18 @@
+{
+    "map": "europe",
+    "map_size": "full",
+    "nations": 52,
+    "tribes": 400,
+    "difficulty": "medium",
+    "provenance": "8 spread tiles harvested 2026-09-20: 24 candidates probed through EngineWorker.start (0 nations/0 tribes, spawn-phase-must-end land check); 15 land tiles kept; greedy max-min pick gives min pairwise Manhattan distance 550 on the 2904x1672 board. (2500,300) and (2000,1350) are coastal (32/47-tile spawn blocks). Replaces the N=4 registry for the research loop; config/spawns/europe.json kept for comparability.",
+    "spawns": [
+        {"id": "ctr", "x": 1450, "y": 1000},
+        {"id": "fne", "x": 2500, "y": 300},
+        {"id": "fse", "x": 2500, "y": 1300},
+        {"id": "wsw", "x": 700, "y": 1200},
+        {"id": "e", "x": 2000, "y": 700},
+        {"id": "w", "x": 900, "y": 700},
+        {"id": "n", "x": 1800, "y": 300},
+        {"id": "s", "x": 2000, "y": 1350}
+    ]
+}

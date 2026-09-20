@@ -219,3 +219,6 @@ evidence/
 # Raw experiment data lives here; never committed, only the marker.
 raw/*
 !raw/.gitkeep
+
+# Derived esbuild bundles (e.g. policies/evolve_me.bundle.mjs).
+*.bundle.mjs

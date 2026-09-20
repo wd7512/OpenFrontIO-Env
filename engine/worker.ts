@@ -4,6 +4,7 @@ import { writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
 
 import { Config } from "../vendor/OpenFrontIO/src/core/configuration/Config";
 import { DoomsdayClockExecution } from "../vendor/OpenFrontIO/src/core/execution/DoomsdayClockExecution";
@@ -46,6 +47,9 @@ const MAX_SPAWN_TICKS = 10;
 const MAX_NATIONS = 100;
 const MAX_SPAWN_ATTEMPTS = 10_000;
 const MAX_TRIBES = 500;
+// State-hash cadence for replay tapes (decision-aligned): mirrors the
+// native singleplayer record, which stores hashes every 100 turns.
+const HASH_EVERY_TICKS = 50;
 // Production schema bound for build/upgrade `amount` (Game.ts).
 const MAX_UPGRADE_AMOUNT = 50;
 
@@ -55,6 +59,88 @@ const DIFFICULTIES: Record<string, Difficulty> = {
   hard: Difficulty.Hard,
   impossible: Difficulty.Impossible,
 };
+
+// Replay tapes feed the archived-GameRecord converter, whose schema only
+// accepts gameID matching /^[A-Za-z0-9]{8}$/. The raw game id seeds the
+// engine RNG and must stay intact, so tapes carry a derived label instead:
+// raw ids that already fit pass through, anything else maps to FNV-1a hex
+// (mirrored in Python wherever older tapes are backfilled).
+const TAPE_GAME_ID_RE = /^[A-Za-z0-9]{8}$/;
+
+function tapeGameId(raw: string): string {
+  if (TAPE_GAME_ID_RE.test(raw)) {
+    return raw;
+  }
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(raw)) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+// In-engine agent policy module shape: the harness-bundled candidate must
+// export an EvolvingPolicy class (decide) and a projectOverview projector.
+// Loaded fresh per game (one worker process per episode); failures throw
+// fail-closed so a bad bundle aborts the game instead of playing silent.
+async function loadPolicyModule(policyPath: unknown): Promise<{
+  decide: (overview: unknown) => unknown;
+  projectOverview: (snapshot: unknown) => unknown;
+}> {
+  if (typeof policyPath !== "string" || policyPath.length === 0) {
+    throw new Error(
+      `invalid policyPath: expected a non-empty bundle path, got ${JSON.stringify(policyPath)}`,
+    );
+  }
+  const resolved = path.isAbsolute(policyPath)
+    ? policyPath
+    : path.resolve(policyPath);
+  try {
+    await readFile(resolved, "utf8");
+  } catch {
+    throw new Error(
+      `invalid policyPath: cannot read bundle ${JSON.stringify(policyPath)}`,
+    );
+  }
+  let module: Record<string, unknown>;
+  try {
+    module = (await import(pathToFileURL(resolved).href)) as Record<
+      string,
+      unknown
+    >;
+  } catch (error) {
+    throw new Error(
+      `invalid policyPath: cannot import bundle ${JSON.stringify(policyPath)}: ${error}`,
+    );
+  }
+  const factory = module["EvolvingPolicy"];
+  if (typeof factory !== "function") {
+    throw new Error("invalid policy bundle: no EvolvingPolicy export");
+  }
+  let instance: unknown;
+  try {
+    instance = new (factory as new () => unknown)();
+  } catch (error) {
+    throw new Error(`invalid policy bundle: construction failed: ${error}`);
+  }
+  const decide = (instance as { decide?: unknown })["decide"];
+  if (typeof decide !== "function") {
+    throw new Error("invalid policy bundle: EvolvingPolicy has no decide");
+  }
+  const projectOverview = module["projectOverview"];
+  if (typeof projectOverview !== "function") {
+    throw new Error("invalid policy bundle: no projectOverview export");
+  }
+  // Bind: the harness calls policy.decide as a detached function, which
+  // would lose the instance `this` private methods live on.
+  const bound = (instance as { decide: (overview: unknown) => unknown }).decide.bind(
+    instance,
+  );
+  return {
+    decide: bound,
+    projectOverview: projectOverview as (snapshot: unknown) => unknown,
+  };
+}
 
 interface NationState {
   id: string;
@@ -186,10 +272,25 @@ class EngineSession {
   // tick exactly like the production server archives turns. Observer-only:
   // recording never adds, alters, or delays an intent.
   private pendingIntents: StampedIntent[] = [];
-  private turns: { turnNumber: number; intents: StampedIntent[] }[] = [];
+  private turns: {
+    turnNumber: number;
+    intents: StampedIntent[];
+    hash?: number;
+  }[] = [];
   private mapDir: string = "";
   private recordStartedAt: number = 0;
   private recordConfig: Record<string, unknown> = {};
+  // Game id for this session: drives the seeded RNG at boot and is taped
+  // into the record. Set by start(), defaults to the legacy constant.
+  private gameId: string = GAME_ID;
+  // In-engine agent policy (P0 TS port): a loaded EvolvingPolicy module
+  // plus its overview projector. Set by start() when policyPath is given;
+  // null keeps the harness-driven Python path. Fresh per episode because a
+  // new worker process boots per game.
+  private policy: {
+    decide: (overview: unknown) => unknown;
+    projectOverview: (snapshot: unknown) => unknown;
+  } | null = null;
 
   private submit(intent: StampedIntent): void {
     const game = this.requireGame();
@@ -198,10 +299,26 @@ class EngineSession {
     game.addExecution(executor.createExec(intent));
   }
 
-  private recordTick(): void {
+  private recordTick(game?: Game): void {
     const intents = this.pendingIntents;
     this.pendingIntents = [];
-    this.turns.push({ turnNumber: this.turns.length, intents });
+    const turnNumber = this.turns.length;
+    // State hash every HASH_EVERY_TICKS: the archive-replay tripwire.
+    // The client verifies replay hashes against these and raises desync
+    // instead of silently simulating a skewed world (e.g. after a
+    // gameId/label mismatch). Same sum as GameImpl.hash (private):
+    // identical player order, identical value. start() records spawn
+    // ticks before this.game is stored, so it passes the game in.
+    if (turnNumber % HASH_EVERY_TICKS === 0) {
+      const live = game ?? this.requireGame();
+      let hash = 1;
+      for (const player of live.allPlayers()) {
+        hash += player.hash();
+      }
+      this.turns.push({ turnNumber, intents, hash });
+    } else {
+      this.turns.push({ turnNumber, intents });
+    }
   }
 
   async start(
@@ -212,9 +329,30 @@ class EngineSession {
     difficulty: string = "easy",
     mapSize: string = "full",
     tribes: number = 0,
+    gameId: string | null = null,
+    policyPath: string | null = null,
   ): Promise<Snapshot> {
     if (this.game !== null) {
       throw new Error("engine already started");
+    }
+    // Per-game id drives every seeded RNG (nation draws, tribe stream,
+    // random-spawn fallback) and is taped into the record. Null keeps the
+    // legacy constant; same id + same spawn replays the same world.
+    let gid = GAME_ID;
+    if (gameId !== null && gameId !== undefined) {
+      if (typeof gameId !== "string" || !/^[A-Za-z0-9_-]{1,32}$/.test(gameId)) {
+        throw new Error(
+          `invalid gameId: expected 1-32 [A-Za-z0-9_-] chars, got ${JSON.stringify(gameId)}`,
+        );
+      }
+      gid = gameId;
+    }
+    this.gameId = gid;
+    // In-engine policy: load the pre-bundled ESM module (the harness
+    // bundles + validates the candidate before the eval). Fail-closed:
+    // a bad bundle aborts the game, surfacing as a policy error.
+    if (policyPath !== null && policyPath !== undefined) {
+      this.policy = await loadPolicyModule(policyPath);
     }
     if (
       typeof nations !== "number" ||
@@ -289,7 +427,7 @@ class EngineSession {
     let spawnTileX = spawnX;
     let spawnTileY = spawnY;
     if (spawnTileX === null || spawnTileY === null) {
-      const rng = new PseudoRandom(simpleHash(`${GAME_ID}:spawn`));
+      const rng = new PseudoRandom(simpleHash(`${gid}:spawn`));
       let placed = false;
       for (let attempt = 0; attempt < MAX_SPAWN_ATTEMPTS; attempt++) {
         const x = rng.nextInt(0, gameMap.width());
@@ -334,7 +472,7 @@ class EngineSession {
     // Mirror GameRunner.createGameRunner exactly: one seeded RNG, humans
     // first (their ids consume the first draws), then nations. Any other
     // order splits the RNG stream and tapes stop replaying.
-    const random = new PseudoRandom(simpleHash(GAME_ID));
+    const random = new PseudoRandom(simpleHash(gid));
     const humans = [
       new PlayerInfo(
         PLAYER_NAME,
@@ -362,7 +500,7 @@ class EngineSession {
           )
         : [];
     const game = createGame(humans, nationObjs, gameMap, miniGameMap, config);
-    const executor = new Executor(game, GAME_ID, CLIENT_ID, []);
+    const executor = new Executor(game, gid, CLIENT_ID, []);
     // Mirror GameRunner.init execution order and conditions.
     if (game.config().spawnNations()) {
       game.addExecution(...executor.nationExecutions());
@@ -407,7 +545,7 @@ class EngineSession {
       guard < MAX_SPAWN_TICKS
     ) {
       game.executeNextTick();
-      this.recordTick();
+      this.recordTick(game);
       guard++;
     }
     if (game.inSpawnPhase()) {
@@ -435,8 +573,40 @@ class EngineSession {
     startedAt: number;
     gameConfig: Record<string, unknown>;
     players: { id: string; name: string; kind: string }[];
-    turns: { turnNumber: number; intents: StampedIntent[] }[];
+    turns: { turnNumber: number; intents: StampedIntent[]; hash?: number }[];
     path: string | null;
+  } {
+    const record = this.buildRecord();
+    const recordPath = this.writeRecordFile(record);
+    return { ...record, path: recordPath };
+  }
+
+  flushRecord(): {
+    path: string | null;
+    ticks: number;
+    gameId: string;
+  } {
+    // Per-decision capture: the full tape stays on disk (record.json) and
+    // only metadata crosses the pipe. Returning every turn on every
+    // decision would push tens of MB per call on 400-tribe games and
+    // stall the harness; nothing harness-side reads the tape inline.
+    const game = this.requireGame();
+    const record = this.buildRecord();
+    return {
+      path: this.writeRecordFile(record),
+      ticks: game.ticks(),
+      gameId: this.gameId,
+    };
+  }
+
+  private buildRecord(): {
+    gameId: string;
+    mapDir: string;
+    ticks: number;
+    startedAt: number;
+    gameConfig: Record<string, unknown>;
+    players: { id: string; name: string; kind: string }[];
+    turns: { turnNumber: number; intents: StampedIntent[]; hash?: number }[];
   } {
     const game = this.requireGame();
     const players: { id: string; name: string; kind: string }[] = [];
@@ -453,8 +623,10 @@ class EngineSession {
       if (p.id() === this.humanID || this.nationIDs.includes(p.id())) continue;
       players.push({ id: p.id(), name: p.name(), kind: "tribe" });
     }
-    const record = {
-      gameId: GAME_ID,
+    return {
+      // Tape label only: the engine RNG keeps seeding from the raw id, so
+      // worlds are unchanged; the label just has to satisfy the converter.
+      gameId: tapeGameId(this.gameId),
       mapDir: this.mapDir,
       ticks: game.ticks(),
       startedAt: this.recordStartedAt,
@@ -462,13 +634,16 @@ class EngineSession {
       players,
       turns: this.turns,
     };
+  }
+
+  private writeRecordFile(record: Record<string, unknown>): string | null {
     const dir = process.env.OPENFRONT_RECORD_DIR;
-    let recordPath: string | null = null;
-    if (dir) {
-      recordPath = path.join(dir, "record.json");
-      writeFileSync(recordPath, JSON.stringify(record));
+    if (!dir) {
+      return null;
     }
-    return { ...record, path: recordPath };
+    const recordPath = path.join(dir, "record.json");
+    writeFileSync(recordPath, JSON.stringify(record));
+    return recordPath;
   }
 
   advance(ticks: number): Snapshot {
@@ -483,6 +658,79 @@ class EngineSession {
       this.recordTick();
     }
     return this.snapshot("ok");
+  }
+
+  decide(): Snapshot & {
+    outcomes: { ok: boolean; status?: string; error?: string }[];
+  } {
+    // One in-engine policy decision: project the overview, run the loaded
+    // policy, and submit its orders through the same issue* path the
+    // harness commands use. Rejected orders are skipped per-order exactly
+    // like apply_orders (acceptance, not landing, is the contract); a
+    // non-list decide output throws so the harness counts a policy error.
+    const game = this.requireGame();
+    if (this.policy === null) {
+      throw new Error("no policy loaded: pass policyPath to start");
+    }
+    const overview = this.policy.projectOverview(this.snapshot("ok"));
+    let raw: unknown;
+    try {
+      raw = this.policy.decide(overview);
+    } catch (error) {
+      throw new Error(`policy decide failed: ${error}`);
+    }
+    if (!Array.isArray(raw)) {
+      throw new Error("policy decide must return an order list");
+    }
+    const player = game.player(this.humanID);
+    const outcomes: { ok: boolean; status?: string; error?: string }[] = [];
+    for (const order of raw) {
+      if (order === null || typeof order !== "object") {
+        continue;
+      }
+      const kind = (order as { kind?: unknown }).kind;
+      try {
+        if (kind === "attack") {
+          const { target, percent } = order as {
+            target?: unknown;
+            percent?: unknown;
+          };
+          // Slider contract mirror of session._check_percent (1..100 int).
+          if (
+            typeof percent !== "number" ||
+            !Number.isInteger(percent) ||
+            percent < 1 ||
+            percent > 100
+          ) {
+            throw new Error(
+              `invalid attack percent: expected an integer in [1, 100], got ${JSON.stringify(percent)}`,
+            );
+          }
+          // Live-client troops mirror of session._attack_troops.
+          this.issueAttack(target, (player.troops() * percent) / 100);
+          outcomes.push({ ok: true, status: "attack-ordered" });
+        } else if (kind === "build") {
+          const { unit, x, y } = order as {
+            unit?: unknown;
+            x?: unknown;
+            y?: unknown;
+          };
+          this.issueBuild(unit, x, y);
+          outcomes.push({ ok: true, status: "build-ordered" });
+        } else {
+          outcomes.push({
+            ok: false,
+            error: `unknown kind ${JSON.stringify(kind)}`,
+          });
+        }
+      } catch (error) {
+        outcomes.push({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return { ...this.snapshot("ok"), outcomes };
   }
 
   private collectTribeIDs(game: Game): string[] {
@@ -508,8 +756,15 @@ class EngineSession {
   }
 
   attack(target: unknown, troops: unknown): Snapshot {
-    const game = this.requireGame();
-    const executor = this.requireExecutor();
+    this.issueAttack(target, troops);
+    return this.snapshot("ok");
+  }
+
+  private issueAttack(target: unknown, troops: unknown): void {
+    // Intent-issuing core shared by the attack command and the in-engine
+    // policy: same target resolution, same troops contract, same
+    // production submit path. Throws on invalid input (the policy loop
+    // skips rejected orders exactly like apply_orders).
     // "expand" conquers adjacent neutral land (production path: an attack
     // intent with a null targetID resolves to TerraNullius — this is how
     // live clients expand). "nation-N" targets a nation player, "tribe-N" a
@@ -559,7 +814,6 @@ class EngineSession {
       troops,
     } as StampedIntent;
     this.submit(attackIntent);
-    return this.snapshot("ok");
   }
 
   cancelAttack(attackID: unknown): Snapshot {
@@ -656,8 +910,18 @@ class EngineSession {
     rocketDirectionUp: unknown = undefined,
     amount: unknown = undefined,
   ): Snapshot {
+    this.issueBuild(unit, x, y, rocketDirectionUp, amount);
+    return this.snapshot("ok");
+  }
+
+  private issueBuild(
+    unit: unknown,
+    x: unknown,
+    y: unknown,
+    rocketDirectionUp: unknown = undefined,
+    amount: unknown = undefined,
+  ): void {
     const game = this.requireGame();
-    const executor = this.requireExecutor();
     // Production path: a build_unit intent becomes a ConstructionExecution,
     // the same one a human build-menu click takes. Structures need owned
     // land, nukes take the target tile, warships need water access — the
@@ -710,7 +974,6 @@ class EngineSession {
       ...(amount == null ? {} : { amount }),
     } as StampedIntent;
     this.submit(buildIntent);
-    return this.snapshot("ok");
   }
 
   upgradeUnit(unitID: unknown, amount: unknown = undefined): Snapshot {
@@ -1340,6 +1603,8 @@ interface Request {
   difficulty?: string;
   mapSize?: string;
   tribes?: number;
+  gameId?: string | null;
+  policyPath?: string | null;
   ticks?: number;
   target?: unknown;
   troops?: unknown;
@@ -1385,12 +1650,17 @@ async function handle(raw: string): Promise<boolean> {
           request.difficulty ?? "easy",
           request.mapSize ?? "full",
           request.tribes ?? 0,
+          request.gameId ?? null,
+          request.policyPath ?? null,
         );
         writeResponse({ id, ok: true, result });
         return true;
       }
       case "query":
         writeResponse({ id, ok: true, result: session.query() });
+        return true;
+      case "decide":
+        writeResponse({ id, ok: true, result: session.decide() });
         return true;
       case "advance":
         writeResponse({
@@ -1515,6 +1785,9 @@ async function handle(raw: string): Promise<boolean> {
         return true;
       case "save_record":
         writeResponse({ id, ok: true, result: session.saveRecord() });
+        return true;
+      case "flush_record":
+        writeResponse({ id, ok: true, result: session.flushRecord() });
         return true;
       case "close":
         writeResponse({ id, ok: true, result: { status: "closed" } });

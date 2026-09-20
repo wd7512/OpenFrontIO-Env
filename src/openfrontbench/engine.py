@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import subprocess
 import threading
@@ -82,6 +83,8 @@ class EngineWorker:
         map_size: object = "full",
         spawn: object = (50, 50),
         tribes: object = 0,
+        game_id: object = None,
+        policy_path: object = None,
     ) -> dict[str, Any]:
         """Boot the fixture and return the initial snapshot.
 
@@ -93,7 +96,13 @@ class EngineWorker:
         (required on real maps, where no fixed coordinate is safe).
         ``tribes`` spawns that many production neutral tribes
         (GameRunner.init order: nations, tribes from the bots count, win
-        check) — solo default online is 400.
+        check) — solo default online is 400. ``game_id`` overrides the
+        legacy ``ENGINE01`` constant for every seeded RNG in the game
+        (nation draws, tribe stream, random-spawn fallback) and is taped
+        into the record; ``None`` keeps the legacy constant. Same id +
+        same spawn replays the same world. ``policy_path`` is the path to
+        a bundled in-engine TS policy (``None`` for no policy); a
+        non-empty string is passed through to the worker as ``policyPath``.
         """
         if isinstance(nations, bool) or not isinstance(nations, int):
             raise EngineError(f"nations must be an integer, got {nations!r}")
@@ -131,6 +140,30 @@ class EngineWorker:
             spawn_y: int | None = y_raw
         else:
             spawn_x, spawn_y = None, None
+        if game_id is None:
+            gid: str | None = None
+        elif (
+            isinstance(game_id, str)
+            and len(game_id) >= 1
+            and len(game_id) <= 32
+            and all(c.isascii() and (c.isalnum() or c in "-_") for c in game_id)
+        ):
+            gid = game_id
+        else:
+            raise EngineError(
+                f"game_id must be None or 1-32 [A-Za-z0-9_-] chars, got {game_id!r}"
+            )
+        if policy_path is None:
+            policy: str | None = None
+        elif isinstance(policy_path, str) and len(policy_path) > 0:
+            # Absolutize: the worker runs with its own cwd, so a relative
+            # bundle path would resolve against engine/ instead of the
+            # caller (same trap as OPENFRONT_RECORD_DIR).
+            policy = os.path.abspath(policy_path)
+        else:
+            raise EngineError(
+                f"policy_path must be None or a non-empty string, got {policy_path!r}"
+            )
         return self._request(
             {
                 "cmd": "start",
@@ -141,12 +174,18 @@ class EngineWorker:
                 "difficulty": difficulty,
                 "mapSize": map_size,
                 "tribes": tribes,
+                "gameId": gid,
+                "policyPath": policy,
             }
         )
 
     def query(self) -> dict[str, Any]:
         """Return the current snapshot without advancing the game."""
         return self._request({"cmd": "query"})
+
+    def decide(self) -> dict[str, Any]:
+        """Run one in-engine TS policy decision; return the new snapshot."""
+        return self._request({"cmd": "decide"})
 
     def advance(self, ticks: object) -> dict[str, Any]:
         """Advance ``ticks`` production ticks and return the new snapshot."""
@@ -278,6 +317,15 @@ class EngineWorker:
         in-memory return.
         """
         return self._request({"cmd": "save_record"})
+
+    def flush_record(self) -> dict[str, Any]:
+        """Write record.json when configured; return only file metadata.
+
+        Same tape on disk as :meth:`save_record`, but the turns stay
+        worker-side — per-decision capture on tribe-heavy games would
+        otherwise push tens of MB over the pipe on every call.
+        """
+        return self._request({"cmd": "flush_record"})
 
     def close(self) -> None:
         """Send ``close`` and reap the worker, never raising on teardown."""

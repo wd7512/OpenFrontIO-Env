@@ -1,0 +1,14 @@
+{
+    "map": "europe",
+    "map_size": "full",
+    "nations": 52,
+    "tribes": 400,
+    "difficulty": "medium",
+    "provenance": "SE harvested from all 34 prior tapes in raw/ (tile 3800550 = (2118, 1308) on the 2904x1672 board; GAME_ID-fixed seeded random). NW/NE/SW validated as mainland land (52 tiles after 50 ticks, 0 nations, 0 tribes) via EngineWorker probe 2026-09-20.",
+    "spawns": [
+        {"id": "NW", "x": 1400, "y": 700},
+        {"id": "NE", "x": 1800, "y": 300},
+        {"id": "SW", "x": 700, "y": 1200},
+        {"id": "SE", "x": 2118, "y": 1308}
+    ]
+}
