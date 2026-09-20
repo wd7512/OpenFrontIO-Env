@@ -13,11 +13,16 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from openfrontbench.code_evo import evaluator as evo
-from openfrontbench.code_evo.evaluator import EvalConfig, PolicyError
+from openfrontbench.code_evo.evaluator import (
+    EpisodeResult,
+    EvalConfig,
+    PolicyError,
+)
 from openfrontbench.code_evo.spawns import Spawn
 from openfrontbench.paths import REPO_ROOT
 
@@ -96,13 +101,13 @@ def test_load_ts_policy_valid_bundles() -> None:
 
 def _record_overviews(
     decisions: int = 25,
-) -> list[tuple[dict, list[tuple]]]:
+) -> list[tuple[dict[str, Any], tuple[Any, ...]]]:
     """Play CTR with the Python champion, capturing overview->orders pairs."""
     policy = evo.load_policy(CHAMPION)
-    pairs: list[tuple[dict, list[tuple]]] = []
+    pairs: list[tuple[dict[str, Any], tuple[Any, ...]]] = []
 
     class Recorder:
-        def decide(self, overview: dict) -> list:
+        def decide(self, overview: dict[str, Any]) -> list[Any]:
             orders = policy.decide(dict(overview))
             pairs.append((dict(overview), evo._serialize_orders(orders)))
             return orders
@@ -113,7 +118,9 @@ def _record_overviews(
     return pairs
 
 
-def _ts_decide(pairs: list[tuple[dict, list]]) -> list[tuple]:
+def _ts_decide(
+    pairs: list[tuple[dict[str, Any], tuple[Any, ...]]],
+) -> list[tuple[Any, ...]]:
     """Replay recorded overviews through the TS policy; return order tuples."""
     payload = "\n".join(json.dumps(overview) for overview, _ in pairs) + "\n"
     completed = subprocess.run(
@@ -154,16 +161,16 @@ def test_ts_order_stream_matches_python() -> None:
         assert actual == expected, f"decision {index} diverged"
 
 
-def _episode_signature(episode: object) -> tuple:
+def _episode_signature(episode: EpisodeResult) -> tuple[Any, ...]:
     return (
-        episode.ticks,  # type: ignore[attr-defined]
-        episode.decisions,  # type: ignore[attr-defined]
-        episode.tiles_peak,  # type: ignore[attr-defined]
-        episode.final_tiles,  # type: ignore[attr-defined]
-        episode.final_troops,  # type: ignore[attr-defined]
-        episode.winner,  # type: ignore[attr-defined]
-        episode.outcome,  # type: ignore[attr-defined]
-        episode.score,  # type: ignore[attr-defined]
+        episode.ticks,
+        episode.decisions,
+        episode.tiles_peak,
+        episode.final_tiles,
+        episode.final_troops,
+        episode.winner,
+        episode.outcome,
+        episode.score,
     )
 
 
