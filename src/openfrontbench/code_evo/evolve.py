@@ -70,13 +70,67 @@ RESEARCH_AGENT_PROMPT = (
     "no new files, nothing else touched."
 )
 
+RESEARCH_AGENT_PROMPT_TS = (
+    "You are the OpenFrontBench research agent. Read research_log.md "
+    "first, then edit only evolve_me.ts between the EVOLVE markers "
+    "and append your notes plus a VERDICT trailer to the log. "
+    "No shell, no network, no new files."
+)
+
 
 class CandidateError(ValueError):
     """A candidate policy file violates the edit contract."""
 
 
+def _smoke_ts_candidate(path: Path) -> None:
+    """Run one canned overview through decide_runner; raise on failure."""
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        log.warning("node not on PATH; skipping TS runner smoke for %s", path)
+        return
+    runner = REPO_ROOT / "policies" / "decide_runner.ts"
+    payload = json.dumps({"in_spawn_phase": True, "human": {"troops": 100}}) + "\n"
+    try:
+        proc = subprocess.run(
+            [node, str(runner), str(path.resolve())],
+            input=payload,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=str(REPO_ROOT),
+        )
+    except Exception as error:
+        raise CandidateError(f"TS runner smoke failed: {error}") from error
+    if proc.returncode != 0:
+        raise CandidateError(f"TS runner smoke failed: {proc.stderr[-2000:]}")
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if not lines:
+        raise CandidateError("TS runner smoke produced no output")
+    try:
+        orders = json.loads(lines[0])
+    except json.JSONDecodeError as error:
+        raise CandidateError(f"TS runner smoke bad JSON: {error}") from error
+    if not isinstance(orders, list):
+        raise CandidateError("TS runner smoke must output a JSON array")
+
+
 def validate_candidate(path: Path) -> str:
     """Check markers, syntax, interface and imports; return file text."""
+    if path.suffix == ".ts":
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as error:
+            raise CandidateError(f"cannot read candidate {path}: {error}") from error
+        try:
+            _evaluator.load_ts_policy(path)
+        except _evaluator.PolicyError as error:
+            raise CandidateError(str(error)) from error
+        _smoke_ts_candidate(path)
+        return text
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
@@ -114,6 +168,7 @@ def launch_research_round(
     timeout_s: float,
     opencode_bin: str = "opencode",
     models_cache_source: Path | None = None,
+    policy_filename: str = _research.POLICY_FILENAME,
 ) -> tuple[str, str, _research.Verdict]:
     """Run one isolated research round; return (policy, log_appendix, verdict).
 
@@ -124,11 +179,16 @@ def launch_research_round(
     (contract break) or :class:`CandidateError` (bad policy edit).
     """
     check_managed_settings()
+    agent_prompt = (
+        RESEARCH_AGENT_PROMPT_TS
+        if policy_filename == _research.TS_POLICY_FILENAME
+        else RESEARCH_AGENT_PROMPT
+    )
     config = build_config(
         model=model,
         mcp=None,
         agent_name="research",
-        agent_prompt=RESEARCH_AGENT_PROMPT,
+        agent_prompt=agent_prompt,
         provider=provider,
         key_env_var=key_env_var,
         base_url=base_url,
@@ -136,9 +196,7 @@ def launch_research_round(
     )
     agent_root = Path(tempfile.mkdtemp(prefix="openfront-research-"))
     run = prepare_run(agent_root / "run", config)
-    (run.work_dir / _research.POLICY_FILENAME).write_text(
-        parent_source, encoding="utf-8"
-    )
+    (run.work_dir / policy_filename).write_text(parent_source, encoding="utf-8")
     (run.work_dir / _research.LOG_FILENAME).write_text(log_text, encoding="utf-8")
     files_before = _research.snapshot_files(run.work_dir)
     repo_before = _research.git_status_snapshot(REPO_ROOT)
@@ -169,12 +227,14 @@ def launch_research_round(
     except RoundError as error:
         raise RoundError(str(error)) from error
     try:
-        appendix = _research.check_two_file_rule(run.work_dir, files_before, log_text)
+        appendix = _research.check_two_file_rule(
+            run.work_dir, files_before, log_text, policy_filename
+        )
     except RoundError as error:
         raise RoundError(str(error)) from error
-    edited_path = run.work_dir / _research.POLICY_FILENAME
+    edited_path = run.work_dir / policy_filename
     if not edited_path.is_file():
-        raise RoundError("research agent did not leave evolve_me.py")
+        raise RoundError(f"research agent did not leave {policy_filename}")
     edited = validate_candidate(edited_path)
     verdict = _research.parse_verdict(log_text + appendix)
     return edited, appendix, verdict
@@ -293,8 +353,12 @@ def run_evolution(
         },
     )
     template = sampler.load_template(
-        prompts_dir or (REPO_ROOT / "prompts"), name="code_evo_research"
+        prompts_dir or (REPO_ROOT / "prompts"),
+        name="code_evo_research_ts"
+        if policy_path.suffix == ".ts"
+        else "code_evo_research",
     )
+    policy_filename = _research.policy_filename_for(policy_path)
     baseline_source = validate_candidate(policy_path)
     log_path = output / _research.LOG_FILENAME
     _append_log(
@@ -388,6 +452,7 @@ def run_evolution(
                 api_key=api_key,
                 timeout_s=agent_timeout_s,
                 models_cache_source=models_cache_source,
+                policy_filename=policy_filename,
             )
         except (RoundError, CandidateError) as error:
             _append_log(log_path, f"\nRound rejected: {error}\n")
@@ -414,10 +479,10 @@ def run_evolution(
             appended.append(entry)
             log.info("iteration %d HOLD: %s", iteration, verdict.reason)
             continue
-        candidate_path = output / f"iter_{iteration}" / "evolve_me.py"
+        candidate_path = output / f"iter_{iteration}" / policy_filename
         candidate_path.parent.mkdir(parents=True, exist_ok=True)
         candidate_path.write_text(edited, encoding="utf-8")
-        parent_path = output / f"iter_{iteration}" / "parent_evolve_me.py"
+        parent_path = output / f"iter_{iteration}" / f"parent_{policy_filename}"
         parent_path.write_text(parent_source, encoding="utf-8")
         diverged, probe_detail = _evaluator.probe_divergence(
             candidate_path,

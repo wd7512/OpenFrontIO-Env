@@ -136,12 +136,8 @@ class EnginePolicy:
         raise PolicyError("EnginePolicy cannot decide in Python")
 
 
-def load_ts_policy(path: Path) -> EnginePolicy:
-    """Validate a TS policy and bundle it to ESM with esbuild."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as error:
-        raise PolicyError(f"cannot read TS policy {path}: {error}") from error
+def validate_ts_source(text: str, path: Path) -> None:
+    """Check TS markers, interface and banned patterns without bundling."""
     if text.count("// EVOLVE-START") != 1 or text.count("// EVOLVE-END") != 1:
         raise PolicyError("TS policy must contain exactly one EVOLVE block")
     if text.index("// EVOLVE-START") > text.index("// EVOLVE-END"):
@@ -158,6 +154,15 @@ def load_ts_policy(path: Path) -> EnginePolicy:
     for line in block.splitlines():
         if line.lstrip().startswith("import "):
             raise PolicyError("TS policy uses banned pattern 'import '")
+
+
+def load_ts_policy(path: Path) -> EnginePolicy:
+    """Validate a TS policy and bundle it to ESM with esbuild."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise PolicyError(f"cannot read TS policy {path}: {error}") from error
+    validate_ts_source(text, path)
     esbuild = REPO_ROOT / "engine" / "node_modules" / ".bin" / "esbuild"
     if not esbuild.is_file():
         raise PolicyError(f"esbuild not found: {esbuild}")
@@ -531,6 +536,149 @@ def order_stream(
     return recorder.calls
 
 
+def _serialize_ts_orders(orders: Any) -> tuple[Any, ...]:
+    """Hashable order signature for runner dicts (same 6-tuple shape)."""
+    if not isinstance(orders, list):
+        return (("invalid", None),)
+    items: list[tuple[Any, ...]] = []
+    for order in orders:
+        if order is None:
+            continue
+        if isinstance(order, dict):
+            items.append(
+                (
+                    order.get("kind", "?"),
+                    order.get("target"),
+                    order.get("percent"),
+                    order.get("unit"),
+                    order.get("x"),
+                    order.get("y"),
+                )
+            )
+        else:
+            items.append(
+                (
+                    getattr(order, "kind", "?"),
+                    getattr(order, "target", None),
+                    getattr(order, "percent", None),
+                    getattr(order, "unit", None),
+                    getattr(order, "x", None),
+                    getattr(order, "y", None),
+                )
+            )
+    return tuple(items)
+
+
+def _ts_decide_batch(
+    bundle: Path, overviews: list[dict[str, Any]]
+) -> list[tuple[Any, ...]]:
+    """Replay overviews through the TS bundle via decide_runner (one node)."""
+    import json
+    import shutil
+
+    if not overviews:
+        return []
+    node = shutil.which("node")
+    if node is None:
+        raise PolicyError("node is not on PATH")
+    runner = REPO_ROOT / "policies" / "decide_runner.ts"
+    payload = "\n".join(json.dumps(overview) for overview in overviews) + "\n"
+    proc = subprocess.run(
+        [node, str(runner), str(bundle)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=str(REPO_ROOT),
+    )
+    if proc.returncode != 0:
+        raise PolicyError(f"decide_runner failed: {proc.stderr[-2000:]}")
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if len(lines) != len(overviews):
+        raise PolicyError(
+            f"decide_runner returned {len(lines)} lines for {len(overviews)} overviews"
+        )
+    streams: list[tuple[Any, ...]] = []
+    for line in lines:
+        try:
+            orders = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise PolicyError(f"decide_runner bad JSON: {error}") from error
+        streams.append(_serialize_ts_orders(orders))
+    return streams
+
+
+def ts_order_stream(
+    policy_path: Path,
+    spawn: Spawn,
+    map_name: str,
+    config: EvalConfig,
+    game_id: str | None,
+    max_ticks: int = 500,
+) -> list[tuple[Any, ...]]:
+    """Short TS trajectory probe: runner-decided order stream, capped."""
+    policy = load_ts_policy(policy_path)
+    bundle = policy.bundle
+    session = GameSession()
+    started = session.start(
+        nations=config.nations,
+        difficulty=config.difficulty,
+        map=map_name,
+        tribes=config.tribes,
+        spawn=(spawn.x, spawn.y),
+        game_id=game_id,
+        policy_path=str(bundle),
+    )
+    overviews: list[dict[str, Any]] = []
+    overview: dict[str, Any] = started
+    max_decisions = max_ticks // config.decision_ticks
+    consecutive_errors = 0
+    try:
+        for _ in range(max_decisions):
+            human = overview.get("human", {})
+            tiles = human.get("tiles", 0) if isinstance(human, dict) else 0
+            if (
+                isinstance(tiles, int)
+                and tiles == 0
+                and not overview.get("in_spawn_phase")
+            ):
+                break
+            winner = overview.get("winner")
+            if isinstance(winner, str) and winner:
+                break
+            overviews.append(dict(overview))
+            try:
+                overview = session.run_policy_decision()
+                consecutive_errors = 0
+            except Exception as exc:
+                consecutive_errors += 1
+                log.debug("TS policy decide failed: %s", exc)
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    break
+            try:
+                stepped = session.end_decision()
+            except Exception as exc:
+                log.debug("end_decision failed: %s", exc)
+                break
+            tick = int(stepped.get("tick", 0))
+            if tick >= max_ticks:
+                overview = session.overview()
+                winner = overview.get("winner")
+                if isinstance(winner, str) and winner:
+                    pass
+                break
+            overview = session.overview()
+            winner = overview.get("winner")
+            if isinstance(winner, str) and winner:
+                break
+    finally:
+        try:
+            session.close()
+        except Exception as exc:
+            log.debug("session close failed: %s", exc)
+    return _ts_decide_batch(bundle, overviews)
+
+
 def probe_divergence(
     candidate_path: Path,
     parent_path: Path,
@@ -549,17 +697,38 @@ def probe_divergence(
     """
     import dataclasses
 
+    candidate_is_ts = candidate_path.suffix == ".ts"
+    parent_is_ts = parent_path.suffix == ".ts"
+    if candidate_is_ts != parent_is_ts:
+        raise ValueError(
+            f"refuse to compare across languages: {candidate_path.suffix} "
+            f"vs {parent_path.suffix}"
+        )
+    use_ts = candidate_is_ts and parent_is_ts
     probe_config = dataclasses.replace(config, max_ticks=max_ticks)
     spawns = list(registry.spawns)[:2]
     try:
         for spawn in spawns:
             game_id = world_id_for(game_id_prefix, spawn, world_scheme)
-            candidate_calls = order_stream(
-                candidate_path, spawn, registry.map, probe_config, game_id
-            )
-            parent_calls = order_stream(
-                parent_path, spawn, registry.map, probe_config, game_id
-            )
+            if use_ts:
+                candidate_calls = ts_order_stream(
+                    candidate_path,
+                    spawn,
+                    registry.map,
+                    probe_config,
+                    game_id,
+                    max_ticks,
+                )
+                parent_calls = ts_order_stream(
+                    parent_path, spawn, registry.map, probe_config, game_id, max_ticks
+                )
+            else:
+                candidate_calls = order_stream(
+                    candidate_path, spawn, registry.map, probe_config, game_id
+                )
+                parent_calls = order_stream(
+                    parent_path, spawn, registry.map, probe_config, game_id
+                )
             if candidate_calls != parent_calls:
                 first = next(
                     i
@@ -590,7 +759,11 @@ def _spawn_job(
     parallel spawns never share ``OPENFRONT_RECORD_DIR``.
     """
     policy_path, map_name, config, game_dir, spawn, game_id = args
-    policy = load_policy(Path(policy_path))
+    path = Path(policy_path)
+    if path.suffix == ".ts":
+        policy: Any = load_ts_policy(path)
+    else:
+        policy = load_policy(path)
     episode_start = time.time()
     episode = run_episode(
         spawn, policy, map_name, config, GameSession, Path(game_dir), game_id
@@ -625,7 +798,10 @@ def evaluate_candidate(
     eval_started_at = time.time()
     # Fail fast on an unloadable policy before fanning out; children load
     # their own copy per spawn (no cross-episode state leaks).
-    _policy = load_policy(policy_path)
+    if policy_path.suffix == ".ts":
+        _policy: Any = load_ts_policy(policy_path)
+    else:
+        _policy = load_policy(policy_path)
     assert _policy is not None
     policy_sha = hashlib.sha256(policy_path.read_bytes()).hexdigest()
     config_dict = {
