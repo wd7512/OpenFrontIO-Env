@@ -26,6 +26,7 @@ from pathlib import Path
 
 LOG_FILENAME = "research_log.md"
 POLICY_FILENAME = "evolve_me.py"
+TS_POLICY_FILENAME = "evolve_me.ts"
 
 VERDICT_RE = re.compile(r"^VERDICT:\s*(SHIP|HOLD)\s*$", re.MULTILINE)
 REASON_RE = re.compile(r"^REASON:\s*(.+?)\s*$", re.MULTILINE)
@@ -41,6 +42,11 @@ class Verdict:
 
 class RoundError(ValueError):
     """A research round broke the two-file contract or gave no verdict."""
+
+
+def policy_filename_for(policy_path: Path) -> str:
+    """Policy work-dir filename inferred from the baseline suffix."""
+    return TS_POLICY_FILENAME if policy_path.suffix == ".ts" else POLICY_FILENAME
 
 
 def parse_verdict(log_text: str) -> Verdict:
@@ -76,7 +82,12 @@ def changed_files(before: dict[str, str], after: dict[str, str]) -> dict[str, st
     return changed
 
 
-def check_two_file_rule(work_dir: Path, before: dict[str, str], log_before: str) -> str:
+def check_two_file_rule(
+    work_dir: Path,
+    before: dict[str, str],
+    log_before: str,
+    policy_filename: str = POLICY_FILENAME,
+) -> str:
     """Enforce the contract; return the agent's appended log section.
 
     Raises :class:`RoundError` when any file besides the policy script
@@ -84,7 +95,7 @@ def check_two_file_rule(work_dir: Path, before: dict[str, str], log_before: str)
     """
     after = snapshot_files(work_dir)
     changed = changed_files(before, after)
-    allowed = {POLICY_FILENAME, LOG_FILENAME}
+    allowed = {policy_filename, LOG_FILENAME}
     violations = {rel: kind for rel, kind in changed.items() if rel not in allowed}
     if violations:
         detail = ", ".join(
