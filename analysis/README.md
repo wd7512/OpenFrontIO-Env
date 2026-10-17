@@ -3,6 +3,11 @@
 Empirical study of optimal attack ratios for long-term territory growth,
 run against the real OpenFrontIO engine (not a simulation).
 
+> Latest: [The Box single-entity baseline](box_single_entity_baseline.md) —
+> minimum win time **7,811 ticks** at (threshold=0.36, ratio=0.005), derived
+> analytically (`analytical_model.py`), verified in-game, with 4 nation
+> reference runs. Reproduce with `sweep_single_entity.py`.
+
 ## Setup
 
 - **Engine**: OpenFrontIO v577819ba, built via `engine/npm run build`
