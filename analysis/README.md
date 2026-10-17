@@ -146,3 +146,51 @@ Terrain sweep uses alps compact map with random spawn.
 These results apply to **pure expansion into empty land with no opponents, no economy, no combat**.
 Real-game optimal ratios likely shift based on threat level, terrain, gold income, and opponent proximity.
 The most transferable finding: **don't delay expansion** — tile growth drives max troops, which drives regen.
+
+## The Box Map (2048×2048, 4,194,304 tiles, all land)
+
+### Optimal Ratio Sweep
+
+| Ratio | Ticks to Full Map |
+|-------|-------------------|
+| 5%    | 12,352 |
+| **10%** | **9,152** |
+| 15%   | 9,302 |
+| 20%   | 11,202 |
+| 25%   | 15,202 |
+| 30%   | 22,002 |
+| 40%   | 48,202 |
+
+**Optimal: 10%** (vs 25% on plains). Larger map → bigger border → each attack costs more troops → lower ratio preserves regen.
+
+### Decision Interval Sweep
+
+| Interval (D) | Ticks to Full Map |
+|-------------|-------------------|
+| 1 tick  | 100,000 (stalled) |
+| 5 ticks | 100,000 (stalled) |
+| 10 ticks | 52,362 |
+| 25 ticks | 10,652 |
+| **50 ticks** | **9,152** |
+
+**Optimal: 50 ticks** (vs 1 tick on plains). Larger border → more troops spent per attack → need longer regen gaps.
+
+### Threshold Sweep (10% ratio, 50-tick)
+
+All thresholds 0-25% tie at 9,152 ticks. Threshold doesn't matter on large maps.
+
+### Full Grid (50-tick decisions)
+
+Best: threshold 0%, ratio 10% → 9,152 ticks (915 seconds game time).
+
+### Key Insight: Map Size Inverts the Strategy
+
+| Factor | Small Map (plains 200×200) | Large Map (The Box 2048×2048) |
+|--------|---------------------------|-------------------------------|
+| Optimal ratio | 25% | 10% |
+| Optimal threshold | 0% (or 25% for 1-tick) | 0% (any threshold ties) |
+| Optimal interval | 1 tick | 50 ticks |
+| Ticks to full map | 852 (40K tiles) | 9,152 (4.2M tiles) |
+| Tiles/tick (avg) | ~47 | ~458 |
+
+On small maps, frequent micro-decisions with high ratios win. On large maps, less frequent decisions with conservative ratios win because the border is so large that each attack is expensive.
