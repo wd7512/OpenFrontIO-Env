@@ -194,3 +194,31 @@ Best: threshold 0%, ratio 10% → 9,152 ticks (915 seconds game time).
 | Tiles/tick (avg) | ~47 | ~458 |
 
 On small maps, frequent micro-decisions with high ratios win. On large maps, less frequent decisions with conservative ratios win because the border is so large that each attack is expensive.
+
+## The Box Map — 1-Tick Decisions (forced)
+
+With decision interval fixed at 1 tick, optimal threshold and ratio change:
+
+### 1-Tick Grid (The Box)
+
+| Threshold | 5% | 8% | 10% | 12% | 15% |
+|-----------|-----|-----|------|------|------|
+| 0%        | stalled | stalled | stalled | stalled | stalled |
+| 30%       | 9,091 | 9,115 | 9,143 | 9,176 | — |
+| 40%       | 8,915 | 8,913 | **8,909** | 8,929 | — |
+| 50%       | 9,360 | 9,309 | 9,278 | 9,259 | — |
+
+**Optimal: threshold 40%, ratio 10% → 8,909 ticks**
+
+This beats 50-tick decisions (9,152 ticks) because the 1-tick cadence with a 40% threshold protects regen while allowing better adaptation.
+
+### Combined Results (The Box, full map takeover)
+
+| Strategy | Ticks |
+|----------|-------|
+| 50-tick, 0% thresh, 10% ratio | 9,152 |
+| **1-tick, 40% thresh, 10% ratio** | **8,909** |
+| 1-tick, 40% thresh, 8% ratio | 8,913 |
+| 1-tick, 40% thresh, 5% ratio | 8,915 |
+
+**Best overall: 1-tick, 40% threshold, 10% ratio → 8,909 ticks (891s game time)**
