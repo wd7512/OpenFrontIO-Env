@@ -230,11 +230,12 @@ class EngineWorker:
         """Queue one fight order for an externally-driven nation.
 
         ``nation`` is the 0-based nation index (must be ``"external"``);
-        ``target`` is a ``"nation-N"`` 1-based label (self-targets rejected);
-        ``troops`` follows the production float contract (non-negative,
-        clamped to owner troops at execution). The order is drained by the
-        execution on a later tick and taped into the record, so replays
-        reproduce it bit-for-bit. Validated worker-side against live state.
+        ``target`` is a ``"nation-N"`` 1-based label (self-targets rejected)
+        or a ``"tribe-N"`` roster label (tribe farming); ``troops`` follows
+        the production float contract (non-negative, clamped to owner
+        troops at execution). The order is drained by the execution on a
+        later tick and taped into the record, so replays reproduce it
+        bit-for-bit. Validated worker-side against live state.
         """
         return self._request(
             {
@@ -250,8 +251,13 @@ class EngineWorker:
 
         ``nation`` is the 0-based nation index (any behavior). Result has
         tick/inSpawnPhase/winner, a ``me`` block (name/tiles/troops/
-        maxTroops/alive/incomingTroops/outgoingAttacks) and an ``others``
-        list (one entry per other nation). No game mutation.
+        maxTroops/alive/incomingTroops/outgoingAttacks), an ``others``
+        list (one entry per other nation), a ``tribes`` list (stable
+        ``tribe-N`` roster: id/name/troops/tiles/alive/bordersMe/enclosed/
+        incomingTroops, where ``enclosed`` means every border-tile
+        neighbor is ours) and a ``tribeGraph`` adjacency map (roster label
+        to sorted adjacent roster labels) for peel-order targeting.
+        No game mutation.
         """
         return self._request({"cmd": "nation_observe", "nation": nation})
 

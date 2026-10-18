@@ -1,0 +1,101 @@
+{
+ "created": "2026-10-18T18:51:45.861973+00:00",
+ "episodes": [
+  {
+   "seed": "BOX-TRIBE2-A",
+   "tribes": 100,
+   "policy": "farm-p4",
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 5723,
+   "orders": 100,
+   "annex_pokes": 0,
+   "tribes_dead": 69,
+   "tiles": 3401385
+  },
+  {
+   "seed": "BOX-TRIBE2-A",
+   "tribes": 100,
+   "policy": "production",
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 5983,
+   "orders": 0,
+   "annex_pokes": 0,
+   "tribes_dead": 73,
+   "tiles": 3490645
+  },
+  {
+   "seed": "BOX-TRIBE2-B",
+   "tribes": 100,
+   "policy": "farm-p4",
+   "winner": "Suspicious Ally",
+   "agent_won": true,
+   "ticks": 5775,
+   "orders": 106,
+   "annex_pokes": 0,
+   "tribes_dead": 75,
+   "tiles": 3392461
+  },
+  {
+   "seed": "BOX-TRIBE2-B",
+   "tribes": 100,
+   "policy": "production",
+   "winner": "Suspicious Ally",
+   "agent_won": true,
+   "ticks": 6087,
+   "orders": 0,
+   "annex_pokes": 0,
+   "tribes_dead": 73,
+   "tiles": 3461235
+  },
+  {
+   "seed": "BOX-TRIBE2-C",
+   "tribes": 100,
+   "policy": "farm-p4",
+   "winner": "Fullsender",
+   "agent_won": true,
+   "ticks": 5879,
+   "orders": 115,
+   "annex_pokes": 0,
+   "tribes_dead": 75,
+   "tiles": 3369062
+  },
+  {
+   "seed": "BOX-TRIBE2-C",
+   "tribes": 100,
+   "policy": "production",
+   "winner": "Fullsender",
+   "agent_won": true,
+   "ticks": 6503,
+   "orders": 0,
+   "annex_pokes": 0,
+   "tribes_dead": 72,
+   "tiles": 3363750
+  },
+  {
+   "seed": "BOX-TRIBE2-D",
+   "tribes": 100,
+   "policy": "farm-p4",
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 5671,
+   "orders": 102,
+   "annex_pokes": 0,
+   "tribes_dead": 68,
+   "tiles": 3374675
+  },
+  {
+   "seed": "BOX-TRIBE2-D",
+   "tribes": 100,
+   "policy": "production",
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 5931,
+   "orders": 0,
+   "annex_pokes": 0,
+   "tribes_dead": 69,
+   "tiles": 3361229
+  }
+ ]
+}

@@ -1,8 +1,9 @@
-"""Analytical model of solo expansion on The Box.
+"""Analytical model of solo expansion on The Box (phase 1) plus the
+tribe-farming kill model (phase 2).
 
 Derives the game from the exact engine equations (no game grid search),
 verifies each equation against measured engine behaviour, then solves for
-the optimal (threshold, ratio) expansion policy.
+the optimal policies.
 
 Engine sources (vendor/OpenFrontIO, pinned engine):
 - troop regen / max troops:  core/configuration/Config.ts
@@ -12,6 +13,16 @@ Engine sources (vendor/OpenFrontIO, pinned engine):
 - per-tick conquest loop:    core/execution/AttackExecution.ts ``tick``
 - win rule:                  core/execution/WinCheckExecution.ts
   (FFA: tile share > ``percentageTilesOwnedToWin`` = 80%)
+- player-vs-player combat:   core/configuration/Config.ts ``attackLogic``
+  (player branch) + ``attackTilesPerTick`` (player branch)
+- production bot farming:    core/execution/utils/AiAttackBehavior.ts
+  ``attackBots`` / ``calculateBotAttackTroops`` / ``isAttackTooWeak`` /
+  ``troopSendCap`` + core/execution/NationExecution.ts ratios/cadence
+- instant flip + annex:      core/execution/AttackExecution.ts
+  ``handleDeadDefender`` (<100 tiles -> conquerPlayer) +
+  core/execution/PlayerExecution.ts ``removeClusters`` (surrounded
+  clusters deleted; largest cluster deleted when surrounded by a single
+  non-friendly player)
 
 The Box is uniformly Plains (map.bin is a single repeated byte 0x82:
 land bit set, magnitude 2 < 10 -> Plains, GameMap.ts ``terrainType``),
@@ -316,6 +327,142 @@ def find_optimum(
     return {"threshold": best[0], "ratio": best[1], "crossing_tick": best[2]}
 
 
+# ---------------------------------------------------------------------------
+# Phase 2: tribe-farming kill model (nation vs bot, Box plains)
+# ---------------------------------------------------------------------------
+# Player-branch combat (Config.attackLogic, Plains, no defense posts, no
+# fallout; nation-vs-bot mag discount 0.7 -> MAG_PVP = 56). Debuff factors
+# (large-defender sigmoid, large-attacker bonus) default to 1.0 = upper
+# bound on cost; both equal 1.0 below 100k attacker tiles on the Box.
+MAG_PVP = MAG_PLAINS * 0.7  # 56.0
+# Production bot-farming constants (AiAttackBehavior / NationExecution):
+FARM_FORCE_MULT = 4.0  # tranche = 4x target troops (calculateBotAttackTroops)
+FARM_SKIP_MULT = 2.0  # skip front if budget < 2x target
+FARM_RESERVE = 0.35  # spend at most troops - 0.35 * cap (reserveRatio 0.30-0.40)
+FARM_PARALLEL = 3  # Hard bot-attack parallelism (getBotAttackMaxParallelism)
+FARM_CADENCE = 52  # Hard attack loop 45-60 ticks; phase-1 decision step
+FARM_RETAIN = 0.75  # keep >= 75% of strongest non-bot neighbor (troopSendCap)
+FLIP_TILES = 100.0  # <100 tiles -> instant full conquest (handleDeadDefender)
+# Bot economy (startManpower / maxTroops / troopIncreaseRate, Bot branch):
+BOT_START_TROOPS = 10000.0
+BOT_MAX_MULT = 1.0 / 3.0
+BOT_REGEN_MULT = 0.5
+
+
+def _within(x: float, lo: float, hi: float) -> float:
+    return min(hi, max(lo, x))
+
+
+def pvp_tiles_per_tick(
+    attack_troops: float, defender_troops: float, border: float
+) -> float:
+    """Config.attackTilesPerTick, player branch: pacing budget per game tick."""
+    if defender_troops <= 0:
+        return 0.5 * border * 3.0
+    ratio = attack_troops / defender_troops
+    return _within(10.0 * ratio, 0.01, 0.5) * border * 3.0
+
+
+def pvp_cost_per_tile(
+    attack_troops: float, defender_troops: float, debuff: float = 1.0
+) -> float:
+    """Config.attackLogic tilesPerTickUsed, player branch, Box plains."""
+    if defender_troops <= 0 or attack_troops <= 0:
+        return SPEED_PLAINS * debuff
+    ratio = attack_troops / defender_troops
+    return _within(1.0 / (5.0 * ratio), 0.2, 1.5) * SPEED_PLAINS * debuff
+
+
+def pvp_attacker_loss_per_tile(
+    attack_troops: float,
+    defender_troops: float,
+    density: float,
+    debuff: float = 1.0,
+) -> float:
+    """Config.attackLogic attackerTroopLoss, player branch, Box plains,
+    nation-vs-bot: 0.6 * within(D/A, 0.6, 2) * MAG_PVP * 0.8 * debuff
+    + 0.4 * 1.3 * density * (MAG_PVP / 100)."""
+    if attack_troops <= 0:
+        return float("inf")
+    ratio = defender_troops / attack_troops
+    current = _within(ratio, 0.6, 2.0) * MAG_PVP * 0.8 * debuff
+    alt = 1.3 * density * (MAG_PVP / 100.0)
+    return 0.6 * current + 0.4 * alt
+
+
+def siege_tiles_per_tick(
+    attack_troops: float,
+    defender_troops: float,
+    border: float,
+    debuff: float = 1.0,
+) -> float:
+    """Conquered tiles per game tick: pacing budget divided by per-tile cost."""
+    pacing = pvp_tiles_per_tick(attack_troops, defender_troops, border)
+    cost = pvp_cost_per_tile(attack_troops, defender_troops, debuff)
+    return pacing / cost if cost > 0 else 0.0
+
+
+def siege_ticks(
+    tribe_tiles: float,
+    attack_troops: float,
+    defender_troops: float,
+    border: float,
+    debuff: float = 1.0,
+) -> float:
+    """Ticks to shrink a tribe to the <100-tile instant-flip line."""
+    rate = siege_tiles_per_tick(attack_troops, defender_troops, border, debuff)
+    if rate <= 0:
+        return float("inf")
+    return max(0.0, tribe_tiles - FLIP_TILES) / rate
+
+
+def bot_regen(troops: float, tiles: float) -> float:
+    """Tribe troop regen per tick (half rate, one-third cap)."""
+    cap = max_troops(tiles) * BOT_MAX_MULT
+    if troops >= cap:
+        return 0.0
+    return (10 + troops**0.73 / 4) * (1 - troops / cap) * BOT_REGEN_MULT
+
+
+def kill_completes(
+    attack_troops: float,
+    defender_troops: float,
+    tribe_tiles: float,
+    border: float,
+) -> bool:
+    """A siege finishes iff defender-pool damage outruns defender regen;
+    otherwise it stalls forever and the sent troops are wasted. Damage per
+    tick = density * conquered tiles per tick."""
+    if tribe_tiles <= 0:
+        return False
+    density = defender_troops / tribe_tiles
+    damage = density * siege_tiles_per_tick(attack_troops, defender_troops, border)
+    return damage > bot_regen(defender_troops, tribe_tiles)
+
+
+def farm_tranches(
+    my_troops: float,
+    my_cap: float,
+    targets: list[tuple[str, float]],
+    reserve: float = FARM_RESERVE,
+    retain: float = 0.0,
+    parallel: int = FARM_PARALLEL,
+) -> list[tuple[str, float]]:
+    """Production calculateBotAttackTroops per front (density order assumed
+    upstream): send min(4x target, budget), skip fronts below 2x target.
+    ``targets`` are (label, troops) in attack order; ``retain`` is the
+    75%-of-strongest-nation-neighbor floor (0 in a pure race)."""
+    budget = min(my_troops - reserve * my_cap, my_troops - retain)
+    sends: list[tuple[str, float]] = []
+    for label, target_troops in targets[:parallel]:
+        send = min(FARM_FORCE_MULT * target_troops, budget)
+        if send < FARM_SKIP_MULT * target_troops or send < 1:
+            continue
+        sends.append((label, send))
+        budget -= send
+    return sends
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info(
@@ -339,6 +486,12 @@ def main() -> None:
         opt50["threshold"],
         opt50["ratio"],
         opt50["crossing_tick"],
+    )
+    logger.info(
+        "farm-p4 check: siege(10000 tiles, A=40000 vs D=10000, front=300) "
+        "= %.0f ticks; kill completes: %s",
+        siege_ticks(10000.0, 40000.0, 10000.0, 300.0),
+        kill_completes(40000.0, 10000.0, 10000.0, 300.0),
     )
 
 

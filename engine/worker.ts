@@ -292,6 +292,51 @@ interface NationObs {
     bordersMe: boolean;
     incomingTroops: number;
   }[];
+  // Tribe roster for the farming phase: stable 1-based "tribe-N" labels in
+  // snapshot order, plus the tribe-tribe adjacency graph for peel-order
+  // targeting (annex-ready tribes first, then front-minimizing kills).
+  // `enclosed` mirrors the engine's surround test (PlayerExecution):
+  // every border-tile neighbor is ours (no TN, water, edge, or other
+  // players) — enclosed tribes die to a token poke via cluster deletion
+  // plus the <100-tile flip, so they sort ahead of density order.
+  tribes: {
+    id: string;
+    name: string;
+    troops: number;
+    tiles: number;
+    alive: boolean;
+    bordersMe: boolean;
+    enclosed: boolean;
+    incomingTroops: number;
+  }[];
+  tribeGraph: Record<string, string[]>;
+}
+
+// Annex test mirroring the engine's surround rule (PlayerExecution
+// surroundedBySamePlayer/isSurrounded): a tribe is enclosed by `me` when
+// every neighbor of every border tile is owned by `me` — no neutral land,
+// water, map edge, or other players. Only border tiles are scanned (not
+// the full tile set): exact except pathological map-corner pockets, where
+// the consequence is just a token poke that sieges normally.
+function isEnclosedBy(game: Game, me: Player, tribe: Player): boolean {
+  if (tribe.numTilesOwned() === 0) {
+    return false;
+  }
+  const map = game.map();
+  const myID = me.smallID();
+  const nbuf: number[] = [0, 0, 0, 0];
+  for (const tile of tribe.borderTiles()) {
+    if (map.isOnEdgeOfMap(tile) || map.isOceanShore(tile)) {
+      return false;
+    }
+    const n = map.neighbors4(tile, nbuf);
+    for (let i = 0; i < n; i++) {
+      if (map.ownerID(nbuf[i]) !== myID) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 class EngineSession {
@@ -946,7 +991,7 @@ class EngineSession {
     // The order is queued (NOT executed immediately) and taped into the
     // record; the execution drains it on a later tick through the same rule
     // replays use, so live and replay agree by construction. Fail-closed:
-    // non-external nations, self-targets, non-nation targets and dead
+    // non-external nations, self-targets, unknown targets and dead
     // owners are rejected before anything is queued or taped.
     const game = this.requireGame();
     if (
@@ -968,8 +1013,11 @@ class EngineSession {
     if (!owner.isAlive()) {
       throw new Error(`invalid nation: nation ${nation} is not alive`);
     }
-    // v0 scope is nation-vs-nation fighting (the autopilot owns expansion);
-    // "nation-N" reuses the 1-based harness label convention.
+    // Tribe farming (phase 2): "tribe-N" reuses the 1-based roster
+    // numbering from the snapshot's tribe_list. Tribes can spawn late, so
+    // refresh the roster before resolving. The taped order stores the raw
+    // targetID, so tribe orders replay through the same preload path as
+    // nation orders — no bridge change.
     let targetID: string;
     let targetName: string;
     if (typeof target === "string" && /^nation-\d+$/.test(target)) {
@@ -986,9 +1034,21 @@ class EngineSession {
       targetName = game.hasPlayer(targetID)
         ? game.player(targetID).name()
         : target;
+    } else if (typeof target === "string" && /^tribe-\d+$/.test(target)) {
+      this.refreshTribeIDs(game);
+      const index = Number.parseInt(target.slice("tribe-".length), 10) - 1;
+      if (index < 0 || index >= this.tribeIDs.length) {
+        throw new Error(
+          `invalid order target: no such tribe ${JSON.stringify(target)}`,
+        );
+      }
+      targetID = this.tribeIDs[index];
+      targetName = game.hasPlayer(targetID)
+        ? game.player(targetID).name()
+        : target;
     } else {
       throw new Error(
-        `invalid order target: expected "nation-N", got ${JSON.stringify(target)}`,
+        `invalid order target: expected "nation-N" or "tribe-N", got ${JSON.stringify(target)}`,
       );
     }
     // Production troops contract (AttackIntentSchema float >= 0);
@@ -1033,8 +1093,63 @@ class EngineSession {
         `invalid nation: expected an integer in [0, ${this.nationIDs.length}), got ${JSON.stringify(nation)}`,
       );
     }
+    this.refreshTribeIDs(game);
     const me = game.player(this.nationIDs[nation]);
     const winner = game.getWinner();
+    const roster = this.tribeIDs.map((id, index) => ({
+      label: `tribe-${index + 1}`,
+      id,
+    }));
+    const tribes = roster.map(({ label, id }) => {
+      if (!game.hasPlayer(id)) {
+        return {
+          id: label,
+          name: "fallen tribe",
+          troops: 0,
+          tiles: 0,
+          alive: false,
+          bordersMe: false,
+          enclosed: false,
+          incomingTroops: 0,
+        };
+      }
+      const tribe = game.player(id);
+      const alive = tribe.isAlive();
+      const bordersMe = alive && me.sharesBorderWith(tribe);
+      return {
+        id: label,
+        name: tribe.name(),
+        troops: tribe.troops(),
+        tiles: tribe.numTilesOwned(),
+        alive,
+        bordersMe,
+        enclosed: bordersMe && isEnclosedBy(game, me, tribe),
+        incomingTroops: tribe
+          .incomingAttacks()
+          .filter((attack) => !attack.retreating())
+          .reduce((sum, attack) => sum + attack.troops(), 0),
+      };
+    });
+    // Tribe-tribe adjacency over the stable roster labels. Pairwise border
+    // checks (n=20: 190 pairs; n=100: ~5k) — cheap at small N, re-measure
+    // before scaling to 400-tribe arenas.
+    const tribeGraph: Record<string, string[]> = {};
+    for (const { label } of roster) {
+      tribeGraph[label] = [];
+    }
+    const live = roster.filter(
+      ({ id }) => game.hasPlayer(id) && game.player(id).isAlive(),
+    );
+    for (let i = 0; i < live.length; i++) {
+      for (let j = i + 1; j < live.length; j++) {
+        const a = game.player(live[i].id);
+        const b = game.player(live[j].id);
+        if (a.sharesBorderWith(b)) {
+          tribeGraph[live[i].label].push(live[j].label);
+          tribeGraph[live[j].label].push(live[i].label);
+        }
+      }
+    }
     return {
       tick: game.ticks(),
       inSpawnPhase: game.inSpawnPhase(),
@@ -1074,6 +1189,8 @@ class EngineSession {
               .reduce((sum, attack) => sum + attack.troops(), 0),
           };
         }),
+      tribes,
+      tribeGraph,
     };
   }
 

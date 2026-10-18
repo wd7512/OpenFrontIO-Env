@@ -1,0 +1,53 @@
+{
+ "created": "2026-10-18T18:53:40.071442+00:00",
+ "episodes": [
+  {
+   "seed": "BOX-TR2-A",
+   "tribes": 400,
+   "policy": "farm-p4",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 7023,
+   "orders": 248,
+   "annex_pokes": 0,
+   "tribes_dead": 288,
+   "tiles": 3372979
+  },
+  {
+   "seed": "BOX-TR2-A",
+   "tribes": 400,
+   "policy": "production",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 7335,
+   "orders": 0,
+   "annex_pokes": 0,
+   "tribes_dead": 290,
+   "tiles": 3372173
+  },
+  {
+   "seed": "BOX-TR2-B",
+   "tribes": 400,
+   "policy": "farm-p4",
+   "winner": "Train Trader",
+   "agent_won": true,
+   "ticks": 7127,
+   "orders": 260,
+   "annex_pokes": 0,
+   "tribes_dead": 294,
+   "tiles": 3380550
+  },
+  {
+   "seed": "BOX-TR2-B",
+   "tribes": 400,
+   "policy": "production",
+   "winner": "Train Trader",
+   "agent_won": true,
+   "ticks": 7439,
+   "orders": 0,
+   "annex_pokes": 0,
+   "tribes_dead": 289,
+   "tiles": 3374476
+  }
+ ]
+}

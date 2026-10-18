@@ -40,7 +40,9 @@ REWARD_SCALE = 1000.0
 WIN_BONUS = 5000.0
 LOSS_PENALTY = -5000.0
 
-OBS_KEYS = frozenset({"tick", "inSpawnPhase", "winner", "me", "others"})
+OBS_KEYS = frozenset(
+    {"tick", "inSpawnPhase", "winner", "me", "others", "tribes", "tribeGraph"}
+)
 ME_KEYS = frozenset(
     {
         "name",
@@ -54,6 +56,18 @@ ME_KEYS = frozenset(
 )
 OTHER_KEYS = frozenset(
     {"name", "tiles", "troops", "alive", "bordersMe", "incomingTroops"}
+)
+TRIBE_KEYS = frozenset(
+    {
+        "id",
+        "name",
+        "troops",
+        "tiles",
+        "alive",
+        "bordersMe",
+        "enclosed",
+        "incomingTroops",
+    }
 )
 
 
