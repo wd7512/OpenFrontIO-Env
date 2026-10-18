@@ -86,6 +86,27 @@ beats production at the farming *phase* on every tested map, ties it at
 the *killing* skill by construction, and the remaining gap is
 quantified and assigned to phase 4, not hand-waved.
 
+## Stage scoreboard: the two agents vs Hard
+
+The two agents are not two different players — farm-p4 *contains* the
+expansion agent (same IH autopilot body; verified bit-identical without
+tribes: tribeless BOX-BARE-A, both win at exactly 7,959 ticks with 0
+orders). The ladder is cumulative: each phase adds a skill without
+regressing the previous one. Hard is a different shape at every stage:
+
+| Stage | IH (expansion agent) | farm-p4 | Hard |
+|---|---|---|---|
+| Opening (~260 ticks, same seed/spawn) | 2,400 tiles (gated rhythm) | same as IH (0 orders pre-contact) | **5,746 tiles** (Tick-1 burst at 80–90%) — wins the opening |
+| Sustained expansion (tribeless race) | **7,959**, beats Hard (phase-1 paired 6/6, +1,685) | identical to IH (verified) | 9,155 — loses the long game |
+| Farming (tribes present) | 0 wins everywhere, dies (N=400: dead at 86,401) | **beats Hard everywhere**; same kills, faster races | parity kills, slower races |
+
+Read across: Hard wins the opening, loses the race, ties the kills.
+IH wins the race, dies to contact. farm-p4 keeps IH's race, adds
+contact, and the contact costs nothing when there is nothing to fight
+(0 orders, identical tape). The open question is no longer "which
+agent" — it is which *phase* the next map demands, and phases 3+ are
+still Hard's territory (nation fighting, then economy).
+
 ## What's next
 
 - Phase 3 (nation fighting): same recipe — read production's
