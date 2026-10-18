@@ -5,9 +5,9 @@ run against the real OpenFrontIO engine (not a simulation).
 
 > Latest: [The Box single-entity baseline](box_single_entity_baseline.md) —
 > minimum win time **7,811 ticks** at (threshold=0.36, ratio=0.005), derived
-> analytically (`analytical_model.py`), verified in-game, with a 50-tick
-> (5s) decision variant (7,902) and 4 nation reference runs. Reproduce with
-> `sweep_single_entity.py`.
+> analytically (`analytical_model.py`), verified in-game, with 20-tick
+> (7,822) and 50-tick (7,902) decision variants and 4 nation reference
+> runs. Reproduce with `sweep_single_entity.py`.
 
 ## Setup
 

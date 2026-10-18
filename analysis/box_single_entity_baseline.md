@@ -11,26 +11,42 @@ FFA rule: tile share > 80% of land
 - Reproduce: `uv run python analysis/sweep_single_entity.py --raw /tmp/replay_raw`
   then `uv run python scripts/serve_replays.py --raw /tmp/replay_raw`.
 
-## The 6 strategies
+## The 7 strategies
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
-| 1 | Agent solo, 1-tick decisions, send 0.5% of troops whenever troops >= 36% of max | OF000002 | 7,803 | **7,811** | Agent |
-| 2 | Agent solo, 50-tick (5s) decisions, send 12% of troops every cycle, no gate | OF000001 | 7,902 | 7,902 | Agent |
-| 3 | 1 nation, Easy (human idle) | OF000003 | — | 15,553 | Non-peaceful Bot |
-| 4 | 1 nation, Medium (human idle) | OF000006 | — | 11,503 | Non-peaceful Bot |
-| 5 | 1 nation, Hard (human idle) | OF000004 | — | 9,153 | Non-peaceful Bot |
-| 6 | 1 nation, Impossible (human idle) | OF000005 | — | 7,703 | Non-peaceful Bot |
+| 1 | Agent solo, 1-tick decisions, send 0.5% of troops whenever troops >= 36% of max | OF000003 | 7,803 | **7,811** | Agent |
+| 2 | Agent solo, 20-tick (2s) decisions, send 6.5% whenever troops >= 37.5% of max | OF000001 | 7,822 | 7,822 | Agent |
+| 3 | Agent solo, 50-tick (5s) decisions, send 12% of troops every cycle, no gate | OF000002 | 7,902 | 7,902 | Agent |
+| 4 | 1 nation, Easy (human idle) | OF000004 | — | 15,553 | Non-peaceful Bot |
+| 5 | 1 nation, Medium (human idle) | OF000007 | — | 11,503 | Non-peaceful Bot |
+| 6 | 1 nation, Hard (human idle) | OF000005 | — | 9,153 | Non-peaceful Bot |
+| 7 | 1 nation, Impossible (human idle) | OF000006 | — | 7,703 | Non-peaceful Bot |
 
 Result: the minimum is **7,811 ticks (7,803 to cross 80%)** with
-(threshold=0.36, ratio=0.005) at 1-tick cadence. The 50-tick variant needs
-7,902 ticks — coarser decisions cost ~90 ticks. Hard is the nation most
-comparable to the
+(threshold=0.36, ratio=0.005) at 1-tick cadence. Coarser decisions cost
+more: 2s cadence needs 7,822 ticks, 5s cadence 7,902. Hard is the nation
+most comparable to the
 agent (identical economy: 25,000 start, 1.0x max, 1.0x regen —
 `Config.ts:856-943`); it takes 9,153 ticks because the built-in nation AI
 builds structures and paces its attacks instead of expanding every tick.
 
-## The 50-tick (5s) variant
+## Cadence ladder (agent variants)
+
+| Decision interval | Params (threshold, ratio) | Model crossing | Game declared |
+|---|---|---|---|
+| 1 tick (0.1s) | (0.36, 0.005), gated | 7,801 | **7,811** |
+| 20 ticks (2s) | (0.375, 0.065), gated | 7,806 | 7,822 |
+| 50 ticks (5s) | (0.0, 0.12), ungated | 7,858 | 7,902 |
+
+Finer cadence dominates monotonically. Gating stays viable at 2s (22% of
+decisions gated off, war-chest buffer covers the misses; model error ±16),
+but breaks down at 5s (missed gates idle the front for full cycles; model
+error ±90 — see below). The ungated robust policy (0, 0.05) was also
+measured at 2s: 7,842, confirming the gated optimum is genuinely better
+there.
+
+## The 20-tick (2s) variant
 
 Same policy class with decisions every 50 ticks (`interval=50` in
 `analytical_model.py`). Two findings:
