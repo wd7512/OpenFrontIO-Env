@@ -119,7 +119,7 @@
       "winner": "Agent"
     },
     {
-      "name": "box-hardbot-ours-A",
+      "name": "box-improved-hard-A",
       "threshold": 0.38,
       "ratio": 0.15,
       "interval": 52,
@@ -131,7 +131,7 @@
       "winner": "Agent"
     },
     {
-      "name": "box-hardbot-ours-B",
+      "name": "box-improved-hard-B",
       "threshold": 0.38,
       "ratio": 0.15,
       "interval": 52,
@@ -143,7 +143,7 @@
       "winner": "Agent"
     },
     {
-      "name": "box-hardbot-ours-C",
+      "name": "box-improved-hard-C",
       "threshold": 0.38,
       "ratio": 0.15,
       "interval": 52,

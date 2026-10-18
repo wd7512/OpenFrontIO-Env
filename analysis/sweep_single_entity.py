@@ -8,7 +8,7 @@ One entity per game (no competition), no units/structures:
     optimum — the raw gated optimizer spike is phase overfitting, i.e. it
     does not transfer in-game; see verify_optimum.py). 45/52/60-tick
     bracket the Hard nation decision cadence (attackRate = U{45..60}).
-  - hardbot-ours variants: the 52-tick optimum under bot-like conditions
+  - improved-hard variants: the 52-tick optimum under bot-like conditions
     (random spawn fixed per game_id, Hard cadence/economy) — the improved
     Hard bot; 3 seeds.
   - one nation at each difficulty (easy/medium/hard/impossible), human
@@ -83,14 +83,14 @@ AGENTS = {
     "box-agent-52tick": (0.38, 0.15, 52),
     "box-agent-60tick": (0.37, 0.18, 60),
 }
-# Hard-bot-with-our-thresholds variants: our 52-tick optimal policy
+# Improved-Hard bot variants: our 52-tick optimal policy
 # (0.38, 0.15) under bot-like conditions — random spawn (None) with a fixed
 # game_id per seed for reproducibility. Hard nation economy == human
 # economy, so the human slot with our decision logic IS the improved bot.
 HARDBOT_VARIANTS = {
-    "box-hardbot-ours-A": (0.38, 0.15, 52, None, "BOX-OURS-A"),
-    "box-hardbot-ours-B": (0.38, 0.15, 52, None, "BOX-OURS-B"),
-    "box-hardbot-ours-C": (0.38, 0.15, 52, None, "BOX-OURS-C"),
+    "box-improved-hard-A": (0.38, 0.15, 52, None, "BOX-OURS-A"),
+    "box-improved-hard-B": (0.38, 0.15, 52, None, "BOX-OURS-B"),
+    "box-improved-hard-C": (0.38, 0.15, 52, None, "BOX-OURS-C"),
 }
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 

@@ -12,7 +12,7 @@ FFA rule: tile share > 80% of land
 - Scope of the minimality claim: **within the threshold-ratio policy class**
   (send `ratio * troops` when `troops >= threshold * max`) at decision
   cadences 1–60 ticks. The 4 nation runs are reference points, not policies;
-  the 3 hardbot-ours runs are policies (our 52-tick optimum under bot-like
+  the 3 Improved-Hard runs are policies (our 52-tick optimum under bot-like
   random-spawn conditions).
 
 ## Reproduce
@@ -48,9 +48,9 @@ directly servable.
 | 7 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000006 | 7,859 | 7,861 | Agent |
 | 8 | Agent, 52-tick decisions, 15% whenever >= 38% of max | OF000007 | 7,825 | 7,831 | Agent |
 | 9 | Agent, 60-tick decisions, 18% whenever >= 37% of max | OF000008 | 7,881 | 7,891 | Agent |
-| 10 | Hard-bot-with-our-thresholds A: 52-tick (0.38, 0.15), random spawn | OF000010 | 7,908 | 7,911 | Agent |
-| 11 | Hard-bot-with-our-thresholds B: 52-tick (0.38, 0.15), random spawn | OF000011 | 7,889 | 7,891 | Agent |
-| 12 | Hard-bot-with-our-thresholds C: 52-tick (0.38, 0.15), random spawn | OF000012 | 7,909 | 7,911 | Agent |
+| 10 | Improved-Hard bot A: 52-tick (0.38, 0.15), random spawn | OF000010 | 7,908 | 7,911 | Agent |
+| 11 | Improved-Hard bot B: 52-tick (0.38, 0.15), random spawn | OF000011 | 7,889 | 7,891 | Agent |
+| 12 | Improved-Hard bot C: 52-tick (0.38, 0.15), random spawn | OF000012 | 7,909 | 7,911 | Agent |
 | 13 | 1 nation, Easy (human idle) | OF000013 | — | 15,551 | Non-peaceful Bot |
 | 14 | 1 nation, Medium (human idle) | OF000016 | — | 11,461 | Non-peaceful Bot |
 | 15 | 1 nation, Hard (human idle) | OF000014 | — | 9,151 | Non-peaceful Bot |
@@ -135,7 +135,7 @@ Single-draw nation times are noisy: Hard redraws attackRate/ratios per
 seeds (mean 9,886, range ±~1,100). The gap to our 52-tick 7,831 holds on
 every draw (minimum margin 1,070 ticks).
 
-## Did we improve the Hard game? Yes — the variant table
+## Did we improve the Hard game? Yes — the Improved-Hard bot
 
 `HARDBOT_VARIANTS` in `sweep_single_entity.py`: our 52-tick optimal policy
 (0.38, 0.15) played under bot-like conditions — random land spawn (fixed
@@ -154,6 +154,40 @@ variant spread is ±10 ticks vs the bot's ±1,100 — the threshold-ratio
 policy is nearly spawn-insensitive where the bot's randomized gates are
 not. The random spawn costs ~60–80 ticks vs center spawn (7,825/7,831),
 so most of the 7,831→9,151 gap is decision logic, not positioning.
+
+## Full comparison: every agent cadence vs every nation
+
+All 16 strategies ranked by declared win tick, with gaps to the human-
+economy best (7,811) and to the Hard bot (9,151). Watch every game at
+`http://localhost:8787` (replays OF000001–OF000016); open any replay in
+the client renderer via its Watch link.
+
+| Rank | Strategy | Declared | Δ vs best (7,811) | Δ vs Hard bot (9,151) |
+|---|---|---|---|---|
+| — | Impossible nation (1.25x/1.05x economy) | 7,691 | −120 (economy, not policy) | −1,460 |
+| 1 | Agent 1-tick (0.36, 0.005) | **7,811** | 0 | −1,340 |
+| 1 | Agent 10-tick (0.375, 0.05) | 7,811 | 0 (quantization tie) | −1,340 |
+| 1 | Agent 20-tick (0.375, 0.065) | 7,811 | 0 (quantization tie) | −1,340 |
+| 4 | Agent 30-tick (0.38, 0.095) | 7,821 | +10 | −1,330 |
+| 4 | Agent 40-tick (0.37, 0.115) | 7,821 | +10 | −1,330 |
+| 6 | Agent 52-tick (0.38, 0.15) | 7,831 | +20 | −1,320 |
+| 7 | Agent 45-tick (0.38, 0.15) | 7,851 | +40 | −1,300 |
+| 8 | Agent 50-tick (0, 0.12) ungated | 7,861 | +50 | −1,290 |
+| 9 | Agent 60-tick (0.37, 0.18) | 7,891 | +80 | −1,260 |
+| 9 | Improved-Hard B (random spawn) | 7,891 | +80 | −1,260 |
+| 11 | Improved-Hard A (random spawn) | 7,911 | +100 | −1,240 |
+| 11 | Improved-Hard C (random spawn) | 7,911 | +100 | −1,240 |
+| — | Hard nation bot (human economy) | 9,151 | +1,340 | 0 |
+| — | Medium nation (0.75x/0.95x) | 11,461 | +3,650 | +2,310 |
+| — | Easy nation (0.5x/0.9x) | 15,551 | +7,740 | +6,400 |
+
+Reading: every agent cadence — including the coarsest 60-tick and the
+random-spawn Improved-Hard games — beats every same-or-weaker-economy
+nation bot by 1,240+ ticks. The only entry ahead of the 1-tick minimum
+is Impossible, purely on economy (optimal play with its bonuses crosses
+at 6,556; §Nation comparison). Within human economy, the ranking is
+monotone in cadence except the 45/52-tick swap (win-check quantization:
+crossings 7,847 vs 7,825 declare 7,851 vs 7,831).
 
 Economy decomposition (model-only — the human player cannot take nation
 bonuses in-game; `NATION_ECONOMY` in `analytical_model.py`, optima logged
