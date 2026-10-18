@@ -149,14 +149,50 @@ contact. Each stage is a no-op below its trigger, so the stack equals phase
   for the opening; only a separate benchmark makes the two optima visible
   and composable.
 
-## Next: phases 3–7 as framework instances
+## Phase 3 — Nation fighting (3a benchmarked; optimum partially derived)
+
+**Arena (nesting: 0 rival ⇒ phase 2; 0 tribes ⇒ 3a).** The isolated scale
+3a, implemented in `sweep_duel.py`: Box, external nation (the phase-1/2
+autopilot body) vs one production Hard nation, 0 tribes, idle human. 3b
+(tribes + a rival — the strictly nested end-to-end) is next.
+**Metric:** do we win the world. **Gate:** beat Hard paired.
+
+**Result** (6 fresh seeds here + the 6 from `probe_fight.py` = 12 worlds):
+
+| policy | wins | mean win tick | orders |
+|---|---|---|---|
+| `expand` (IH, no fight) | 0/6 | — | 0 |
+| `raid` (0.15 / 52, retargeted at the rival) | **6/6** | 9,363 | 127–193 |
+| `p4` (raid only if the phase-2 kill model says the siege completes) | 0/6 | — | 0 |
+| `production` vs `production` (control) | 2/6 | — | 0 |
+
+Two findings:
+
+1. **IH is not a fighter.** Pure expansion loses every duel (0/12 across
+   both runs, and the phase-1 duels were 0/6 vs production): the proven
+   body must learn to fight. This is phase 3's reason to exist.
+2. **The phase-2 kill model does not transfer.** Its objective is to
+   annihilate a *stationary* defender pool (a bot). A duel is won on
+   *land* against a *mobile, expanding* rival. A straight port (`p4`)
+   fires **zero** orders — against a same-economy nation no 4× tranche
+   ever "completes" a siege in the model's sense — and loses 0/6. The
+   negative result is the finding: the objective must be re-derived for
+   the duel, not reused.
+
+**Empirical optimum (candidate derivation).** What wins is the *expansion*
+tranche retargeted: 0.15 every 52 ticks — the phase-1 rhythm, pointed at
+the rival (`raid`), 12/12 across both runs. It inherits the phase-1
+constraint (feed the front, keep the regen reserve); the target, not the
+shape, changes. A full derivation of the share needs a two-nation
+mean-field model (net land rate under mutual attack, a different objective
+from phase 2's single-siege model) — that is the open work for 3a, then 3b
+adds the tribe field back.
+
+## Next: phases 4–7 as framework instances
 
 Each phase starts by writing its benchmark (arena + metric + gate), then
 derives the optimum:
 
-- **3 Nation fighting.** Benchmark: paired duels vs Hard (metric: win rate
-  and margin). The opening's value gets tested here; the peel graph
-  transfers to targeting.
 - **4 Economy.** Needs `build_unit`/`upgrade_structure`; benchmark: troop-cap
   curve + first-city tick. The ~8-city gap measured at phase 2 is its
   starting metric.

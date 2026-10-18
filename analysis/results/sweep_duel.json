@@ -1,0 +1,246 @@
+{
+ "created": "2026-10-18T21:42:10.078725+00:00",
+ "tribes": 0,
+ "episodes": [
+  {
+   "seed": "BOX-DUEL-G",
+   "policy": "production",
+   "tribes": 0,
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 13783,
+   "orders": 0,
+   "final_tiles": 703638
+  },
+  {
+   "seed": "BOX-DUEL-G",
+   "policy": "expand",
+   "tribes": 0,
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 69007,
+   "orders": 0,
+   "final_tiles": 784168
+  },
+  {
+   "seed": "BOX-DUEL-G",
+   "policy": "raid",
+   "tribes": 0,
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 9519,
+   "orders": 130,
+   "final_tiles": 3368802
+  },
+  {
+   "seed": "BOX-DUEL-G",
+   "policy": "p4",
+   "tribes": 0,
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 69007,
+   "orders": 0,
+   "final_tiles": 784168
+  },
+  {
+   "seed": "BOX-DUEL-H",
+   "policy": "production",
+   "tribes": 0,
+   "winner": "Non-peaceful Bot",
+   "agent_won": false,
+   "ticks": 11391,
+   "orders": 0,
+   "final_tiles": 629112
+  },
+  {
+   "seed": "BOX-DUEL-H",
+   "policy": "expand",
+   "tribes": 0,
+   "winner": "Non-peaceful Bot",
+   "agent_won": false,
+   "ticks": 9987,
+   "orders": 0,
+   "final_tiles": 629630
+  },
+  {
+   "seed": "BOX-DUEL-H",
+   "policy": "raid",
+   "tribes": 0,
+   "winner": "Cage Liberator",
+   "agent_won": true,
+   "ticks": 8583,
+   "orders": 165,
+   "final_tiles": 3373746
+  },
+  {
+   "seed": "BOX-DUEL-H",
+   "policy": "p4",
+   "tribes": 0,
+   "winner": "Non-peaceful Bot",
+   "agent_won": false,
+   "ticks": 9987,
+   "orders": 0,
+   "final_tiles": 629630
+  },
+  {
+   "seed": "BOX-DUEL-I",
+   "policy": "production",
+   "tribes": 0,
+   "winner": "Nuke Thrower",
+   "agent_won": false,
+   "ticks": 13627,
+   "orders": 0,
+   "final_tiles": 815475
+  },
+  {
+   "seed": "BOX-DUEL-I",
+   "policy": "expand",
+   "tribes": 0,
+   "winner": "Nuke Thrower",
+   "agent_won": false,
+   "ticks": 12847,
+   "orders": 0,
+   "final_tiles": 807666
+  },
+  {
+   "seed": "BOX-DUEL-I",
+   "policy": "raid",
+   "tribes": 0,
+   "winner": "Punch Merchant",
+   "agent_won": true,
+   "ticks": 11443,
+   "orders": 193,
+   "final_tiles": 3372702
+  },
+  {
+   "seed": "BOX-DUEL-I",
+   "policy": "p4",
+   "tribes": 0,
+   "winner": "Nuke Thrower",
+   "agent_won": false,
+   "ticks": 12847,
+   "orders": 0,
+   "final_tiles": 807666
+  },
+  {
+   "seed": "BOX-DUEL-J",
+   "policy": "production",
+   "tribes": 0,
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 12639,
+   "orders": 0,
+   "final_tiles": 831770
+  },
+  {
+   "seed": "BOX-DUEL-J",
+   "policy": "expand",
+   "tribes": 0,
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 23975,
+   "orders": 0,
+   "final_tiles": 675316
+  },
+  {
+   "seed": "BOX-DUEL-J",
+   "policy": "raid",
+   "tribes": 0,
+   "winner": "Fullsender",
+   "agent_won": true,
+   "ticks": 8323,
+   "orders": 160,
+   "final_tiles": 3367409
+  },
+  {
+   "seed": "BOX-DUEL-J",
+   "policy": "p4",
+   "tribes": 0,
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 23975,
+   "orders": 0,
+   "final_tiles": 675316
+  },
+  {
+   "seed": "BOX-DUEL-K",
+   "policy": "production",
+   "tribes": 0,
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 16331,
+   "orders": 0,
+   "final_tiles": 3361194
+  },
+  {
+   "seed": "BOX-DUEL-K",
+   "policy": "expand",
+   "tribes": 0,
+   "winner": "Train Trader",
+   "agent_won": false,
+   "ticks": 10039,
+   "orders": 0,
+   "final_tiles": 742155
+  },
+  {
+   "seed": "BOX-DUEL-K",
+   "policy": "raid",
+   "tribes": 0,
+   "winner": "Box Fighter",
+   "agent_won": true,
+   "ticks": 9779,
+   "orders": 147,
+   "final_tiles": 3362370
+  },
+  {
+   "seed": "BOX-DUEL-K",
+   "policy": "p4",
+   "tribes": 0,
+   "winner": "Train Trader",
+   "agent_won": false,
+   "ticks": 10039,
+   "orders": 0,
+   "final_tiles": 742155
+  },
+  {
+   "seed": "BOX-DUEL-L",
+   "policy": "production",
+   "tribes": 0,
+   "winner": "Fullsender",
+   "agent_won": true,
+   "ticks": 14563,
+   "orders": 0,
+   "final_tiles": 3473816
+  },
+  {
+   "seed": "BOX-DUEL-L",
+   "policy": "expand",
+   "tribes": 0,
+   "winner": "Train Trader",
+   "agent_won": false,
+   "ticks": 72439,
+   "orders": 0,
+   "final_tiles": 754072
+  },
+  {
+   "seed": "BOX-DUEL-L",
+   "policy": "raid",
+   "tribes": 0,
+   "winner": "Fullsender",
+   "agent_won": true,
+   "ticks": 8531,
+   "orders": 127,
+   "final_tiles": 3381762
+  },
+  {
+   "seed": "BOX-DUEL-L",
+   "policy": "p4",
+   "tribes": 0,
+   "winner": "Train Trader",
+   "agent_won": false,
+   "ticks": 72439,
+   "orders": 0,
+   "final_tiles": 754072
+  }
+ ]
+}
