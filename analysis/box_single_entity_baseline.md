@@ -11,9 +11,9 @@ FFA rule: tile share > 80% of land
   and reproduced all results to the tick).
 - Scope of the minimality claim: **within the threshold-ratio policy class**
   (send `ratio * troops` when `troops >= threshold * max`) at decision
-  cadences 1–60 ticks. The 4 nation runs are reference points, not policies;
-  the 3 Improved-Hard runs are policies (our 52-tick optimum under bot-like
-  random-spawn conditions).
+  cadences 1–60 ticks. The 4 production-nation runs are reference points,
+  not policies; the 3 Improved-Hard runs are nations playing our policy
+  (new "improved-hard" difficulty: Hard economy, threshold-ratio behavior).
 
 ## Reproduce
 
@@ -48,13 +48,13 @@ directly servable.
 | 7 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000006 | 7,859 | 7,861 | Agent |
 | 8 | Agent, 52-tick decisions, 15% whenever >= 38% of max | OF000007 | 7,825 | 7,831 | Agent |
 | 9 | Agent, 60-tick decisions, 18% whenever >= 37% of max | OF000008 | 7,881 | 7,891 | Agent |
-| 10 | Improved-Hard bot A: 52-tick (0.38, 0.15), random spawn | OF000010 | 7,908 | 7,911 | Agent |
-| 11 | Improved-Hard bot B: 52-tick (0.38, 0.15), random spawn | OF000011 | 7,889 | 7,891 | Agent |
-| 12 | Improved-Hard bot C: 52-tick (0.38, 0.15), random spawn | OF000012 | 7,909 | 7,911 | Agent |
-| 13 | 1 nation, Easy (human idle) | OF000013 | — | 15,551 | Non-peaceful Bot |
-| 14 | 1 nation, Medium (human idle) | OF000016 | — | 11,461 | Non-peaceful Bot |
-| 15 | 1 nation, Hard (human idle) | OF000014 | — | 9,151 | Non-peaceful Bot |
-| 16 | 1 nation, Impossible (human idle) | OF000015 | — | 7,691 | Non-peaceful Bot |
+| 10 | 1 nation, Easy (human idle) | OF000010 | — | 15,551 | Non-peaceful Bot |
+| 11 | 1 nation, Hard (human idle) | OF000011 | — | 9,151 | Non-peaceful Bot |
+| 12 | 1 nation, Impossible (human idle) | OF000012 | — | 7,691 | Non-peaceful Bot |
+| 13 | 1 nation, Improved-Hard A (human idle) | OF000013 | — | 7,921 | Factory Builder |
+| 14 | 1 nation, Improved-Hard B (human idle) | OF000014 | — | 7,921 | Train Trader |
+| 15 | 1 nation, Improved-Hard C (human idle) | OF000015 | — | 7,921 | Evan The Dev |
+| 16 | 1 nation, Medium (human idle) | OF000016 | — | 11,461 | Non-peaceful Bot |
 
 Result: the minimum, within the policy class, is **7,811 ticks (7,803 to
 cross 80%)** with (threshold=0.36, ratio=0.005) at 1-tick cadence — no other
@@ -135,25 +135,33 @@ Single-draw nation times are noisy: Hard redraws attackRate/ratios per
 seeds (mean 9,886, range ±~1,100). The gap to our 52-tick 7,831 holds on
 every draw (minimum margin 1,070 ticks).
 
-## Did we improve the Hard game? Yes — the Improved-Hard bot
+## Did we improve the Hard game? Yes — the Improved-Hard nation
 
-`HARDBOT_VARIANTS` in `sweep_single_entity.py`: our 52-tick optimal policy
-(0.38, 0.15) played under bot-like conditions — random land spawn (fixed
-per `game_id`, so reproducible) at Hard cadence and Hard economy
-(identical to human). Three seeds:
+Improved-Hard is wired as a real nation difficulty, not a human-slot
+policy: `difficulty="improved-hard"` flows through the standard
+`EngineWorker.start → cmd:start → session.start` path; `engine/worker.ts`
+maps it to `Difficulty.Hard` (so every vendor economy read — start
+troops, max troops, regen — is Hard), but substitutes our
+`ImprovedHardExecution` (`engine/improvedHardBehavior.ts`, our code —
+vendor untouched, pin intact) for the vendor `NationExecution`. The
+execution lands via `SpawnExecution` random placement like any nation,
+then decides every 52 ticks: send 15% whenever troops >= 38% of max, at
+TerraNullius via `AttackExecution`. No structures, diplomacy, or boats.
 
-| Variant (seed) | Crossing | Declared | vs Hard bot on overlapping seeds |
-|---|---|---|---|
-| ours-A (BOX-OURS-A) | 7,908 | 7,911 (OF000010) | — |
-| ours-B (BOX-OURS-B) | 7,889 | 7,891 (OF000011) | — |
-| ours-C (BOX-OURS-C) | 7,909 | 7,911 (OF000012) | — |
-| Hard bot range (4 seeds) | — | 8,901–11,241 | +990 to +3,330 slower, every draw |
+Three seeds (human idle), all declared **7,921** with three different bot
+names — zero seed variance (fixed logic; spawn barely matters):
 
-Mean 7,904 vs Hard mean 9,886: **~1,980 ticks (~20%) faster**, and the
-variant spread is ±10 ticks vs the bot's ±1,100 — the threshold-ratio
-policy is nearly spawn-insensitive where the bot's randomized gates are
-not. The random spawn costs ~60–80 ticks vs center spawn (7,825/7,831),
-so most of the 7,831→9,151 gap is decision logic, not positioning.
+| Seed | Declared | Winner (nation name) |
+|---|---|---|
+| BOX-IH-A | 7,921 (OF000013) | Factory Builder |
+| BOX-IH-B | 7,921 (OF000014) | Train Trader |
+| BOX-IH-C | 7,921 (OF000015) | Evan The Dev |
+| Hard bot range (4 seeds) | 8,901–11,241 | various bots |
+
+Mean 7,921 vs Hard mean 9,886: **~1,965 ticks (~20%) faster**, beating
+the best Hard draw (8,901) by ~1,000. The +90 ticks over the center-spawn
+52-tick agent (7,831) is random spawn plus a later first decision (the
+nation starts deciding once spawned, not at tick 2).
 
 ## Full comparison: every agent cadence vs every nation
 
@@ -174,9 +182,7 @@ the client renderer via its Watch link.
 | 7 | Agent 45-tick (0.38, 0.15) | 7,851 | +40 | −1,300 |
 | 8 | Agent 50-tick (0, 0.12) ungated | 7,861 | +50 | −1,290 |
 | 9 | Agent 60-tick (0.37, 0.18) | 7,891 | +80 | −1,260 |
-| 9 | Improved-Hard B (random spawn) | 7,891 | +80 | −1,260 |
-| 11 | Improved-Hard A (random spawn) | 7,911 | +100 | −1,240 |
-| 11 | Improved-Hard C (random spawn) | 7,911 | +100 | −1,240 |
+| 10 | Improved-Hard nation (×3 seeds) | 7,921 | +110 | −1,230 |
 | — | Hard nation bot (human economy) | 9,151 | +1,340 | 0 |
 | — | Medium nation (0.75x/0.95x) | 11,461 | +3,650 | +2,310 |
 | — | Easy nation (0.5x/0.9x) | 15,551 | +7,740 | +6,400 |
@@ -199,6 +205,7 @@ in `verify_results.json`). Per-economy 1-tick optimal play vs observed bot:
 | Medium (18,750, 0.75x, 0.95x) | 9,729 | 11,461 | ~1,732 |
 | Hard (25,000, 1.0x, 1.0x) | 7,802 | 9,151 | ~1,349 |
 | Impossible (31,250, 1.25x, 1.05x) | 6,556 | 7,691 | ~1,135 |
+| Improved-Hard (25,000, 1.0x, 1.0x) | 7,802 | 7,921 | ~119 |
 
 (Declared-vs-crossing win-check lag is <= 10 ticks; every gap dwarfs it.)
 Optimal threshold is stable at 0.35–0.39 across all four economies, and the

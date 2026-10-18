@@ -8,11 +8,11 @@ One entity per game (no competition), no units/structures:
     optimum — the raw gated optimizer spike is phase overfitting, i.e. it
     does not transfer in-game; see verify_optimum.py). 45/52/60-tick
     bracket the Hard nation decision cadence (attackRate = U{45..60}).
-  - improved-hard variants: the 52-tick optimum under bot-like conditions
-    (random spawn fixed per game_id, Hard cadence/economy) — the improved
-    Hard bot; 3 seeds.
-  - one nation at each difficulty (easy/medium/hard/impossible), human
-    idle (no orders), run until the engine declares a winner.
+  - one nation at each production difficulty (easy/medium/hard/impossible),
+    human idle (no orders), run until the engine declares a winner.
+  - seeded Improved-Hard nations (new "improved-hard" difficulty: Hard
+    economy, custom threshold-ratio behavior from
+    engine/improvedHardBehavior.ts), 3 game_ids.
 
 Sampling is per-tick; sends happen only on cadence ticks
 (``(tick - FIRST_DECISION_TICK) % interval == 0``), so trajectories are
@@ -83,16 +83,10 @@ AGENTS = {
     "box-agent-52tick": (0.38, 0.15, 52),
     "box-agent-60tick": (0.37, 0.18, 60),
 }
-# Improved-Hard bot variants: our 52-tick optimal policy
-# (0.38, 0.15) under bot-like conditions — random spawn (None) with a fixed
-# game_id per seed for reproducibility. Hard nation economy == human
-# economy, so the human slot with our decision logic IS the improved bot.
-HARDBOT_VARIANTS = {
-    "box-improved-hard-A": (0.38, 0.15, 52, None, "BOX-OURS-A"),
-    "box-improved-hard-B": (0.38, 0.15, 52, None, "BOX-OURS-B"),
-    "box-improved-hard-C": (0.38, 0.15, 52, None, "BOX-OURS-C"),
-}
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
+# Seeded runs of the improved-hard nation difficulty (Hard economy, custom
+# threshold-ratio behavior wired in engine/improvedHardBehavior.ts).
+NATION_SEEDS = {"improved-hard": ("BOX-IH-A", "BOX-IH-B", "BOX-IH-C")}
 
 
 def git_sha() -> str:
@@ -184,7 +178,11 @@ def run_agent(
 def run_nation(
     raw: Path, difficulty: str, game_id: str | None = None, progress: bool = False
 ) -> dict[str, object]:
-    tag = f"box-nation-{difficulty}-solo" + (f"-{game_id}" if game_id else "")
+    tag = (
+        f"box-nation-{difficulty}-{game_id}"
+        if game_id
+        else f"box-nation-{difficulty}-solo"
+    )
     outdir = raw / tag
     outdir.mkdir(parents=True, exist_ok=True)
     os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
@@ -214,6 +212,7 @@ def run_nation(
     result = {
         "name": tag,
         "difficulty": difficulty,
+        "behavior": "improved-hard" if difficulty == "improved-hard" else "production",
         "game_id": game_id,
         "declared_tick": record["ticks"],
         "winner": winner,
@@ -324,13 +323,15 @@ def main() -> None:
     for name, (threshold, ratio, interval) in AGENTS.items():
         if only is None or name in only:
             tasks.append(("agent", (name, threshold, ratio, interval, SPAWN, None)))
-    for name, (threshold, ratio, interval, spawn, game_id) in HARDBOT_VARIANTS.items():
-        if only is None or name in only:
-            tasks.append(("agent", (name, threshold, ratio, interval, spawn, game_id)))
     for difficulty in DIFFICULTIES:
         run_name = f"box-nation-{difficulty}-solo"
         if only is None or run_name in only:
             tasks.append(("nation", (difficulty, None)))
+    for difficulty, seeds in NATION_SEEDS.items():
+        for game_id in seeds:
+            run_name = f"box-nation-{difficulty}-{game_id}"
+            if only is None or run_name in only:
+                tasks.append(("nation", (difficulty, game_id)))
 
     tick_progress = args.progress and args.jobs == 1
     specs: list[TaskSpec] = [

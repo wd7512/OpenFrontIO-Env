@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T01:11:59.328764+00:00",
-  "git_sha": "bf47650b673d2f5160b1762c9b529ce4697f9b9f",
+  "created": "2026-10-18T01:24:30.472715+00:00",
+  "git_sha": "9cf5052a55bb5e915ac7f05ae3b41a3bedd2ae6f",
   "tolerance": 6,
   "worst_gap": 5.0,
   "grid_3x3": [
@@ -225,6 +225,13 @@
       "opt_ratio": 0.005058593749999984,
       "opt_crossing": 6556.0,
       "human_policy_crossing": 6559.0
+    },
+    {
+      "economy": "improved-hard",
+      "opt_threshold": 0.36435546875,
+      "opt_ratio": 0.013359374999999991,
+      "opt_crossing": 7802.0,
+      "human_policy_crossing": 7802.0
     }
   ]
 }

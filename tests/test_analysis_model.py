@@ -93,6 +93,8 @@ def test_nation_economy_matches_hard_and_decomposes() -> None:
         "medium": (0.38263789415359495, 0.049872417449951176, 9729),
         "hard": (0.36435546875, 0.013359374999999991, 7802),
         "impossible": (0.34831542968749996, 0.005058593749999984, 6556),
+        # improved-hard shares Hard's economy, so the same optimum.
+        "improved-hard": (0.36435546875, 0.013359374999999991, 7802),
     }
     for name, (start, mm, rm) in NATION_ECONOMY.items():
         th, ra, expected = optima[name]

@@ -232,7 +232,8 @@ def main() -> None:
     # bonuses in-game). Per-economy 1-tick optima show what optimal play
     # achieves with each nation's economy; the residual vs the observed
     # nation bot time is the behavior gap. Observed declared ticks from
-    # sweep_results.json: easy 15551, medium 11461, hard 9151, impossible 7691.
+    # sweep_results.json: easy 15551, medium 11461, hard 9151, impossible
+    # 7691, improved-hard 7921 (x3 seeds).
     economy: list[dict[str, object]] = []
     for (name, (start_troops, max_mult, regen_mult)), opt in zip(
         NATION_ECONOMY.items(), opt_results[len(cadences) :]

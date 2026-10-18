@@ -40,7 +40,7 @@ MAP_NAMES = tuple(MAPS)
 DEFAULT_TIMEOUT_SECONDS = 60.0
 MAX_NATIONS = 100
 MAX_TRIBES = 500
-DIFFICULTIES = ("easy", "medium", "hard", "impossible")
+DIFFICULTIES = ("easy", "medium", "hard", "impossible", "improved-hard")
 MAP_SIZES = ("full", "compact")
 
 

@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T01:12:01.998328+00:00",
-  "git_sha": "bf47650b673d2f5160b1762c9b529ce4697f9b9f",
+  "created": "2026-10-18T01:21:37.657902+00:00",
+  "git_sha": "9cf5052a55bb5e915ac7f05ae3b41a3bedd2ae6f",
   "map": "The Box",
   "win_rule": "tile share > 80% (FFA)",
   "runs": [
@@ -119,40 +119,28 @@
       "winner": "Agent"
     },
     {
-      "name": "box-improved-hard-A",
-      "threshold": 0.38,
-      "ratio": 0.15,
-      "interval": 52,
-      "spawn": null,
-      "game_id": "BOX-OURS-A",
-      "crossing_tick": 7908,
-      "declared_tick": 7911,
-      "tiles": 3360036,
-      "winner": "Agent"
+      "name": "box-nation-improved-hard-BOX-IH-A",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-IH-A",
+      "declared_tick": 7921,
+      "winner": "Factory Builder"
     },
     {
-      "name": "box-improved-hard-B",
-      "threshold": 0.38,
-      "ratio": 0.15,
-      "interval": 52,
-      "spawn": null,
-      "game_id": "BOX-OURS-B",
-      "crossing_tick": 7889,
-      "declared_tick": 7891,
-      "tiles": 3359224,
-      "winner": "Agent"
+      "name": "box-nation-improved-hard-BOX-IH-B",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-IH-B",
+      "declared_tick": 7921,
+      "winner": "Train Trader"
     },
     {
-      "name": "box-improved-hard-C",
-      "threshold": 0.38,
-      "ratio": 0.15,
-      "interval": 52,
-      "spawn": null,
-      "game_id": "BOX-OURS-C",
-      "crossing_tick": 7909,
-      "declared_tick": 7911,
-      "tiles": 3358880,
-      "winner": "Agent"
+      "name": "box-nation-improved-hard-BOX-IH-C",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-IH-C",
+      "declared_tick": 7921,
+      "winner": "Evan The Dev"
     }
   ]
 }

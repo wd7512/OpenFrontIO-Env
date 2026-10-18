@@ -11,6 +11,7 @@ import { DoomsdayClockExecution } from "../vendor/OpenFrontIO/src/core/execution
 import { Executor } from "../vendor/OpenFrontIO/src/core/execution/ExecutionManager";
 import { RecomputeRailClusterExecution } from "../vendor/OpenFrontIO/src/core/execution/RecomputeRailClusterExecution";
 import { WinCheckExecution } from "../vendor/OpenFrontIO/src/core/execution/WinCheckExecution";
+import { ImprovedHardExecution } from "./improvedHardBehavior";
 import {
   Difficulty,
   Game,
@@ -58,6 +59,9 @@ const DIFFICULTIES: Record<string, Difficulty> = {
   medium: Difficulty.Medium,
   hard: Difficulty.Hard,
   impossible: Difficulty.Impossible,
+  // New nation difficulty: Hard economy (every vendor read sees
+  // Difficulty.Hard) with custom decision logic (see useImprovedHard).
+  "improved-hard": Difficulty.Hard,
 };
 
 // Replay tapes feed the archived-GameRecord converter, whose schema only
@@ -370,6 +374,10 @@ class EngineSession {
         `invalid difficulty: expected one of easy/medium/hard/impossible, got ${difficulty}`,
       );
     }
+    // The improved-hard difficulty keeps Hard economy everywhere in vendor
+    // code (it maps to Difficulty.Hard above) but swaps the decision logic:
+    // derive the behavior from the difficulty string, no side channel.
+    const useImprovedHard = difficulty === "improved-hard";
     if (
       typeof tribes !== "number" ||
       !Number.isInteger(tribes) ||
@@ -501,9 +509,18 @@ class EngineSession {
         : [];
     const game = createGame(humans, nationObjs, gameMap, miniGameMap, config);
     const executor = new Executor(game, gid, CLIENT_ID, []);
-    // Mirror GameRunner.init execution order and conditions.
+    // Mirror GameRunner.init execution order and conditions, except a
+    // custom nationBehavior replaces the vendor NationExecution (same
+    // Nation players, names, spawns and difficulty economy — only the
+    // decision logic differs).
     if (game.config().spawnNations()) {
-      game.addExecution(...executor.nationExecutions());
+      if (useImprovedHard) {
+        for (const nation of nationObjs) {
+          game.addExecution(new ImprovedHardExecution(gid, nation));
+        }
+      } else {
+        game.addExecution(...executor.nationExecutions());
+      }
     }
     if (game.config().bots() > 0) {
       game.addExecution(...executor.spawnTribes(game.config().bots()));

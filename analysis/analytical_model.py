@@ -54,6 +54,9 @@ NATION_ECONOMY = {
     "medium": (18750.0, 0.75, 0.95),
     "hard": (25000.0, 1.0, 1.0),
     "impossible": (31250.0, 1.25, 1.05),
+    # Improved-hard is a new difficulty with Hard economy (worker.ts maps it
+    # to Difficulty.Hard) and custom threshold-ratio behavior.
+    "improved-hard": (25000.0, 1.0, 1.0),
 }
 
 
