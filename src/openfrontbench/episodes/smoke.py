@@ -24,14 +24,20 @@ MAP_ASSET_NAMES = ("manifest.json", "map.bin", "map4x.bin")
 
 
 def _actual_vendor_pin() -> str | None:
+    # Read the vendor submodule gitlink recorded in the outer repo index.
+    # `git rev-parse HEAD` inside vendor/OpenFrontIO falls through to the
+    # outer HEAD when the submodule is not checked out, which is meaningless
+    # as a vendor pin; the gitlink is the pin declaration and works either way.
     try:
         proc = subprocess.run(
             [
                 "git",
                 "-C",
-                str(REPO_ROOT / "vendor" / "OpenFrontIO"),
-                "rev-parse",
+                str(REPO_ROOT),
+                "ls-tree",
                 "HEAD",
+                "--",
+                "vendor/OpenFrontIO",
             ],
             capture_output=True,
             text=True,
@@ -41,8 +47,10 @@ def _actual_vendor_pin() -> str | None:
         return None
     if proc.returncode != 0:
         return None
-    value = proc.stdout.strip()
-    return value if value else None
+    parts = proc.stdout.strip().split()
+    if len(parts) < 3 or parts[1] != "commit":
+        return None
+    return parts[2] or None
 
 
 @dataclass(frozen=True)

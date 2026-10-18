@@ -533,7 +533,10 @@ def test_cli_tool_timeout_writes_failure_artefact_and_exits_nonzero(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "fail"
-    proc = _cli(EXAMPLE_CONFIG, output, "--tool-timeout", "0.05")
+    # 1us: no stdio-subprocess tool round-trip can complete in a microsecond,
+    # so the timeout path triggers deterministically on any machine (0.05s
+    # was racy: a fast machine completes every call inside the budget).
+    proc = _cli(EXAMPLE_CONFIG, output, "--tool-timeout", "0.000001")
     assert proc.returncode != 0
     trace = _read_jsonl(output / "trace.jsonl")
     errors = [line for line in trace if line["event"] == "tool_error"]

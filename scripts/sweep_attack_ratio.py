@@ -21,7 +21,9 @@ def run_trial(ratio: int, trial: int) -> dict:
     """Run one game. Return {milestone_tiles: ticks_to_reach, early_ticks: tiles}."""
     milestone_ticks = {m: None for m in MILESTONES}
     early_tiles = {}
-    with EngineWorker(map_dir="/Users/ky23812/Repos/OpenFrontIO-Env/vendor/OpenFrontIO/tests/testdata/maps/big_plains") as engine:
+    with EngineWorker(
+        map_dir="/Users/ky23812/Repos/OpenFrontIO-Env/vendor/OpenFrontIO/tests/testdata/maps/big_plains"
+    ) as engine:
         state = engine.start(nations=0, tribes=0, spawn=(100, 100))
         tick = state["tick"]
         tiles = state["human"]["tiles"]
@@ -60,7 +62,12 @@ def run_trial(ratio: int, trial: int) -> dict:
             if ec not in early_tiles:
                 early_tiles[ec] = tiles
 
-    return {"milestones": milestone_ticks, "early": early_tiles, "final_tiles": tiles, "final_tick": tick}
+    return {
+        "milestones": milestone_ticks,
+        "early": early_tiles,
+        "final_tiles": tiles,
+        "final_tick": tick,
+    }
 
 
 def main():
@@ -72,7 +79,9 @@ def main():
             elapsed = time.time() - t0
             results[ratio].append(res)
             mt = res["milestones"]
-            print(f"ratio={ratio}% trial={trial} t@36000={mt[36000]} final={res['final_tiles']} ({elapsed:.1f}s)")
+            print(
+                f"ratio={ratio}% trial={trial} t@36000={mt[36000]} final={res['final_tiles']} ({elapsed:.1f}s)"
+            )
 
     # Summary: ticks to reach 9000 tiles (lower = better)
     print("\n" + "=" * 90)
@@ -99,7 +108,9 @@ def main():
             vals.append(statistics.mean(ts))
         print(f"{ratio:>5}% | " + " | ".join(f"{v:>7.0f}" for v in vals))
 
-    with open("/Users/ky23812/Repos/OpenFrontIO-Env/scripts/sweep_results.json", "w") as f:
+    with open(
+        "/Users/ky23812/Repos/OpenFrontIO-Env/scripts/sweep_results.json", "w"
+    ) as f:
         json.dump({str(r): results[r] for r in RATIOS}, f, indent=2)
     print("\nRaw results saved to scripts/sweep_results.json")
 

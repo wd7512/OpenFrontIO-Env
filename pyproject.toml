@@ -19,6 +19,7 @@ openfront-harbor = "openfront_harbor.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.4.0,<10",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.14.10,<0.15",
     "ty>=0.0.42,<0.1",
 ]
@@ -29,6 +30,14 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+# Parallel by default: the suite is dominated by black-box subprocess tests
+# (CLI + MCP server + engine boots) that parallelize cleanly. Override with
+# `pytest -n0` for serial runs.
+# `slow` marks full-game end-to-end tests excluded from the default run;
+# CI runs them explicitly (`pytest -m "slow or not slow"`).
+addopts = ["-n", "auto", "-m", "not slow"]
+markers = ["slow: full-game end-to-end tests (minutes); run explicitly"]
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]

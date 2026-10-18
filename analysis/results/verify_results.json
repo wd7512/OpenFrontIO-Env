@@ -1,0 +1,170 @@
+{
+  "created": "2026-10-18T00:16:38.859380+00:00",
+  "git_sha": "9a0dc816cce70d60b1441405175266efcf80f18e",
+  "tolerance": 6,
+  "worst_gap": 5.0,
+  "grid_3x3": [
+    {
+      "threshold": 0.34,
+      "ratio": 0.005,
+      "interval": 1,
+      "model_crossing": 7819.0,
+      "game_crossing": 7817,
+      "game_declared": 7821
+    },
+    {
+      "threshold": 0.34,
+      "ratio": 0.01,
+      "interval": 1,
+      "model_crossing": 7821.0,
+      "game_crossing": 7820,
+      "game_declared": 7821
+    },
+    {
+      "threshold": 0.34,
+      "ratio": 0.02,
+      "interval": 1,
+      "model_crossing": 7824.0,
+      "game_crossing": 7823,
+      "game_declared": 7831
+    },
+    {
+      "threshold": 0.36,
+      "ratio": 0.005,
+      "interval": 1,
+      "model_crossing": 7802.0,
+      "game_crossing": 7803,
+      "game_declared": 7811
+    },
+    {
+      "threshold": 0.36,
+      "ratio": 0.01,
+      "interval": 1,
+      "model_crossing": 7805.0,
+      "game_crossing": 7805,
+      "game_declared": 7811
+    },
+    {
+      "threshold": 0.36,
+      "ratio": 0.02,
+      "interval": 1,
+      "model_crossing": 7805.0,
+      "game_crossing": 7805,
+      "game_declared": 7811
+    },
+    {
+      "threshold": 0.38,
+      "ratio": 0.005,
+      "interval": 1,
+      "model_crossing": 7811.0,
+      "game_crossing": 7813,
+      "game_declared": 7821
+    },
+    {
+      "threshold": 0.38,
+      "ratio": 0.01,
+      "interval": 1,
+      "model_crossing": 7813.0,
+      "game_crossing": 7815,
+      "game_declared": 7821
+    },
+    {
+      "threshold": 0.38,
+      "ratio": 0.02,
+      "interval": 1,
+      "model_crossing": 7813.0,
+      "game_crossing": 7815,
+      "game_declared": 7821
+    }
+  ],
+  "points": [
+    {
+      "label": "model-opt-1tick",
+      "threshold": 0.3644,
+      "ratio": 0.0134,
+      "interval": 1,
+      "model_crossing": 7802.0,
+      "game_crossing": 7807,
+      "game_declared": 7811,
+      "gap": 5.0
+    },
+    {
+      "label": "old-grid-best",
+      "threshold": 0.4,
+      "ratio": 0.1,
+      "interval": 1,
+      "model_crossing": 7817.0,
+      "game_crossing": 7819,
+      "game_declared": 7821,
+      "gap": 2.0
+    },
+    {
+      "label": "neighbor",
+      "threshold": 0.36,
+      "ratio": 0.01,
+      "interval": 1,
+      "model_crossing": 7805.0,
+      "game_crossing": 7805,
+      "game_declared": 7811,
+      "gap": 0.0
+    },
+    {
+      "label": "ungated-2s",
+      "threshold": 0.0,
+      "ratio": 0.05,
+      "interval": 20,
+      "model_crossing": 7827.0,
+      "game_crossing": 7829,
+      "game_declared": 7831,
+      "gap": 2.0
+    },
+    {
+      "label": "gated-5s",
+      "threshold": 0.37,
+      "ratio": 0.15,
+      "interval": 50,
+      "model_crossing": 7858.0,
+      "game_crossing": 7860,
+      "game_declared": 7861,
+      "gap": 2.0
+    },
+    {
+      "label": "far-low-threshold",
+      "threshold": 0.2,
+      "ratio": 0.01,
+      "interval": 1,
+      "model_crossing": 8908.0
+    },
+    {
+      "label": "far-high-threshold",
+      "threshold": 0.5,
+      "ratio": 0.1,
+      "interval": 1,
+      "model_crossing": 8188.0
+    },
+    {
+      "label": "far-high-ratio",
+      "threshold": 0.36,
+      "ratio": 0.5,
+      "interval": 1,
+      "model_crossing": 8386.0
+    },
+    {
+      "label": "always-send",
+      "threshold": 0.0,
+      "ratio": 0.1,
+      "interval": 1,
+      "model_crossing": Infinity
+    },
+    {
+      "label": "spike-10tick-rounded",
+      "threshold": 0.3699,
+      "ratio": 0.0682,
+      "interval": 10,
+      "model_crossing": 7808.0,
+      "game_crossing": 7809,
+      "game_declared": 7811,
+      "gap": 1.0
+    }
+  ]
+}

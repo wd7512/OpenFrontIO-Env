@@ -372,14 +372,23 @@ async def _run_scripted(
     params = _open_session(driver)
     steps = driver.build_steps(config.max_decisions)
 
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await asyncio.wait_for(session.initialize(), connect_timeout)
-            for name, args in steps:
-                if not await _execute_step(
-                    session, trace, stats, name, args, tool_timeout, driver
-                ):
-                    break
+    # Session teardown can raise after a step already failed (e.g. closing a
+    # session whose in-flight call was cancelled by a tool timeout surfaces
+    # the cancellation as a TaskGroup error). Fold that into the same stats
+    # instead of propagating: propagating discards the recorded steps and
+    # leaves trace.jsonl contradicting result.json.
+    try:
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await asyncio.wait_for(session.initialize(), connect_timeout)
+                for name, args in steps:
+                    if not await _execute_step(
+                        session, trace, stats, name, args, tool_timeout, driver
+                    ):
+                        break
+    except Exception as error:
+        stats["errors"].append(f"session failure: {error}")
+        trace.emit(event="episode_error", error=f"session failure: {error}")
     return stats
 
 

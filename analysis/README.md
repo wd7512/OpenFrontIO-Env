@@ -6,8 +6,14 @@ run against the real OpenFrontIO engine (not a simulation).
 > Latest: [The Box single-entity baseline](box_single_entity_baseline.md) —
 > minimum win time **7,811 ticks** at (threshold=0.36, ratio=0.005), derived
 > analytically (`analytical_model.py`), verified in-game, with 10/20/30/40/50
-> tick decision variants and 4 nation reference runs. Reproduce with
-> `sweep_single_entity.py`.
+> tick decision variants and 4 nation reference runs. Reproduce:
+> ```bash
+> uv run python analysis/sweep_single_entity.py --raw /tmp/replay_raw
+> uv run python analysis/verify_optimum.py --raw /tmp/replay_verify
+> uv run python scripts/serve_replays.py --raw /tmp/replay_raw  # index at :8787
+> ```
+> Results land in `analysis/results/` (`sweep_results.json`,
+> `verify_results.json`); every report number comes from those files.
 
 ## Setup
 
@@ -113,39 +119,28 @@ Threshold 0% is catastrophic for ratios ≥20% (stalls at ~6,700 tiles).
 
 ## Reproduction
 
-All scripts are in `analysis/`. Run from repo root:
+Current workflow (all scripts in `analysis/`, run from repo root):
 
 ```bash
 # Prerequisites
 cd engine && npm install && npm run build && cd ..
 
-# 1. Attack ratio sweep (plains, 50-tick)
-uv run python analysis/sweep_attack_ratio.py  # (in scripts/)
+# 1. Single-entity baseline sweep (The Box, 10 strategies)
+uv run python analysis/sweep_single_entity.py --raw /tmp/replay_raw
 
-# 2. Grid search (50-tick decisions)
-uv run python analysis/grid_search_50tick.py
+# 2. Game-side verification (3x3 grid + exploratory points + optimizer)
+uv run python analysis/verify_optimum.py --raw /tmp/replay_verify
 
-# 3. Grid search (1-tick decisions)
-uv run python analysis/grid_search_1tick.py
+# 3. Analytical model optima (stdout)
+uv run python analysis/analytical_model.py
 
-# 4. Decision interval sweep
-uv run python analysis/decision_interval_sweep.py
-
-# 5. Speed grid (1s and 10s)
-uv run python analysis/speed_grid.py
-
-# 6. Terrain sweep (alps)
-uv run python analysis/terrain_sweep.py
-
-# 7. Threshold sweep
-uv run python analysis/threshold_sweep.py
-
-# 8. Fine sweep (22-28%)
-uv run python analysis/fine_sweep.py
+# 4. Serve replays
+uv run python scripts/serve_replays.py --raw /tmp/replay_raw
 ```
 
-Note: `sweep_attack_ratio.py` is in `scripts/` and uses plains map with spawn (100,100).
-Terrain sweep uses alps compact map with random spawn.
+The sections below are the earlier batch-era studies (per-tick sampling
+supersedes their multi-tick numbers; the exploratory grid scripts were
+removed in favor of `sweep_single_entity.py` / `verify_optimum.py`).
 
 ## Limitations
 

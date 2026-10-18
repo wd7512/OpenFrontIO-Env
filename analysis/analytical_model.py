@@ -34,6 +34,9 @@ TOTAL_LAND = 4194304
 WIN_SHARE = 0.80
 SPAWN_TILES = 52
 SPAWN_TROOPS = 25000.0
+# Engine starts at tick 2 with a fresh spawn; both the game sweep and this
+# model decide sends on ticks with (tick - FIRST_DECISION_TICK) % interval == 0.
+FIRST_DECISION_TICK = 2
 
 # Frontier coefficient: attack budget per tick is 2 * (borderSize + U{0..4}),
 # borderSize ~= BORDER_K * sqrt(tiles). Calibrated from three fixed-attack
@@ -128,17 +131,22 @@ def simulate(
 
     ``interval`` is the decision cadence in ticks (1 = every tick,
     50 = every 5s); the attack itself still conquers every tick.
+
+    The loop mirrors the game sweep exactly: the engine starts at tick 2
+    with a fresh spawn, and ``sweep_single_entity.run_agent`` sends when
+    ``(tick - 2) % interval == 0``, so the model uses the same schedule —
+    first send decided at tick 2 for every cadence.
     """
     tiles = float(SPAWN_TILES)
     troops = float(SPAWN_TROOPS)
     attack = 0.0
     pending = 0.0  # ordered troops join the attack next tick (intent delay)
     target = WIN_SHARE * TOTAL_LAND
-    for tick in range(1, max_ticks + 1):
+    for tick in range(FIRST_DECISION_TICK, max_ticks + 1):
         attack += pending
         pending = 0.0
         cap = max_troops(tiles)
-        if tick % interval == 0 and troops >= threshold * cap:
+        if (tick - FIRST_DECISION_TICK) % interval == 0 and troops >= threshold * cap:
             send = min(troops, ratio * troops)
             troops -= send
             pending = send
@@ -228,7 +236,21 @@ def _nelder_mead(
     return simplex[best][0], simplex[best][1], vals[best]
 
 
-def find_optimum(interval: int = 1) -> dict[str, float]:
+DEFAULT_STARTS = (
+    (0.4, 0.10),
+    (0.2, 0.10),
+    (0.6, 0.10),
+    (0.4, 0.30),
+    (0.1, 0.05),
+    (0.7, 0.50),
+    (0.0, 0.10),
+    (0.42, 0.05),
+)
+
+
+def find_optimum(
+    interval: int = 1, starts: tuple[tuple[float, float], ...] | None = None
+) -> dict[str, float]:
     """Global optimum of crossing_tick over (threshold, ratio) in the model."""
 
     def objective(p: list[float]) -> float:
@@ -244,16 +266,7 @@ def find_optimum(interval: int = 1) -> dict[str, float]:
         return simulate(thc, rac, interval=interval)["crossing_tick"] + 1e9 * penalty
 
     best = (0.0, 0.0, float("inf"))
-    for start in [
-        (0.4, 0.10),
-        (0.2, 0.10),
-        (0.6, 0.10),
-        (0.4, 0.30),
-        (0.1, 0.05),
-        (0.7, 0.50),
-        (0.0, 0.10),
-        (0.42, 0.05),
-    ]:
+    for start in DEFAULT_STARTS if starts is None else starts:
         th, ra, val = _nelder_mead(objective, start)
         if val < best[2]:
             best = (th, ra, val)

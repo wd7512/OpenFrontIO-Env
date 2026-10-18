@@ -1,0 +1,92 @@
+{
+  "created": "2026-10-18T00:13:28.573171+00:00",
+  "git_sha": "9a0dc816cce70d60b1441405175266efcf80f18e",
+  "map": "The Box",
+  "win_rule": "tile share > 80% (FFA)",
+  "runs": [
+    {
+      "name": "box-agent-solo",
+      "threshold": 0.36,
+      "ratio": 0.005,
+      "interval": 1,
+      "crossing_tick": 7803,
+      "declared_tick": 7811,
+      "tiles": 3361585,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-10tick",
+      "threshold": 0.375,
+      "ratio": 0.05,
+      "interval": 10,
+      "crossing_tick": 7809,
+      "declared_tick": 7811,
+      "tiles": 3358808,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-20tick",
+      "threshold": 0.375,
+      "ratio": 0.065,
+      "interval": 20,
+      "crossing_tick": 7809,
+      "declared_tick": 7811,
+      "tiles": 3361467,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-30tick",
+      "threshold": 0.38,
+      "ratio": 0.095,
+      "interval": 30,
+      "crossing_tick": 7817,
+      "declared_tick": 7821,
+      "tiles": 3356667,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-40tick",
+      "threshold": 0.37,
+      "ratio": 0.115,
+      "interval": 40,
+      "crossing_tick": 7819,
+      "declared_tick": 7821,
+      "tiles": 3356911,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-50tick",
+      "threshold": 0.0,
+      "ratio": 0.12,
+      "interval": 50,
+      "crossing_tick": 7859,
+      "declared_tick": 7861,
+      "tiles": 3362210,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-nation-easy-solo",
+      "difficulty": "easy",
+      "declared_tick": 15551,
+      "winner": "Non-peaceful Bot"
+    },
+    {
+      "name": "box-nation-medium-solo",
+      "difficulty": "medium",
+      "declared_tick": 11461,
+      "winner": "Non-peaceful Bot"
+    },
+    {
+      "name": "box-nation-hard-solo",
+      "difficulty": "hard",
+      "declared_tick": 9151,
+      "winner": "Non-peaceful Bot"
+    },
+    {
+      "name": "box-nation-impossible-solo",
+      "difficulty": "impossible",
+      "declared_tick": 7691,
+      "winner": "Non-peaceful Bot"
+    }
+  ]
+}

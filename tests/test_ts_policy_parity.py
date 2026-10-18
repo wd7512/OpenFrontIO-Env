@@ -174,9 +174,14 @@ def _episode_signature(episode: EpisodeResult) -> tuple[Any, ...]:
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("spawn", [CTR, S_SPAWN])
 def test_ts_episode_matches_python(spawn: Spawn) -> None:
-    """End-to-end parity on fixed legacy worlds: same game, same fate."""
+    """End-to-end parity on fixed legacy worlds: same game, same fate.
+
+    Slow (two full europe games per spawn, ~2min): the per-decision port
+    contract is covered fast by test_ts_order_stream_matches_python.
+    """
     config = EvalConfig(nations=52, tribes=400, difficulty="medium")
     game_id = evo.game_id_for("ts-parity", spawn)
     expected = _episode_signature(
