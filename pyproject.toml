@@ -36,7 +36,7 @@ pythonpath = ["."]
 # (CLI + MCP server + engine boots) that parallelize cleanly. Override with
 # `pytest -n0` for serial runs.
 # `slow` marks full-game end-to-end tests excluded from the default run;
-# CI runs them explicitly (`pytest -m "slow or not slow"`).
+# CI runs them explicitly (`pytest -m slow`).
 addopts = ["-n", "auto", "-m", "not slow"]
 markers = ["slow: full-game end-to-end tests (minutes); run explicitly"]
 

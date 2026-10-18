@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: uv run pytest
       - name: Test (slow end-to-end, excluded from the default run)
-        run: uv run pytest -m "slow or not slow" -q
+        run: uv run pytest -m slow -q
       - name: Harbor + docker skeleton checks (guarded)
         run: |
           if [ -f scripts/build-openfront.sh ]; then bash scripts/build-openfront.sh --dry-run; fi
