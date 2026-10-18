@@ -33,6 +33,13 @@ SPAWN = (1024, 1024)
 AGENT_THRESHOLD = 0.36
 AGENT_RATIO = 0.005
 
+# 50-tick (5s) variant: threshold gating is phase-fragile at this cadence
+# (a missed gate idles the front for a full cycle), so the robust optimum
+# sends every cycle. Ratio is the model optimum at threshold=0.
+AGENT50_THRESHOLD = 0.0
+AGENT50_RATIO = 0.12
+AGENT50_INTERVAL = 50
+
 
 def run_agent(raw: Path) -> dict[str, object]:
     outdir = raw / "box-agent-solo"
@@ -61,6 +68,40 @@ def run_agent(raw: Path) -> dict[str, object]:
         record = engine.save_record()
     result = {
         "name": "box-agent-solo",
+        "crossing_tick": crossed,
+        "declared_tick": record["ticks"],
+        "tiles": tiles,
+        "winner": winner,
+    }
+    logger.info(result)
+    return result
+
+
+def run_agent_50(raw: Path) -> dict[str, object]:
+    outdir = raw / "box-agent-50tick"
+    outdir.mkdir(parents=True, exist_ok=True)
+    os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
+    with EngineWorker(map_dir=MD) as engine:
+        state = engine.start(nations=0, tribes=0, spawn=SPAWN, map_size="full")
+        tick = state["tick"]
+        tiles = state["human"]["tiles"]
+        winner = None
+        crossed = None
+        while winner is None and tick < 200000:
+            troops = state["human"]["troops"]
+            try:
+                engine.attack(target="expand", troops=troops * AGENT50_RATIO)
+            except Exception:
+                pass
+            state = engine.advance(AGENT50_INTERVAL)
+            tick = state["tick"]
+            tiles = state["human"]["tiles"]
+            if crossed is None and tiles > WIN_SHARE * TOTAL_LAND:
+                crossed = tick
+            winner = state.get("winner")
+        record = engine.save_record()
+    result = {
+        "name": "box-agent-50tick",
         "crossing_tick": crossed,
         "declared_tick": record["ticks"],
         "tiles": tiles,
@@ -105,7 +146,7 @@ def main() -> None:
     parser.add_argument("--raw", type=Path, required=True)
     args = parser.parse_args()
     args.raw.mkdir(parents=True, exist_ok=True)
-    results = [run_agent(args.raw)]
+    results = [run_agent(args.raw), run_agent_50(args.raw)]
     for difficulty in ("easy", "medium", "hard", "impossible"):
         results.append(run_nation(args.raw, difficulty))
     print("\n=== Single-entity baseline (The Box, win = >80% land) ===")

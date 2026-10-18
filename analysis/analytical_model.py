@@ -122,9 +122,13 @@ def conquest_tiles(attack_troops: float, tick_budget: float) -> tuple[int, float
 # Policy simulator: 1-tick (threshold, ratio) expansion, no units
 # ---------------------------------------------------------------------------
 def simulate(
-    threshold: float, ratio: float, max_ticks: int = 200000
+    threshold: float, ratio: float, max_ticks: int = 200000, interval: int = 1
 ) -> dict[str, float]:
-    """Run the mean-field model. Returns crossing tick of the 80% win line."""
+    """Run the mean-field model. Returns crossing tick of the 80% win line.
+
+    ``interval`` is the decision cadence in ticks (1 = every tick,
+    50 = every 5s); the attack itself still conquers every tick.
+    """
     tiles = float(SPAWN_TILES)
     troops = float(SPAWN_TROOPS)
     attack = 0.0
@@ -134,7 +138,7 @@ def simulate(
         attack += pending
         pending = 0.0
         cap = max_troops(tiles)
-        if troops >= threshold * cap:
+        if tick % interval == 0 and troops >= threshold * cap:
             send = min(troops, ratio * troops)
             troops -= send
             pending = send
@@ -224,7 +228,7 @@ def _nelder_mead(
     return simplex[best][0], simplex[best][1], vals[best]
 
 
-def find_optimum() -> dict[str, float]:
+def find_optimum(interval: int = 1) -> dict[str, float]:
     """Global optimum of crossing_tick over (threshold, ratio) in the model."""
 
     def objective(p: list[float]) -> float:
@@ -237,7 +241,7 @@ def find_optimum() -> dict[str, float]:
         )
         thc = min(0.95, max(0.0, th))
         rac = min(1.0, max(0.001, ra))
-        return simulate(thc, rac)["crossing_tick"] + 1e9 * penalty
+        return simulate(thc, rac, interval=interval)["crossing_tick"] + 1e9 * penalty
 
     best = (0.0, 0.0, float("inf"))
     for start in [
@@ -272,6 +276,13 @@ def main() -> None:
         opt["threshold"],
         opt["ratio"],
         opt["crossing_tick"],
+    )
+    opt50 = find_optimum(interval=50)
+    logger.info(
+        "model 50-tick optimum: threshold=%.4f ratio=%.4f crossing=%.0f",
+        opt50["threshold"],
+        opt50["ratio"],
+        opt50["crossing_tick"],
     )
 
 

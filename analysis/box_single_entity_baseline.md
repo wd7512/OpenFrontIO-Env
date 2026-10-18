@@ -11,21 +11,44 @@ FFA rule: tile share > 80% of land
 - Reproduce: `uv run python analysis/sweep_single_entity.py --raw /tmp/replay_raw`
   then `uv run python scripts/serve_replays.py --raw /tmp/replay_raw`.
 
-## The 5 strategies
+## The 6 strategies
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
-| 1 | Agent solo, 1-tick decisions, send 0.5% of troops whenever troops >= 36% of max | OF000001 | 7,803 | **7,811** | Agent |
-| 2 | 1 nation, Easy (human idle) | OF000002 | — | 15,553 | Non-peaceful Bot |
-| 3 | 1 nation, Medium (human idle) | OF000005 | — | 11,503 | Non-peaceful Bot |
-| 4 | 1 nation, Hard (human idle) | OF000003 | — | 9,153 | Non-peaceful Bot |
-| 5 | 1 nation, Impossible (human idle) | OF000004 | — | 7,703 | Non-peaceful Bot |
+| 1 | Agent solo, 1-tick decisions, send 0.5% of troops whenever troops >= 36% of max | OF000002 | 7,803 | **7,811** | Agent |
+| 2 | Agent solo, 50-tick (5s) decisions, send 12% of troops every cycle, no gate | OF000001 | 7,902 | 7,902 | Agent |
+| 3 | 1 nation, Easy (human idle) | OF000003 | — | 15,553 | Non-peaceful Bot |
+| 4 | 1 nation, Medium (human idle) | OF000006 | — | 11,503 | Non-peaceful Bot |
+| 5 | 1 nation, Hard (human idle) | OF000004 | — | 9,153 | Non-peaceful Bot |
+| 6 | 1 nation, Impossible (human idle) | OF000005 | — | 7,703 | Non-peaceful Bot |
 
 Result: the minimum is **7,811 ticks (7,803 to cross 80%)** with
-(threshold=0.36, ratio=0.005). Hard is the nation most comparable to the
+(threshold=0.36, ratio=0.005) at 1-tick cadence. The 50-tick variant needs
+7,902 ticks — coarser decisions cost ~90 ticks. Hard is the nation most
+comparable to the
 agent (identical economy: 25,000 start, 1.0x max, 1.0x regen —
 `Config.ts:856-943`); it takes 9,153 ticks because the built-in nation AI
 builds structures and paces its attacks instead of expanding every tick.
+
+## The 50-tick (5s) variant
+
+Same policy class with decisions every 50 ticks (`interval=50` in
+`analytical_model.py`). Two findings:
+
+1. **Threshold gating is phase-fragile at this cadence.** The model optimum
+   (0.368, 0.15) predicts 7,815, but the game measures 7,902: with 50-tick
+   cycles, reserves swing widely between decisions, so a decision tick can
+   land in a trough (troops < threshold), idling the front for a full cycle
+   — observed twice in-game (ticks 6,802 and 7,602). A 2-tick phase shift in
+   the model changes nothing, i.e. the mean-field model cannot resolve which
+   cycles miss, so gated 50-tick optima are not trustworthy.
+2. **The robust 50-tick policy gates nothing (threshold=0, send every
+   cycle).** Model optimum at threshold=0 is ratio=0.12 -> 7,858; game
+   measures **7,902** (OF000001). U-shaped in ratio (starvation below,
+   reserve crash above), interior optimum, no gating misses possible.
+
+Net: 1-tick decisions (7,811) beat 5s decisions (7,902) by 91 ticks —
+finer cadence dominates, as the model predicts.
 
 ## Governing equations (all from engine source, all empirically verified)
 
@@ -87,8 +110,9 @@ Policy class: each tick, if `troops >= threshold * max`, send
   minimum confirmed in-game.
 - Far field ruled out by 1,000+ tick margins (model): (0.2, 0.01) -> 8,907;
   (0.5, 0.1) -> 8,187; (0.36, 0.5) -> 8,385; always-send (0, 0.1) never wins
-  (reserve death spiral). 50-tick cadence measured 9,152 in-game: finer
-  cadence dominates, so 1-tick is the right policy class.
+  (reserve death spiral). 50-tick cadence optimum measured 7,902 in-game
+  (model: 7,858), 91 ticks worse than 1-tick: finer cadence dominates, so
+  1-tick is the right policy class.
 - The analysis found a policy the earlier game grid searches never tried
   (ratio 0.5%, threshold 0.36) and it verified 10 ticks better (7,811 vs
   7,821 declared).
