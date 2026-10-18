@@ -19,18 +19,23 @@ are written as JSON. Records go to a scratch raw directory (not served).
 
 Usage:
   uv run python analysis/verify_optimum.py --raw /tmp/replay_verify
+  uv run python analysis/verify_optimum.py --raw /tmp/replay_verify --jobs 8
 """
 
 import argparse
 import json
 import logging
+import os
 import sys
+from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from analytical_model import NATION_ECONOMY, find_optimum, simulate
-from sweep_single_entity import git_sha, run_agent
+from analytical_model import NATION_ECONOMY, SPAWN_TROOPS, simulate
+from sweep_single_entity import SPAWN, _run_task, git_sha
 
 from tqdm import tqdm
 
@@ -69,6 +74,34 @@ def slug(threshold: float, ratio: float, interval: int) -> str:
     )
 
 
+def _run_games(
+    specs: Sequence[tuple[str, str, Sequence[Any]]],
+    jobs: int,
+    progress: bool,
+    desc: str,
+) -> list[dict[str, object]]:
+    """Run (raw_dir, kind, payload) game specs serially or pooled, in order.
+
+    Games are independent engine subprocesses with distinct record dirs;
+    pool.map preserves submission order so results stay deterministic.
+    Per-game tick bars only in serial mode (child bars don't render).
+    """
+    tick_progress = progress and jobs == 1
+    full = [(raw, tick_progress, kind, payload) for raw, kind, payload in specs]
+    if jobs <= 1:
+        return [_run_task(spec) for spec in full]
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        return list(
+            tqdm(
+                pool.map(_run_task, full),
+                total=len(full),
+                desc=desc,
+                unit="run",
+                disable=not progress,
+            )
+        )
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
@@ -84,39 +117,40 @@ def main() -> None:
         default=True,
         help="show tqdm progress bars (per-run tick bars on stderr)",
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=min(8, os.cpu_count() or 1),
+        help="parallel game processes (1 = serial)",
+    )
     args = parser.parse_args()
     args.raw.mkdir(parents=True, exist_ok=True)
 
     grid_cells = [
         (threshold, ratio) for threshold in GRID_THRESHOLDS for ratio in GRID_RATIOS
     ]
-    game_points = [
-        (label, threshold, ratio, interval)
-        for label, threshold, ratio, interval, in_game in POINTS
-        if in_game
-    ]
+    n_game_points = sum(1 for _, _, _, _, in_game in POINTS if in_game)
     logger.info(
         "verifying %d grid cells + %d game points (%d model-only points skipped)",
         len(grid_cells),
-        len(game_points),
-        len(POINTS) - len(game_points),
+        n_game_points,
+        len(POINTS) - n_game_points,
     )
 
     grid: list[dict[str, object]] = []
-    for threshold, ratio in tqdm(
-        grid_cells, desc="grid", unit="run", disable=not args.progress
-    ):
-        row = []
-        model_crossing = simulate(threshold, ratio, interval=1)["crossing_tick"]
-        game = run_agent(
-            args.raw,
-            slug(threshold, ratio, 1),
-            threshold,
-            ratio,
-            1,
-            progress=args.progress,
+    grid_specs = [
+        (
+            str(args.raw),
+            "agent",
+            (slug(threshold, ratio, 1), threshold, ratio, 1, SPAWN, None),
         )
-        row.append(game["crossing_tick"])
+        for threshold, ratio in grid_cells
+    ]
+    grid_games = _run_games(
+        grid_specs, jobs=args.jobs, progress=args.progress, desc="grid"
+    )
+    for (threshold, ratio), game in zip(grid_cells, grid_games):
+        model_crossing = simulate(threshold, ratio, interval=1)["crossing_tick"]
         grid.append(
             {
                 "threshold": threshold,
@@ -137,6 +171,25 @@ def main() -> None:
 
     points: list[dict[str, object]] = []
     worst = 0
+    in_game_points = [
+        (label, threshold, ratio, interval)
+        for label, threshold, ratio, interval, in_game in POINTS
+        if in_game
+    ]
+    point_specs = [
+        (
+            str(args.raw),
+            "agent",
+            (slug(threshold, ratio, interval), threshold, ratio, interval, SPAWN, None),
+        )
+        for _, threshold, ratio, interval in in_game_points
+    ]
+    point_games = _run_games(
+        point_specs, jobs=args.jobs, progress=args.progress, desc="points-games"
+    )
+    games_by_label = {
+        label: game for (label, _, _, _), game in zip(in_game_points, point_games)
+    }
     for label, threshold, ratio, interval, in_game in tqdm(
         POINTS, desc="points", unit="run", disable=not args.progress
     ):
@@ -149,14 +202,7 @@ def main() -> None:
             "model_crossing": model_crossing,
         }
         if in_game:
-            game = run_agent(
-                args.raw,
-                slug(threshold, ratio, interval),
-                threshold,
-                ratio,
-                interval,
-                progress=args.progress,
-            )
+            game = games_by_label[label]
             entry["game_crossing"] = game["crossing_tick"]
             entry["game_declared"] = game["declared_tick"]
             crossed = game["crossing_tick"]
@@ -167,8 +213,20 @@ def main() -> None:
         points.append(entry)
         logger.info(entry)
 
-    for interval in (1, 10, 20, 30, 40, 45, 50, 52, 60):
-        logger.info("optimizer interval=%d: %s", interval, find_optimum(interval))
+    cadences = (1, 10, 20, 30, 40, 45, 50, 52, 60)
+    opt_specs: list[tuple[str, str, Sequence[Any]]] = [
+        (str(args.raw), "opt", (interval, 1.0, 1.0, SPAWN_TROOPS))
+        for interval in cadences
+    ]
+    opt_specs.extend(
+        (str(args.raw), "opt", (1, max_mult, regen_mult, start_troops))
+        for _, (start_troops, max_mult, regen_mult) in NATION_ECONOMY.items()
+    )
+    opt_results = _run_games(
+        opt_specs, jobs=args.jobs, progress=args.progress, desc="optimizer"
+    )
+    for interval, opt in zip(cadences, opt_results[: len(cadences)]):
+        logger.info("optimizer interval=%d: %s", interval, opt)
 
     # Economy decomposition (model-only: the human player cannot take nation
     # bonuses in-game). Per-economy 1-tick optima show what optimal play
@@ -176,13 +234,9 @@ def main() -> None:
     # nation bot time is the behavior gap. Observed declared ticks from
     # sweep_results.json: easy 15551, medium 11461, hard 9151, impossible 7691.
     economy: list[dict[str, object]] = []
-    for name, (start_troops, max_mult, regen_mult) in NATION_ECONOMY.items():
-        opt = find_optimum(
-            interval=1,
-            max_mult=max_mult,
-            regen_mult=regen_mult,
-            start_troops=start_troops,
-        )
+    for (name, (start_troops, max_mult, regen_mult)), opt in zip(
+        NATION_ECONOMY.items(), opt_results[len(cadences) :]
+    ):
         fixed = simulate(
             0.36,
             0.005,

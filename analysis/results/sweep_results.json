@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T00:53:44.345188+00:00",
-  "git_sha": "2712217e89da355e836ca9469a0dc4d01a6e27ef",
+  "created": "2026-10-18T01:12:01.998328+00:00",
+  "git_sha": "bf47650b673d2f5160b1762c9b529ce4697f9b9f",
   "map": "The Box",
   "win_rule": "tile share > 80% (FFA)",
   "runs": [
@@ -116,6 +116,42 @@
       "crossing_tick": 7881,
       "declared_tick": 7891,
       "tiles": 3383955,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-hardbot-ours-A",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 52,
+      "spawn": null,
+      "game_id": "BOX-OURS-A",
+      "crossing_tick": 7908,
+      "declared_tick": 7911,
+      "tiles": 3360036,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-hardbot-ours-B",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 52,
+      "spawn": null,
+      "game_id": "BOX-OURS-B",
+      "crossing_tick": 7889,
+      "declared_tick": 7891,
+      "tiles": 3359224,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-hardbot-ours-C",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 52,
+      "spawn": null,
+      "game_id": "BOX-OURS-C",
+      "crossing_tick": 7909,
+      "declared_tick": 7911,
+      "tiles": 3358880,
       "winner": "Agent"
     }
   ]

@@ -11,7 +11,9 @@ FFA rule: tile share > 80% of land
   and reproduced all results to the tick).
 - Scope of the minimality claim: **within the threshold-ratio policy class**
   (send `ratio * troops` when `troops >= threshold * max`) at decision
-  cadences 1–60 ticks. The 4 nation runs are reference points, not policies.
+  cadences 1–60 ticks. The 4 nation runs are reference points, not policies;
+  the 3 hardbot-ours runs are policies (our 52-tick optimum under bot-like
+  random-spawn conditions).
 
 ## Reproduce
 
@@ -20,6 +22,9 @@ uv run python analysis/sweep_single_entity.py --raw /tmp/replay_raw
 uv run python analysis/verify_optimum.py --raw /tmp/replay_verify
 uv run python scripts/serve_replays.py --raw /tmp/replay_raw  # index at :8787
 ```
+
+Both scripts take `--jobs N` (default: up to 8 parallel game/optimizer
+processes; `--jobs 1` for serial) and `--no-progress` for quiet logs.
 
 `sweep_single_entity.py` writes `analysis/results/sweep_results.json`
 (crossing/declared ticks, winners, git SHA); `verify_optimum.py` writes
@@ -30,7 +35,7 @@ number in the tables below comes from those two files. Records are cleaned
 in place (turn hashes stripped, map stamped), so the raw directory is
 directly servable.
 
-## The 13 strategies
+## The 16 strategies
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
@@ -43,10 +48,13 @@ directly servable.
 | 7 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000006 | 7,859 | 7,861 | Agent |
 | 8 | Agent, 52-tick decisions, 15% whenever >= 38% of max | OF000007 | 7,825 | 7,831 | Agent |
 | 9 | Agent, 60-tick decisions, 18% whenever >= 37% of max | OF000008 | 7,881 | 7,891 | Agent |
-| 10 | 1 nation, Easy (human idle) | OF000010 | — | 15,551 | Non-peaceful Bot |
-| 11 | 1 nation, Medium (human idle) | OF000013 | — | 11,461 | Non-peaceful Bot |
-| 12 | 1 nation, Hard (human idle) | OF000011 | — | 9,151 | Non-peaceful Bot |
-| 13 | 1 nation, Impossible (human idle) | OF000012 | — | 7,691 | Non-peaceful Bot |
+| 10 | Hard-bot-with-our-thresholds A: 52-tick (0.38, 0.15), random spawn | OF000010 | 7,908 | 7,911 | Agent |
+| 11 | Hard-bot-with-our-thresholds B: 52-tick (0.38, 0.15), random spawn | OF000011 | 7,889 | 7,891 | Agent |
+| 12 | Hard-bot-with-our-thresholds C: 52-tick (0.38, 0.15), random spawn | OF000012 | 7,909 | 7,911 | Agent |
+| 13 | 1 nation, Easy (human idle) | OF000013 | — | 15,551 | Non-peaceful Bot |
+| 14 | 1 nation, Medium (human idle) | OF000016 | — | 11,461 | Non-peaceful Bot |
+| 15 | 1 nation, Hard (human idle) | OF000014 | — | 9,151 | Non-peaceful Bot |
+| 16 | 1 nation, Impossible (human idle) | OF000015 | — | 7,691 | Non-peaceful Bot |
 
 Result: the minimum, within the policy class, is **7,811 ticks (7,803 to
 cross 80%)** with (threshold=0.36, ratio=0.005) at 1-tick cadence — no other
@@ -126,6 +134,26 @@ Single-draw nation times are noisy: Hard redraws attackRate/ratios per
 `game_id`, measuring 9,151 (ENGINE01), 10,301 / 8,901 / 11,241 across three
 seeds (mean 9,886, range ±~1,100). The gap to our 52-tick 7,831 holds on
 every draw (minimum margin 1,070 ticks).
+
+## Did we improve the Hard game? Yes — the variant table
+
+`HARDBOT_VARIANTS` in `sweep_single_entity.py`: our 52-tick optimal policy
+(0.38, 0.15) played under bot-like conditions — random land spawn (fixed
+per `game_id`, so reproducible) at Hard cadence and Hard economy
+(identical to human). Three seeds:
+
+| Variant (seed) | Crossing | Declared | vs Hard bot on overlapping seeds |
+|---|---|---|---|
+| ours-A (BOX-OURS-A) | 7,908 | 7,911 (OF000010) | — |
+| ours-B (BOX-OURS-B) | 7,889 | 7,891 (OF000011) | — |
+| ours-C (BOX-OURS-C) | 7,909 | 7,911 (OF000012) | — |
+| Hard bot range (4 seeds) | — | 8,901–11,241 | +990 to +3,330 slower, every draw |
+
+Mean 7,904 vs Hard mean 9,886: **~1,980 ticks (~20%) faster**, and the
+variant spread is ±10 ticks vs the bot's ±1,100 — the threshold-ratio
+policy is nearly spawn-insensitive where the bot's randomized gates are
+not. The random spawn costs ~60–80 ticks vs center spawn (7,825/7,831),
+so most of the 7,831→9,151 gap is decision logic, not positioning.
 
 Economy decomposition (model-only — the human player cannot take nation
 bonuses in-game; `NATION_ECONOMY` in `analytical_model.py`, optima logged
