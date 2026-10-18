@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T14:15:51.926155+00:00",
-  "git_sha": "e8e233fb6a5efb4c364883084c6c2866b3c4b1c5",
+  "created": "2026-10-18T14:26:04.359721+00:00",
+  "git_sha": "0730d683c3f0c13adae7b37f7b19957dcec893af",
   "map": "The Box",
   "win_rule": "tile share > 80% (FFA)",
   "runs": [
@@ -200,6 +200,106 @@
       "tribes": 0,
       "declared_tick": 10251,
       "winner": "Factory Builder",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-improved-hard-BOX-PAIR-B",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-PAIR-B",
+      "tribes": 0,
+      "declared_tick": 7901,
+      "winner": "Cage Liberator",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-improved-hard-BOX-PAIR-C",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-PAIR-C",
+      "tribes": 0,
+      "declared_tick": 7911,
+      "winner": "Punch Merchant",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-improved-hard-BOX-PAIR-D",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-PAIR-D",
+      "tribes": 0,
+      "declared_tick": 7911,
+      "winner": "Train Trader",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-improved-hard-BOX-PAIR-E",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-PAIR-E",
+      "tribes": 0,
+      "declared_tick": 7911,
+      "winner": "Punch Merchant",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-improved-hard-BOX-PAIR-F",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-PAIR-F",
+      "tribes": 0,
+      "declared_tick": 7921,
+      "winner": "Punch Merchant",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-hard-BOX-PAIR-B",
+      "difficulty": "hard",
+      "behavior": "production",
+      "game_id": "BOX-PAIR-B",
+      "tribes": 0,
+      "declared_tick": 9921,
+      "winner": "Cage Liberator",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-hard-BOX-PAIR-C",
+      "difficulty": "hard",
+      "behavior": "production",
+      "game_id": "BOX-PAIR-C",
+      "tribes": 0,
+      "declared_tick": 10271,
+      "winner": "Punch Merchant",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-hard-BOX-PAIR-D",
+      "difficulty": "hard",
+      "behavior": "production",
+      "game_id": "BOX-PAIR-D",
+      "tribes": 0,
+      "declared_tick": 8921,
+      "winner": "Train Trader",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-hard-BOX-PAIR-E",
+      "difficulty": "hard",
+      "behavior": "production",
+      "game_id": "BOX-PAIR-E",
+      "tribes": 0,
+      "declared_tick": 9391,
+      "winner": "Punch Merchant",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-hard-BOX-PAIR-F",
+      "difficulty": "hard",
+      "behavior": "production",
+      "game_id": "BOX-PAIR-F",
+      "tribes": 0,
+      "declared_tick": 8761,
+      "winner": "Punch Merchant",
       "winner_kind": "nation"
     }
   ]

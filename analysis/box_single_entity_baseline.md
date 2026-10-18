@@ -166,6 +166,30 @@ the best Hard draw (8,901) by ~1,000. The +10 ticks of seed A over the
 center-spawn 52-tick agent (7,831) is random spawn plus a later first
 decision (the nation starts deciding once spawned, not at tick 2).
 
+## Paired Hard vs Improved-Hard: same world, both difficulties
+
+The §above comparison is unpaired (different worlds, and Hard's extra
+seeds were untracked one-offs). The `box-hard-vs-improved` suite re-runs
+both difficulties on the **same six game_ids** (sealed arena: 1 nation,
+0 tribes, human idle, center spawn) — the per-seed margin isolates
+decision logic from world RNG. Every tape verified FAITHFUL headless:
+
+| Seed | Hard | Improved-Hard | Margin | Routes |
+|---|---|---|---|---|
+| BOX-PAIR-A | 10,251 | 7,851 | +2,400 | OF000019 / OF000020 |
+| BOX-PAIR-B | 9,921 | 7,901 | +2,020 | OF000021 / OF000024 |
+| BOX-PAIR-C | 10,271 | 7,911 | +2,360 | OF000022 / OF000025 |
+| BOX-PAIR-D | 8,921 | 7,911 | +1,010 | OF000023 / OF000026 |
+| BOX-PAIR-E | 9,391 | 7,911 | +1,480 | OF000029 / OF000027 |
+| BOX-PAIR-F | 8,761 | 7,921 | +840 | OF000030 / OF000028 |
+
+Mean margin **+1,685 ticks (~18%)**, minimum margin **+840** — positive on
+all six worlds. Pairing works as designed: each pair crowns the same
+nation (same world RNG, only the brains differ). Improved-Hard is
+consistent (7,851–7,921, 70 spread — fixed 52-tick logic); Hard swings
+8,761–10,271 (per-game redrawn attackRate/ratios). **Verdict: Improved-Hard
+is genuinely better than Hard**, not a seed artifact.
+
 ## Tribes race: which nation wins faster with 400 tribes?
 
 Same map, human idle, one nation each plus the production tribe count
@@ -223,10 +247,11 @@ runs one process per game. Replays are served per experiment
 
 ## Full comparison: every agent cadence vs every nation
 
-All 16 strategies ranked by declared win tick, with gaps to the human-
+All 18 original strategies ranked by declared win tick, with gaps to the human-
 economy best (7,811) and to the Hard bot (9,151). Watch every game at
-`http://localhost:8787` (replays OF000001–OF000018); open any replay in
-the client renderer via its Watch link.
+`http://localhost:8787` (replays OF000001–OF000030, incl. the paired
+`box-hard-vs-improved` suite); open any replay in the client renderer via
+its Watch link.
 
 | Rank | Strategy | Declared | Δ vs best (7,811) | Δ vs Hard bot (9,151) |
 |---|---|---|---|---|
@@ -241,7 +266,7 @@ the client renderer via its Watch link.
 | 7 | Agent 45-tick (0.38, 0.15) | 7,851 | +40 | −1,300 |
 | 8 | Agent 50-tick (0, 0.12) ungated | 7,861 | +50 | −1,290 |
 | 9 | Agent 60-tick (0.37, 0.18) | 7,891 | +80 | −1,260 |
-| 10 | Improved-Hard nation (×3 seeds, mean 7,888) | 7,841–7,911 | +30–100 | −1,310 – −1,240 |
+| 10 | Improved-Hard nation (×3 seeds, mean 7,888; paired +1,685 vs Hard, §Paired) | 7,841–7,911 | +30–100 | −1,310 – −1,240 |
 | — | Hard nation bot (human economy) | 9,151 | +1,340 | 0 |
 | — | Medium nation (0.75x/0.95x) | 11,461 | +3,650 | +2,310 |
 | — | Easy nation (0.5x/0.9x) | 15,551 | +7,740 | +6,400 |
