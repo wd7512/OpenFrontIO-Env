@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T01:21:37.657902+00:00",
-  "git_sha": "9cf5052a55bb5e915ac7f05ae3b41a3bedd2ae6f",
+  "created": "2026-10-18T01:28:22.104017+00:00",
+  "git_sha": "e4d29cb1ffc42ec572fabe914cfe26ff8268f246",
   "map": "The Box",
   "win_rule": "tile share > 80% (FFA)",
   "runs": [
@@ -12,7 +12,8 @@
       "crossing_tick": 7803,
       "declared_tick": 7811,
       "tiles": 3361585,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-10tick",
@@ -22,7 +23,8 @@
       "crossing_tick": 7809,
       "declared_tick": 7811,
       "tiles": 3358808,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-20tick",
@@ -32,7 +34,8 @@
       "crossing_tick": 7809,
       "declared_tick": 7811,
       "tiles": 3361467,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-30tick",
@@ -42,7 +45,8 @@
       "crossing_tick": 7817,
       "declared_tick": 7821,
       "tiles": 3356667,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-40tick",
@@ -52,7 +56,8 @@
       "crossing_tick": 7819,
       "declared_tick": 7821,
       "tiles": 3356911,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-50tick",
@@ -62,31 +67,36 @@
       "crossing_tick": 7859,
       "declared_tick": 7861,
       "tiles": 3362210,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-nation-easy-solo",
       "difficulty": "easy",
       "declared_tick": 15551,
-      "winner": "Non-peaceful Bot"
+      "winner": "Non-peaceful Bot",
+      "winner_kind": "nation"
     },
     {
       "name": "box-nation-medium-solo",
       "difficulty": "medium",
       "declared_tick": 11461,
-      "winner": "Non-peaceful Bot"
+      "winner": "Non-peaceful Bot",
+      "winner_kind": "nation"
     },
     {
       "name": "box-nation-hard-solo",
       "difficulty": "hard",
       "declared_tick": 9151,
-      "winner": "Non-peaceful Bot"
+      "winner": "Non-peaceful Bot",
+      "winner_kind": "nation"
     },
     {
       "name": "box-nation-impossible-solo",
       "difficulty": "impossible",
       "declared_tick": 7691,
-      "winner": "Non-peaceful Bot"
+      "winner": "Non-peaceful Bot",
+      "winner_kind": "nation"
     },
     {
       "name": "box-agent-45tick",
@@ -96,7 +106,8 @@
       "crossing_tick": 7847,
       "declared_tick": 7851,
       "tiles": 3369476,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-52tick",
@@ -106,7 +117,8 @@
       "crossing_tick": 7825,
       "declared_tick": 7831,
       "tiles": 3355952,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-agent-60tick",
@@ -116,7 +128,8 @@
       "crossing_tick": 7881,
       "declared_tick": 7891,
       "tiles": 3383955,
-      "winner": "Agent"
+      "winner": "Agent",
+      "winner_kind": "human"
     },
     {
       "name": "box-nation-improved-hard-BOX-IH-A",
@@ -124,7 +137,8 @@
       "behavior": "improved-hard",
       "game_id": "BOX-IH-A",
       "declared_tick": 7921,
-      "winner": "Factory Builder"
+      "winner": "Factory Builder",
+      "winner_kind": "nation"
     },
     {
       "name": "box-nation-improved-hard-BOX-IH-B",
@@ -132,7 +146,8 @@
       "behavior": "improved-hard",
       "game_id": "BOX-IH-B",
       "declared_tick": 7921,
-      "winner": "Train Trader"
+      "winner": "Train Trader",
+      "winner_kind": "nation"
     },
     {
       "name": "box-nation-improved-hard-BOX-IH-C",
@@ -140,7 +155,28 @@
       "behavior": "improved-hard",
       "game_id": "BOX-IH-C",
       "declared_tick": 7921,
-      "winner": "Evan The Dev"
+      "winner": "Evan The Dev",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-hard-BOX-TR-HARD-tribes400",
+      "difficulty": "hard",
+      "behavior": "production",
+      "game_id": "BOX-TR-HARD",
+      "tribes": 400,
+      "declared_tick": 7741,
+      "winner": "King of the Corner",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-nation-improved-hard-BOX-TR-IH-tribes400",
+      "difficulty": "improved-hard",
+      "behavior": "improved-hard",
+      "game_id": "BOX-TR-IH",
+      "tribes": 400,
+      "declared_tick": 65321,
+      "winner": "Dai Viet Domain",
+      "winner_kind": "tribe"
     }
   ]
 }

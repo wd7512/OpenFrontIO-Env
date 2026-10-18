@@ -87,6 +87,13 @@ DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 # Seeded runs of the improved-hard nation difficulty (Hard economy, custom
 # threshold-ratio behavior wired in engine/improvedHardBehavior.ts).
 NATION_SEEDS = {"improved-hard": ("BOX-IH-A", "BOX-IH-B", "BOX-IH-C")}
+# Tribe races on the same map: production tribe count (400, the solo
+# default), human idle, one nation each — hard vs improved-hard.
+TRIBES = 400
+NATION_TRIBES_RACES = {
+    "hard": "BOX-TR-HARD",
+    "improved-hard": "BOX-TR-IH",
+}
 
 
 def git_sha() -> str:
@@ -176,13 +183,19 @@ def run_agent(
 
 
 def run_nation(
-    raw: Path, difficulty: str, game_id: str | None = None, progress: bool = False
+    raw: Path,
+    difficulty: str,
+    game_id: str | None = None,
+    progress: bool = False,
+    tribes: int = 0,
 ) -> dict[str, object]:
     tag = (
         f"box-nation-{difficulty}-{game_id}"
         if game_id
         else f"box-nation-{difficulty}-solo"
     )
+    if tribes:
+        tag += f"-tribes{tribes}"
     outdir = raw / tag
     outdir.mkdir(parents=True, exist_ok=True)
     os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
@@ -190,7 +203,7 @@ def run_nation(
         state = engine.start(
             nations=1,
             difficulty=difficulty,
-            tribes=0,
+            tribes=tribes,
             spawn=SPAWN,
             map_size="full",
             game_id=game_id,
@@ -214,6 +227,7 @@ def run_nation(
         "difficulty": difficulty,
         "behavior": "improved-hard" if difficulty == "improved-hard" else "production",
         "game_id": game_id,
+        "tribes": tribes,
         "declared_tick": record["ticks"],
         "winner": winner,
     }
@@ -223,7 +237,7 @@ def run_nation(
 
 # Full dispatcher spec: (raw_dir, tick_progress, kind, payload), where the
 # agent payload is (name, threshold, ratio, interval, spawn, game_id),
-# the nation payload is (difficulty, game_id), and the opt payload is
+# the nation payload is (difficulty, game_id, tribes), and the opt payload is
 # (interval, max_mult, regen_mult, start_troops).
 TaskSpec = tuple[str, bool, str, Sequence[Any]]
 
@@ -274,15 +288,17 @@ def _run_task(spec: TaskSpec) -> dict[str, object]:
             "ratio": opt["ratio"],
             "crossing_tick": opt["crossing_tick"],
         }
-    (difficulty, nation_game_id) = payload
+    (difficulty, nation_game_id, nation_tribes) = payload
     assert isinstance(difficulty, str)
     assert nation_game_id is None or isinstance(nation_game_id, str)
+    assert isinstance(nation_tribes, int)
     assert kind == "nation"
     return run_nation(
         raw,
         difficulty,
         game_id=nation_game_id,
         progress=tick_progress,
+        tribes=nation_tribes,
     )
 
 
@@ -326,12 +342,16 @@ def main() -> None:
     for difficulty in DIFFICULTIES:
         run_name = f"box-nation-{difficulty}-solo"
         if only is None or run_name in only:
-            tasks.append(("nation", (difficulty, None)))
+            tasks.append(("nation", (difficulty, None, 0)))
     for difficulty, seeds in NATION_SEEDS.items():
         for game_id in seeds:
             run_name = f"box-nation-{difficulty}-{game_id}"
             if only is None or run_name in only:
-                tasks.append(("nation", (difficulty, game_id)))
+                tasks.append(("nation", (difficulty, game_id, 0)))
+    for difficulty, game_id in NATION_TRIBES_RACES.items():
+        run_name = f"box-nation-{difficulty}-{game_id}-tribes{TRIBES}"
+        if only is None or run_name in only:
+            tasks.append(("nation", (difficulty, game_id, TRIBES)))
 
     tick_progress = args.progress and args.jobs == 1
     specs: list[TaskSpec] = [

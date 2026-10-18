@@ -35,7 +35,7 @@ number in the tables below comes from those two files. Records are cleaned
 in place (turn hashes stripped, map stamped), so the raw directory is
 directly servable.
 
-## The 16 strategies
+## The 18 strategies
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
@@ -49,12 +49,14 @@ directly servable.
 | 8 | Agent, 52-tick decisions, 15% whenever >= 38% of max | OF000007 | 7,825 | 7,831 | Agent |
 | 9 | Agent, 60-tick decisions, 18% whenever >= 37% of max | OF000008 | 7,881 | 7,891 | Agent |
 | 10 | 1 nation, Easy (human idle) | OF000010 | — | 15,551 | Non-peaceful Bot |
-| 11 | 1 nation, Hard (human idle) | OF000011 | — | 9,151 | Non-peaceful Bot |
-| 12 | 1 nation, Impossible (human idle) | OF000012 | — | 7,691 | Non-peaceful Bot |
-| 13 | 1 nation, Improved-Hard A (human idle) | OF000013 | — | 7,921 | Factory Builder |
-| 14 | 1 nation, Improved-Hard B (human idle) | OF000014 | — | 7,921 | Train Trader |
-| 15 | 1 nation, Improved-Hard C (human idle) | OF000015 | — | 7,921 | Evan The Dev |
-| 16 | 1 nation, Medium (human idle) | OF000016 | — | 11,461 | Non-peaceful Bot |
+| 11 | 1 nation, Hard + 400 tribes (human idle) | OF000011 | — | 7,741 | King of the Corner |
+| 12 | 1 nation, Hard (human idle) | OF000012 | — | 9,151 | Non-peaceful Bot |
+| 13 | 1 nation, Impossible (human idle) | OF000013 | — | 7,691 | Non-peaceful Bot |
+| 14 | 1 nation, Improved-Hard A (human idle) | OF000014 | — | 7,921 | Factory Builder |
+| 15 | 1 nation, Improved-Hard B (human idle) | OF000015 | — | 7,921 | Train Trader |
+| 16 | 1 nation, Improved-Hard C (human idle) | OF000016 | — | 7,921 | Evan The Dev |
+| 17 | 1 nation, Improved-Hard + 400 tribes (human idle) | OF000017 | — | 65,321 | Dai Viet Domain (tribe) |
+| 18 | 1 nation, Medium (human idle) | OF000018 | — | 11,461 | Non-peaceful Bot |
 
 Result: the minimum, within the policy class, is **7,811 ticks (7,803 to
 cross 80%)** with (threshold=0.36, ratio=0.005) at 1-tick cadence — no other
@@ -153,9 +155,9 @@ names — zero seed variance (fixed logic; spawn barely matters):
 
 | Seed | Declared | Winner (nation name) |
 |---|---|---|
-| BOX-IH-A | 7,921 (OF000013) | Factory Builder |
-| BOX-IH-B | 7,921 (OF000014) | Train Trader |
-| BOX-IH-C | 7,921 (OF000015) | Evan The Dev |
+| BOX-IH-A | 7,921 (OF000014) | Factory Builder |
+| BOX-IH-B | 7,921 (OF000015) | Train Trader |
+| BOX-IH-C | 7,921 (OF000016) | Evan The Dev |
 | Hard bot range (4 seeds) | 8,901–11,241 | various bots |
 
 Mean 7,921 vs Hard mean 9,886: **~1,965 ticks (~20%) faster**, beating
@@ -163,16 +165,43 @@ the best Hard draw (8,901) by ~1,000. The +90 ticks over the center-spawn
 52-tick agent (7,831) is random spawn plus a later first decision (the
 nation starts deciding once spawned, not at tick 2).
 
+## Tribes race: which nation wins faster with 400 tribes?
+
+Same map, human idle, one nation each plus the production tribe count
+(400, the solo default). Winner kind is read from the record's player
+list, not the name:
+
+| Race | Declared | Winner | Kind |
+|---|---|---|---|
+| Hard + 400 tribes (OF000011) | **7,741** | King of the Corner | nation |
+| Improved-Hard + 400 tribes (OF000017) | 65,321 | Dai Viet Domain | tribe |
+
+**Hard wins the tribes race — and it isn't close.** Worse, our nation
+doesn't just lose slowly: it *loses*, to a tribe, at 65,321. Mechanism:
+`ImprovedHardExecution` only attacks TerraNullius; tribes are players,
+so with 400 tribes covering the map there is almost no neutral land
+left and the nation starves while a tribe snowballs to 80%. The
+production AI instead hunts weak neighbors (`veryWeak/victim/weakest`
+targeting, bot-attack path) — tribes are free real estate, which is why
+Hard wins *faster* with tribes (7,741) than solo (9,151).
+
+Honest scope of the improvement: Improved-Hard dominates solo expansion
+(+1,230 over Hard at equal economy) but regresses catastrophically in
+contested games because it cannot fight players. The next iteration is
+weakest-player attacks on the same 52-tick cadence (the bot's
+`attackBots`-style sizing: 4× target troops, capped to budget).
+
 ## Full comparison: every agent cadence vs every nation
 
 All 16 strategies ranked by declared win tick, with gaps to the human-
 economy best (7,811) and to the Hard bot (9,151). Watch every game at
-`http://localhost:8787` (replays OF000001–OF000016); open any replay in
+`http://localhost:8787` (replays OF000001–OF000018); open any replay in
 the client renderer via its Watch link.
 
 | Rank | Strategy | Declared | Δ vs best (7,811) | Δ vs Hard bot (9,151) |
 |---|---|---|---|---|
 | — | Impossible nation (1.25x/1.05x economy) | 7,691 | −120 (economy, not policy) | −1,460 |
+| — | Hard nation + 400 tribes (tribes accelerate it) | 7,741 | −70 (weak-tribe prey) | −1,410 |
 | 1 | Agent 1-tick (0.36, 0.005) | **7,811** | 0 | −1,340 |
 | 1 | Agent 10-tick (0.375, 0.05) | 7,811 | 0 (quantization tie) | −1,340 |
 | 1 | Agent 20-tick (0.375, 0.065) | 7,811 | 0 (quantization tie) | −1,340 |
@@ -186,10 +215,10 @@ the client renderer via its Watch link.
 | — | Hard nation bot (human economy) | 9,151 | +1,340 | 0 |
 | — | Medium nation (0.75x/0.95x) | 11,461 | +3,650 | +2,310 |
 | — | Easy nation (0.5x/0.9x) | 15,551 | +7,740 | +6,400 |
+| — | Improved-Hard + 400 tribes (loses to a tribe) | 65,321 | +57,510 | +56,170 |
 
-Reading: every agent cadence — including the coarsest 60-tick and the
-random-spawn Improved-Hard games — beats every same-or-weaker-economy
-nation bot by 1,240+ ticks. The only entry ahead of the 1-tick minimum
+Reading: every agent cadence — including the coarsest 60-tick — beats
+every same-or-weaker-economy nation bot by 1,230+ ticks. The only entry ahead of the 1-tick minimum
 is Impossible, purely on economy (optimal play with its bonuses crosses
 at 6,556; §Nation comparison). Within human economy, the ranking is
 monotone in cadence except the 45/52-tick swap (win-check quantization:
