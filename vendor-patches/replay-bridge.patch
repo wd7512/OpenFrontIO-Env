@@ -1,0 +1,175 @@
+--- a/src/core/Schemas.ts
++++ b/src/core/Schemas.ts
+@@ -827,6 +827,11 @@
+   // zb.json: TribeSchema is `.loose()`, and a positional binary layout would
+   // silently drop the passthrough keys that looseness exists to preserve.
+   tribes: z.array(zb.json(TribeSchema)).max(100).optional(),
++  // Custom nation decision logic for archived replays. The record config
++  // always tapes a production difficulty (economy), so the behavior that
++  // actually produced the tape rides here instead; set in-memory by the
++  // replay loader from the archive's sidecar meta, never persisted.
++  nationBehavior: z.string().optional(),
+ });
+ 
+ export const WinnerSchema = z
+--- a/src/client/Main.ts
++++ b/src/client/Main.ts
+@@ -154,6 +154,10 @@
+   gameStartInfo?: GameStartInfo;
+   // GameRecord exists when replaying an archived game.
+   gameRecord?: GameRecord;
++  // Custom nation behavior for archived replays, from the archive sidecar
++  // meta (see JoinLobbyModal.checkArchivedGame). Attached to gameStartInfo
++  // before the sim starts so replays reproduce custom-AI tapes.
++  nationBehavior?: string;
+   source?: "public" | "private" | "host" | "matchmaking" | "singleplayer";
+   publicLobbyInfo?: GameInfo | PublicGameInfo;
+   // Watch without playing.
+@@ -875,6 +879,16 @@
+     // handshake. whenSeeded() always resolves (falling back to the generated
+     // anon name on failure/timeout), so this can only delay, never block.
+     await this.usernameInput?.whenSeeded();
++    const gameStartInfo =
++      lobby.gameStartInfo ??
++      // Replays simulate from the archived record; re-apply the server's
++      // wire blanking or team games desync (see toWireGameStartInfo).
++      (lobby.gameRecord
++        ? toWireGameStartInfo(lobby.gameRecord.info)
++        : undefined);
++    if (gameStartInfo && lobby.nationBehavior) {
++      gameStartInfo.nationBehavior = lobby.nationBehavior;
++    }
+     const newLobbyHandle = joinLobby(this.eventBus, {
+       gameID: lobby.gameID,
+       cosmetics: await getPlayerCosmeticsRefs(),
+@@ -883,13 +897,7 @@
+       playerClanTag: this.usernameInput?.getClanTag() ?? null,
+       clanTagCheck: this.usernameInput?.getClanCheck(),
+       playerRole,
+-      gameStartInfo:
+-        lobby.gameStartInfo ??
+-        // Replays simulate from the archived record; re-apply the server's
+-        // wire blanking or team games desync (see toWireGameStartInfo).
+-        (lobby.gameRecord
+-          ? toWireGameStartInfo(lobby.gameRecord.info)
+-          : undefined),
++      gameStartInfo,
+       gameRecord: lobby.gameRecord,
+       spectator: lobby.spectator,
+     });
+--- a/src/client/JoinLobbyModal.ts
++++ b/src/client/JoinLobbyModal.ts
+@@ -1281,6 +1281,7 @@
+           gameID: lobbyId,
+           gameRecord: parsed.data,
+           source: "private",
++          nationBehavior: await this.fetchReplayBehavior(lobbyId),
+         } as JoinLobbyEvent,
+         bubbles: true,
+         composed: true,
+@@ -1289,6 +1290,28 @@
+     return "success";
+   }
+ 
++  // Custom nation behavior for archived replays, from the archive sidecar
++  // meta (see scripts/serve_replays.py game_meta). Best-effort: archives
++  // without the endpoint (production) replay with the production AI, so a
++  // missing meta is undefined, never an error.
++  private async fetchReplayBehavior(
++    lobbyId: string,
++  ): Promise<string | undefined> {
++    try {
++      const metaResponse = await fetch(
++        `${getApiBase()}/game/${lobbyId}/meta`,
++        { method: "GET", headers: { "Content-Type": "application/json" } },
++      );
++      if (!metaResponse.ok) {
++        return undefined;
++      }
++      const meta = await metaResponse.json();
++      return typeof meta?.behavior === "string" ? meta.behavior : undefined;
++    } catch {
++      return undefined;
++    }
++  }
++
+   // The record was produced by a different build. replay.<domain>/<gameId>
+   // serves the matching versioned shell (uploaded by update.sh on every
+   // deploy); if it exists, navigate there and let that build replay the game
+--- a/src/core/GameRunner.ts
++++ b/src/core/GameRunner.ts
+@@ -86,6 +86,7 @@
+       gameStart.tribes?.map((t) => t.name),
+     ),
+     callBack,
++    gameStart.nationBehavior,
+   );
+   gr.init();
+   return gr;
+@@ -102,6 +103,7 @@
+     public game: Game,
+     private execManager: Executor,
+     private callBack: (gu: GameUpdateViewData | ErrorUpdate) => void,
++    private nationBehavior?: string,
+   ) {}
+ 
+   init() {
+@@ -109,7 +111,9 @@
+       this.game.addExecution(new SpawnTimerExecution());
+     }
+     if (this.game.config().spawnNations()) {
+-      this.game.addExecution(...this.execManager.nationExecutions());
++      this.game.addExecution(
++        ...this.execManager.nationExecutions(this.nationBehavior),
++      );
+     }
+     if (this.game.config().isRandomSpawn()) {
+       this.game.addExecution(...this.execManager.spawnPlayers());
+--- a/src/core/execution/ExecutionManager.ts
++++ b/src/core/execution/ExecutionManager.ts
+@@ -28,6 +28,13 @@
+ import { TribeSpawner } from "./TribeSpawner";
+ import { UpgradeStructureExecution } from "./UpgradeStructureExecution";
+ import { PlayerSpawner } from "./utils/PlayerSpawner";
++// Custom nation behavior (benchmark harness). Replays of custom-AI tapes
++// attach this instead of the production NationExecution when the replay
++// loader flags the behavior; live games never take this branch.
++import {
++  IMPROVED_HARD_BEHAVIOR,
++  ImprovedHardExecution,
++} from "../../../../../engine/improvedHardBehavior";
+ 
+ export class Executor {
+   // private random = new PseudoRandom(999)
+@@ -148,10 +155,14 @@
+     return new PlayerSpawner(this.mg, this.gameID).spawnPlayers();
+   }
+ 
+-  nationExecutions(): Execution[] {
++  nationExecutions(behavior?: string): Execution[] {
+     const execs: Execution[] = [];
+     for (const nation of this.mg.nations()) {
+-      execs.push(new NationExecution(this.gameID, nation));
++      if (behavior === IMPROVED_HARD_BEHAVIOR) {
++        execs.push(new ImprovedHardExecution(this.gameID, nation));
++      } else {
++        execs.push(new NationExecution(this.gameID, nation));
++      }
+     }
+     return execs;
+   }
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -272,6 +272,12 @@
+       host: process.env.VITE_HOST === "lan",
+       // Automatically open the browser when the server starts
+       open: process.env.SKIP_BROWSER_OPEN !== "true",
++      // The game worker bundles the benchmark harness's custom nation
++      // behavior from <repo>/engine (see Executor.nationExecutions); allow
++      // dev-mode imports from outside the package root.
++      fs: {
++        allow: ["..", "../..", "../../.."],
++      },
+       proxy: {
+         "/lobbies": {
+           target: "ws://localhost:3000",

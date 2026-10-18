@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 VENDOR = Path(__file__).resolve().parent.parent / "vendor" / "OpenFrontIO"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 BRIDGE_MARKERS = {
     # Tapes serve sidecar behavior; the loader threads it to the runner.
@@ -31,3 +32,16 @@ def test_vendor_replay_bridge_intact() -> None:
         if not path.is_file() or marker not in path.read_text():
             missing.append(f"{rel} :: {marker}")
     assert not missing, f"vendor replay bridge damaged: {missing}"
+
+
+def test_vendor_patch_and_ci_step_pinned() -> None:
+    """The bridge must be reproducible on a pristine checkout: the patch
+    file must exist and CI must apply it right after submodule init,
+    otherwise fresh checkouts go red in test_vendor_replay_bridge_intact
+    (or worse, silently diverge replays)."""
+    patch = REPO_ROOT / "vendor-patches" / "replay-bridge.patch"
+    assert patch.is_file(), "tracked vendor patch missing"
+    for _rel, marker in BRIDGE_MARKERS.items():
+        assert marker in patch.read_text(), marker
+    ci = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    assert "apply_vendor_patches" in ci.read_text(), "CI apply step missing"
