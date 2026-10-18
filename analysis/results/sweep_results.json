@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T14:26:04.359721+00:00",
-  "git_sha": "0730d683c3f0c13adae7b37f7b19957dcec893af",
+  "created": "2026-10-18T14:44:09.166762+00:00",
+  "git_sha": "99a9d99d60d51187c1fcbc7851817df80a935915",
   "map": "The Box",
   "win_rule": "tile share > 80% (FFA)",
   "runs": [
@@ -300,6 +300,96 @@
       "tribes": 0,
       "declared_tick": 8761,
       "winner": "Punch Merchant",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-duel-BOX-DUEL-A",
+      "difficulty": "hard",
+      "behavior": "duel",
+      "game_id": "BOX-DUEL-A",
+      "tribes": 0,
+      "nation_behaviors": [
+        "production",
+        "improved-hard"
+      ],
+      "declared_tick": 10051,
+      "winner": "King of the Corner",
+      "winner_behavior": "production",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-duel-BOX-DUEL-B",
+      "difficulty": "hard",
+      "behavior": "duel",
+      "game_id": "BOX-DUEL-B",
+      "tribes": 0,
+      "nation_behaviors": [
+        "production",
+        "improved-hard"
+      ],
+      "declared_tick": 87491,
+      "winner": "Evan The Dev",
+      "winner_behavior": "production",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-duel-BOX-DUEL-C",
+      "difficulty": "hard",
+      "behavior": "duel",
+      "game_id": "BOX-DUEL-C",
+      "tribes": 0,
+      "nation_behaviors": [
+        "production",
+        "improved-hard"
+      ],
+      "declared_tick": 84321,
+      "winner": "Punch Merchant",
+      "winner_behavior": "production",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-duel-BOX-DUEL-D",
+      "difficulty": "hard",
+      "behavior": "duel",
+      "game_id": "BOX-DUEL-D",
+      "tribes": 0,
+      "nation_behaviors": [
+        "production",
+        "improved-hard"
+      ],
+      "declared_tick": 9711,
+      "winner": "Factory Builder",
+      "winner_behavior": "production",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-duel-BOX-DUEL-E",
+      "difficulty": "hard",
+      "behavior": "duel",
+      "game_id": "BOX-DUEL-E",
+      "tribes": 0,
+      "nation_behaviors": [
+        "production",
+        "improved-hard"
+      ],
+      "declared_tick": 10831,
+      "winner": "Front Manager",
+      "winner_behavior": "production",
+      "winner_kind": "nation"
+    },
+    {
+      "name": "box-duel-BOX-DUEL-F",
+      "difficulty": "hard",
+      "behavior": "duel",
+      "game_id": "BOX-DUEL-F",
+      "tribes": 0,
+      "nation_behaviors": [
+        "production",
+        "improved-hard"
+      ],
+      "declared_tick": 67581,
+      "winner": "Cage Liberator",
+      "winner_behavior": "production",
       "winner_kind": "nation"
     }
   ]

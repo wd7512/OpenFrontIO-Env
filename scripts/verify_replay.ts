@@ -40,7 +40,15 @@ async function main(): Promise<void> {
   const meta = await (await fetch(`${archive}/game/${route}/meta`)).json();
   const record = decompressGameRecord(GameRecordSchema.parse(recordJson));
   const gameStart: GameStartInfo = toWireGameStartInfo(record.info);
-  if (typeof meta?.behavior === "string" && meta.behavior !== "production") {
+  if (Array.isArray(meta?.nationBehaviors) && meta.nationBehaviors.length > 0) {
+    // Duel tapes: per-nation assignment in spawn order (takes precedence).
+    gameStart.nationBehaviors = meta.nationBehaviors.filter(
+      (b: unknown): b is string => typeof b === "string",
+    );
+  } else if (
+    typeof meta?.behavior === "string" &&
+    meta.behavior !== "production"
+  ) {
     gameStart.nationBehavior = meta.behavior;
   }
   const mapLoader = new NodeGameMapLoader(path.join(REPO_ROOT, "vendor/OpenFrontIO/resources/maps"));

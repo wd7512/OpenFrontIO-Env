@@ -109,6 +109,17 @@ NATION_TRIBES_RACES = {
     "hard": "BOX-TR-HARD",
     "improved-hard": "BOX-TR-IH",
 }
+# Head-to-head duels: two nations, different brains, one world. Fresh ids
+# so duel worlds never collide with solo/paired seeds.
+DUEL_SEEDS = (
+    "BOX-DUEL-A",
+    "BOX-DUEL-B",
+    "BOX-DUEL-C",
+    "BOX-DUEL-D",
+    "BOX-DUEL-E",
+    "BOX-DUEL-F",
+)
+DUEL_BEHAVIORS = ("production", "improved-hard")
 
 # Replay-library layout: run name -> experiment dir. Runs are written
 # straight into their suite so re-runs land in place (no moves, no ghost
@@ -152,6 +163,14 @@ EXPERIMENTS = {
             "idle). Margin = hard tick minus improved-hard tick."
         ),
     },
+    "box-duels": {
+        "kind": "box-duel",
+        "notes": (
+            "Head-to-head duels: production-Hard vs Improved-Hard nations "
+            "in one world (2 nations, 0 tribes, human idle). Winner is "
+            "attributed to its behavior via the taped roster."
+        ),
+    },
 }
 EXP_OF = {
     name: "box-cadence-ladder"
@@ -180,6 +199,8 @@ for _difficulty, _seeds in NATION_SEEDS.items():
         EXP_OF[f"box-nation-{_difficulty}-{_seed}"] = _exp
 for _difficulty, _seed in NATION_TRIBES_RACES.items():
     EXP_OF[f"box-nation-{_difficulty}-{_seed}-tribes{TRIBES}"] = "box-tribes-race"
+for _seed in DUEL_SEEDS:
+    EXP_OF[f"box-duel-{_seed}"] = "box-duels"
 
 
 def exp_dir(raw: Path, name: str) -> Path:
@@ -274,6 +295,8 @@ def _write_run_summary(
         "economy": _economy_label(str(result["difficulty"]))
         if result.get("difficulty")
         else None,
+        "nation_behaviors": result.get("nation_behaviors"),
+        "winner_behavior": result.get("winner_behavior"),
     }
     if (
         isinstance(result.get("threshold"), float)
@@ -304,6 +327,8 @@ def _write_run_summary(
                 "behavior",
                 "tribes",
                 "game_id",
+                "nation_behaviors",
+                "winner_behavior",
             )
             if k in result
         },
@@ -431,10 +456,72 @@ def run_nation(
     return result
 
 
+def run_duel(
+    raw: Path,
+    game_id: str,
+    behaviors: Sequence[str] = ("production", "improved-hard"),
+    progress: bool = False,
+) -> dict[str, object]:
+    """One head-to-head duel: two nations with different brains, same world.
+
+    ``behaviors`` assigns decision logic per nation in spawn order; the
+    roster tapes the assignment so replays reproduce the duel. Winner is
+    attributed to its behavior via the roster (None on draws / human wins).
+    """
+    tag = f"box-duel-{game_id}"
+    outdir = exp_dir(raw, tag)
+    outdir.mkdir(parents=True, exist_ok=True)
+    os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
+    with EngineWorker(map_dir=MAP_DIR) as engine:
+        state = engine.start(
+            nations=len(behaviors),
+            difficulty="hard",
+            tribes=0,
+            spawn=SPAWN,
+            map_size="full",
+            game_id=game_id,
+            nation_behaviors=list(behaviors),
+        )
+        tick = state["tick"]
+        winner = None
+        with tqdm(
+            desc=tag, unit="tick", disable=not progress, leave=False, miniters=50
+        ) as bar:
+            while winner is None and tick < MAX_TICKS:
+                # human idle: the two nations fight alone
+                state = engine.advance(1)
+                tick = state["tick"]
+                bar.update(tick - bar.n)
+                bar.set_postfix_str(f"tick={tick}")
+                winner = state.get("winner")
+        record = engine.save_record()
+    clean_record(outdir)
+    roster = {
+        p.get("name"): p.get("behavior")
+        for p in record.get("players", [])
+        if isinstance(p, dict) and p.get("kind") == "nation"
+    }
+    result = {
+        "name": tag,
+        "difficulty": "hard",
+        "behavior": "duel",
+        "game_id": game_id,
+        "tribes": 0,
+        "nation_behaviors": list(behaviors),
+        "declared_tick": record["ticks"],
+        "winner": winner,
+        "winner_behavior": roster.get(winner) if isinstance(winner, str) else None,
+    }
+    _write_run_summary(outdir, result, record)
+    logger.info(result)
+    return result
+
+
 # Full dispatcher spec: (raw_dir, tick_progress, kind, payload), where the
 # agent payload is (name, threshold, ratio, interval, spawn, game_id),
-# the nation payload is (difficulty, game_id, tribes), and the opt payload is
-# (interval, max_mult, regen_mult, start_troops).
+# the nation payload is (difficulty, game_id, tribes), the duel payload is
+# (game_id,), and the opt payload is (interval, max_mult, regen_mult,
+# start_troops).
 TaskSpec = tuple[str, bool, str, Sequence[Any]]
 
 
@@ -484,11 +571,20 @@ def _run_task(spec: TaskSpec) -> dict[str, object]:
             "ratio": opt["ratio"],
             "crossing_tick": opt["crossing_tick"],
         }
+    if kind == "duel":
+        (duel_game_id,) = payload
+        assert isinstance(duel_game_id, str)
+        return run_duel(
+            raw,
+            duel_game_id,
+            behaviors=DUEL_BEHAVIORS,
+            progress=tick_progress,
+        )
+    assert kind == "nation"
     (difficulty, nation_game_id, nation_tribes) = payload
     assert isinstance(difficulty, str)
     assert nation_game_id is None or isinstance(nation_game_id, str)
     assert isinstance(nation_tribes, int)
-    assert kind == "nation"
     return run_nation(
         raw,
         difficulty,
@@ -549,6 +645,10 @@ def main() -> None:
         run_name = f"box-nation-{difficulty}-{game_id}-tribes{TRIBES}"
         if only is None or run_name in only:
             tasks.append(("nation", (difficulty, game_id, TRIBES)))
+    for game_id in DUEL_SEEDS:
+        run_name = f"box-duel-{game_id}"
+        if only is None or run_name in only:
+            tasks.append(("duel", (game_id,)))
 
     tick_progress = args.progress and args.jobs == 1
     specs: list[TaskSpec] = [

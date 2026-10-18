@@ -1,6 +1,6 @@
 --- a/src/core/Schemas.ts
 +++ b/src/core/Schemas.ts
-@@ -827,6 +827,11 @@
+@@ -827,6 +827,14 @@
    // zb.json: TribeSchema is `.loose()`, and a positional binary layout would
    // silently drop the passthrough keys that looseness exists to preserve.
    tribes: z.array(zb.json(TribeSchema)).max(100).optional(),
@@ -9,12 +9,15 @@
 +  // actually produced the tape rides here instead; set in-memory by the
 +  // replay loader from the archive's sidecar meta, never persisted.
 +  nationBehavior: z.string().optional(),
++  // Per-nation behaviors for duel tapes (spawn order); when present it
++  // takes precedence over the uniform nationBehavior above.
++  nationBehaviors: z.array(z.string()).optional(),
  });
  
  export const WinnerSchema = z
 --- a/src/client/Main.ts
 +++ b/src/client/Main.ts
-@@ -154,6 +154,10 @@
+@@ -154,6 +154,13 @@
    gameStartInfo?: GameStartInfo;
    // GameRecord exists when replaying an archived game.
    gameRecord?: GameRecord;
@@ -22,10 +25,13 @@
 +  // meta (see JoinLobbyModal.checkArchivedGame). Attached to gameStartInfo
 +  // before the sim starts so replays reproduce custom-AI tapes.
 +  nationBehavior?: string;
++  // Per-nation behaviors for duel tapes (spawn order); takes precedence
++  // over the uniform nationBehavior when present.
++  nationBehaviors?: string[];
    source?: "public" | "private" | "host" | "matchmaking" | "singleplayer";
    publicLobbyInfo?: GameInfo | PublicGameInfo;
    // Watch without playing.
-@@ -875,6 +879,16 @@
+@@ -875,6 +882,19 @@
      // handshake. whenSeeded() always resolves (falling back to the generated
      // anon name on failure/timeout), so this can only delay, never block.
      await this.usernameInput?.whenSeeded();
@@ -39,10 +45,13 @@
 +    if (gameStartInfo && lobby.nationBehavior) {
 +      gameStartInfo.nationBehavior = lobby.nationBehavior;
 +    }
++    if (gameStartInfo && lobby.nationBehaviors) {
++      gameStartInfo.nationBehaviors = lobby.nationBehaviors;
++    }
      const newLobbyHandle = joinLobby(this.eventBus, {
        gameID: lobby.gameID,
        cosmetics: await getPlayerCosmeticsRefs(),
-@@ -883,13 +897,7 @@
+@@ -883,13 +903,7 @@
        playerClanTag: this.usernameInput?.getClanTag() ?? null,
        clanTagCheck: this.usernameInput?.getClanCheck(),
        playerRole,
@@ -59,18 +68,20 @@
      });
 --- a/src/client/JoinLobbyModal.ts
 +++ b/src/client/JoinLobbyModal.ts
-@@ -1281,6 +1281,7 @@
+@@ -1281,12 +1281,60 @@
            gameID: lobbyId,
            gameRecord: parsed.data,
            source: "private",
 +          nationBehavior: await this.fetchReplayBehavior(lobbyId),
++          nationBehaviors: await this.fetchReplayBehaviors(lobbyId),
          } as JoinLobbyEvent,
          bubbles: true,
          composed: true,
-@@ -1289,6 +1290,28 @@
+       }),
+     );
      return "success";
-   }
- 
++  }
++
 +  // Custom nation behavior for archived replays, from the archive sidecar
 +  // meta (see scripts/serve_replays.py game_meta). Best-effort: archives
 +  // without the endpoint (production) replay with the production AI, so a
@@ -79,10 +90,10 @@
 +    lobbyId: string,
 +  ): Promise<string | undefined> {
 +    try {
-+      const metaResponse = await fetch(
-+        `${getApiBase()}/game/${lobbyId}/meta`,
-+        { method: "GET", headers: { "Content-Type": "application/json" } },
-+      );
++      const metaResponse = await fetch(`${getApiBase()}/game/${lobbyId}/meta`, {
++        method: "GET",
++        headers: { "Content-Type": "application/json" },
++      });
 +      if (!metaResponse.ok) {
 +        return undefined;
 +      }
@@ -93,34 +104,60 @@
 +    }
 +  }
 +
++  // Per-nation behaviors for duel tapes (spawn order), from the archive
++  // sidecar meta. Same best-effort contract as fetchReplayBehavior.
++  private async fetchReplayBehaviors(
++    lobbyId: string,
++  ): Promise<string[] | undefined> {
++    try {
++      const metaResponse = await fetch(`${getApiBase()}/game/${lobbyId}/meta`, {
++        method: "GET",
++        headers: { "Content-Type": "application/json" },
++      });
++      if (!metaResponse.ok) {
++        return undefined;
++      }
++      const meta = await metaResponse.json();
++      return Array.isArray(meta?.nationBehaviors)
++        ? meta.nationBehaviors.filter(
++            (b: unknown): b is string => typeof b === "string",
++          )
++        : undefined;
++    } catch {
++      return undefined;
++    }
+   }
+ 
    // The record was produced by a different build. replay.<domain>/<gameId>
-   // serves the matching versioned shell (uploaded by update.sh on every
-   // deploy); if it exists, navigate there and let that build replay the game
 --- a/src/core/GameRunner.ts
 +++ b/src/core/GameRunner.ts
-@@ -86,6 +86,7 @@
+@@ -86,6 +86,8 @@
        gameStart.tribes?.map((t) => t.name),
      ),
      callBack,
 +    gameStart.nationBehavior,
++    gameStart.nationBehaviors,
    );
    gr.init();
    return gr;
-@@ -102,6 +103,7 @@
+@@ -102,6 +104,8 @@
      public game: Game,
      private execManager: Executor,
      private callBack: (gu: GameUpdateViewData | ErrorUpdate) => void,
 +    private nationBehavior?: string,
++    private nationBehaviors?: string[],
    ) {}
  
    init() {
-@@ -109,7 +111,9 @@
+@@ -109,7 +113,11 @@
        this.game.addExecution(new SpawnTimerExecution());
      }
      if (this.game.config().spawnNations()) {
 -      this.game.addExecution(...this.execManager.nationExecutions());
 +      this.game.addExecution(
-+        ...this.execManager.nationExecutions(this.nationBehavior),
++        ...this.execManager.nationExecutions(
++          this.nationBehaviors ?? this.nationBehavior,
++        ),
 +      );
      }
      if (this.game.config().isRandomSpawn()) {
@@ -141,23 +178,30 @@
  
  export class Executor {
    // private random = new PseudoRandom(999)
-@@ -148,10 +155,14 @@
+@@ -148,11 +155,19 @@
      return new PlayerSpawner(this.mg, this.gameID).spawnPlayers();
    }
  
 -  nationExecutions(): Execution[] {
-+  nationExecutions(behavior?: string): Execution[] {
++  nationExecutions(behavior?: string | string[]): Execution[] {
      const execs: Execution[] = [];
-     for (const nation of this.mg.nations()) {
+-    for (const nation of this.mg.nations()) {
 -      execs.push(new NationExecution(this.gameID, nation));
-+      if (behavior === IMPROVED_HARD_BEHAVIOR) {
+-    }
++    const nations = this.mg.nations();
++    nations.forEach((nation, index) => {
++      const assigned = Array.isArray(behavior)
++        ? (behavior[index] ?? "production")
++        : behavior;
++      if (assigned === IMPROVED_HARD_BEHAVIOR) {
 +        execs.push(new ImprovedHardExecution(this.gameID, nation));
 +      } else {
 +        execs.push(new NationExecution(this.gameID, nation));
 +      }
-     }
++    });
      return execs;
    }
+ }
 --- a/vite.config.ts
 +++ b/vite.config.ts
 @@ -272,6 +272,12 @@
@@ -173,3 +217,52 @@
        proxy: {
          "/lobbies": {
            target: "ws://localhost:3000",
+--- a/tests/core/DuelBehaviors.test.ts
++++ b/tests/core/DuelBehaviors.test.ts
+@@ -0,0 +1,46 @@
++import { ImprovedHardExecution } from "../../../../engine/improvedHardBehavior";
++import { Executor } from "../../src/core/execution/ExecutionManager";
++import { NationExecution } from "../../src/core/execution/NationExecution";
++import {
++  Cell,
++  Game,
++  Nation,
++  PlayerInfo,
++  PlayerType,
++} from "../../src/core/game/Game";
++import { GameID } from "../../src/core/Schemas";
++
++const gameID: GameID = "duel_game_id";
++
++function mkNation(i: number): Nation {
++  return new Nation(
++    new Cell(20 + i * 15, 20 + i * 15),
++    new PlayerInfo(`Nation${i}`, PlayerType.Nation, null, `nation_${i}`),
++  );
++}
++
++function duelExecutor(): Executor {
++  // nationExecutions only reads mg.nations() + gameID; a stub game keeps
++  // this test map-free and instant.
++  const mg = { nations: () => [mkNation(0), mkNation(1)] };
++  return new Executor(mg as unknown as Game, gameID, "client_1", []);
++}
++
++describe("Duel per-nation behavior assignment", () => {
++  test("mixed array assigns ImprovedHard to index 0, production to index 1", () => {
++    const execs = duelExecutor().nationExecutions([
++      "improved-hard",
++      "production",
++    ]);
++    expect(execs).toHaveLength(2);
++    expect(execs[0]).toBeInstanceOf(ImprovedHardExecution);
++    expect(execs[1]).toBeInstanceOf(NationExecution);
++  });
++
++  test("uniform string preserves the legacy all-one-logic path", () => {
++    const allIH = duelExecutor().nationExecutions("improved-hard");
++    expect(allIH.every((e) => e instanceof ImprovedHardExecution)).toBe(true);
++    const allProd = duelExecutor().nationExecutions();
++    expect(allProd.every((e) => e instanceof NationExecution)).toBe(true);
++  });
++});

@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { Config } from "../vendor/OpenFrontIO/src/core/configuration/Config";
 import { DoomsdayClockExecution } from "../vendor/OpenFrontIO/src/core/execution/DoomsdayClockExecution";
 import { Executor } from "../vendor/OpenFrontIO/src/core/execution/ExecutionManager";
+import { NationExecution } from "../vendor/OpenFrontIO/src/core/execution/NationExecution";
 import { RecomputeRailClusterExecution } from "../vendor/OpenFrontIO/src/core/execution/RecomputeRailClusterExecution";
 import { WinCheckExecution } from "../vendor/OpenFrontIO/src/core/execution/WinCheckExecution";
 import { ImprovedHardExecution } from "./improvedHardBehavior";
@@ -269,6 +270,9 @@ class EngineSession {
   private executor: Executor | null = null;
   private nationIDs: string[] = [];
   private tribeIDs: string[] = [];
+  // Per-nation decision logic in nationIDs order ("production" /
+  // "improved-hard"); taped into the roster so replays reproduce duels.
+  private nationBehaviors: string[] = [];
   // Human player id, drawn from the seeded RNG at boot exactly like
   // GameRunner (humans first, then nations): identical ids and identical
   // downstream RNG stream, so tapes replay bit-for-bit in the real client.
@@ -336,6 +340,7 @@ class EngineSession {
     tribes: number = 0,
     gameId: string | null = null,
     policyPath: string | null = null,
+    nationBehaviors: string[] | null = null,
   ): Promise<Snapshot> {
     if (this.game !== null) {
       throw new Error("engine already started");
@@ -383,6 +388,28 @@ class EngineSession {
     // code (it maps to Difficulty.Hard above) but swaps the decision logic:
     // derive the behavior from the difficulty string, no side channel.
     const useImprovedHard = difficulty === "improved-hard";
+    // Per-nation decision logic (duels): null plays every nation on the
+    // game difficulty; otherwise one "production"/"improved-hard" entry per
+    // nation, in spawn order, taped into the roster so replays reproduce
+    // the duel instead of running one logic for all nations.
+    const uniformBehavior = useImprovedHard ? "improved-hard" : "production";
+    let behaviorOfNation: string[];
+    if (nationBehaviors === null || nationBehaviors === undefined) {
+      behaviorOfNation = Array<string>(nations).fill(uniformBehavior);
+    } else {
+      if (
+        !Array.isArray(nationBehaviors) ||
+        nationBehaviors.length !== nations ||
+        !nationBehaviors.every(
+          (b) => b === "production" || b === "improved-hard",
+        )
+      ) {
+        throw new Error(
+          `invalid nationBehaviors: expected ${nations} "production"/"improved-hard" entries, got ${JSON.stringify(nationBehaviors)}`,
+        );
+      }
+      behaviorOfNation = [...nationBehaviors];
+    }
     if (
       typeof tribes !== "number" ||
       !Number.isInteger(tribes) ||
@@ -519,18 +546,18 @@ class EngineSession {
         : [];
     const game = createGame(humans, nationObjs, gameMap, miniGameMap, config);
     const executor = new Executor(game, gid, CLIENT_ID, []);
-    // Mirror GameRunner.init execution order and conditions, except a
-    // custom nationBehavior replaces the vendor NationExecution (same
+    // Mirror GameRunner.init execution order and conditions, except custom
+    // nationBehavior replaces the vendor NationExecution per nation (same
     // Nation players, names, spawns and difficulty economy — only the
     // decision logic differs).
     if (game.config().spawnNations()) {
-      if (useImprovedHard) {
-        for (const nation of nationObjs) {
+      nationObjs.forEach((nation, index) => {
+        if (behaviorOfNation[index] === "improved-hard") {
           game.addExecution(new ImprovedHardExecution(gid, nation));
+        } else {
+          game.addExecution(new NationExecution(gid, nation));
         }
-      } else {
-        game.addExecution(...executor.nationExecutions());
-      }
+      });
     }
     if (game.config().bots() > 0) {
       game.addExecution(...executor.spawnTribes(game.config().bots()));
@@ -565,6 +592,7 @@ class EngineSession {
     // SpawnExecution during the phase but only land after it, so keep driving
     // until every nation has spawned too.
     this.nationIDs = nationObjs.map((n) => n.playerInfo.id);
+    this.nationBehaviors = behaviorOfNation;
     this.mapDir = mapDir;
     let guard = 0;
     while (
@@ -599,7 +627,7 @@ class EngineSession {
     ticks: number;
     startedAt: number;
     gameConfig: Record<string, unknown>;
-    players: { id: string; name: string; kind: string }[];
+    players: { id: string; name: string; kind: string; behavior?: string }[];
     turns: { turnNumber: number; intents: StampedIntent[]; hash?: number }[];
     path: string | null;
   } {
@@ -632,20 +660,22 @@ class EngineSession {
     ticks: number;
     startedAt: number;
     gameConfig: Record<string, unknown>;
-    players: { id: string; name: string; kind: string }[];
+    players: { id: string; name: string; kind: string; behavior?: string }[];
     turns: { turnNumber: number; intents: StampedIntent[]; hash?: number }[];
   } {
     const game = this.requireGame();
-    const players: { id: string; name: string; kind: string }[] = [];
+    const players: { id: string; name: string; kind: string; behavior?: string }[] =
+      [];
     const human = game.player(this.humanID);
     players.push({ id: this.humanID, name: human.name(), kind: "human" });
-    for (const id of this.nationIDs) {
+    this.nationIDs.forEach((id, index) => {
       players.push({
         id,
         name: game.hasPlayer(id) ? game.player(id).name() : id,
         kind: "nation",
+        behavior: this.nationBehaviors[index] ?? "production",
       });
-    }
+    });
     for (const p of game.players()) {
       if (p.id() === this.humanID || this.nationIDs.includes(p.id())) continue;
       players.push({ id: p.id(), name: p.name(), kind: "tribe" });
@@ -1632,6 +1662,7 @@ interface Request {
   tribes?: number;
   gameId?: string | null;
   policyPath?: string | null;
+  nationBehaviors?: string[] | null;
   ticks?: number;
   target?: unknown;
   troops?: unknown;
@@ -1679,6 +1710,7 @@ async function handle(raw: string): Promise<boolean> {
           request.tribes ?? 0,
           request.gameId ?? null,
           request.policyPath ?? null,
+          request.nationBehaviors ?? null,
         );
         writeResponse({ id, ok: true, result });
         return true;

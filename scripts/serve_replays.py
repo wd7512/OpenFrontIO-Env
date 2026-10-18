@@ -355,8 +355,10 @@ def game_meta(summary: dict[str, Any]) -> dict[str, Any]:
 
     ``behavior`` tells the client which nation decision logic reproduced the
     tape (``improved-hard`` needs the custom execution; anything else replays
-    with the production AI). Best-effort: clients ignore unknown fields and
-    treat a missing meta as production behavior.
+    with the production AI). ``nationBehaviors`` is the per-nation duel
+    assignment (spawn order) and takes precedence when present.
+    Best-effort: clients ignore unknown fields and treat a missing meta as
+    production behavior.
     """
     metrics = summary.get("metrics")
     metrics = metrics if isinstance(metrics, dict) else {}
@@ -364,9 +366,11 @@ def game_meta(summary: dict[str, Any]) -> dict[str, Any]:
         "game": summary.get("name"),
         "experiment": summary.get("experiment"),
         "behavior": metrics.get("behavior", "production"),
+        "nationBehaviors": metrics.get("nation_behaviors"),
         "difficulty": summary.get("difficulty"),
         "winner": summary.get("winner"),
         "winner_kind": summary.get("winner_kind", metrics.get("winner_kind")),
+        "winner_behavior": metrics.get("winner_behavior"),
         "declared_tick": metrics.get("declared_tick", summary.get("tick_last")),
     }
 
@@ -394,7 +398,11 @@ class Registry:
         self._convert = convert
         self._lock = threading.Lock()
         self._stamps: dict[str, tuple[int, int, int, int]] = {}
-        self._route_ids: dict[str, str] = {}
+        # Route IDs persist in the raw dir so watch links survive server
+        # restarts: without this every restart renumbers every game and all
+        # shared OF links rot. Map is {game key: route id}; unknown or
+        # malformed entries are ignored and reassigned below.
+        self._route_ids: dict[str, str] = self._load_route_ids(raw_dir)
         self._exp_of: dict[str, str] = {}
         self._records: dict[str, bytes] = {}
         self._summaries: dict[str, dict[str, Any]] = {}
@@ -408,6 +416,39 @@ class Registry:
         while f"OF{n:06d}" in used:
             n += 1
         return f"OF{n:06d}"
+
+    @staticmethod
+    def _route_map_path(raw_dir: Path) -> Path:
+        return raw_dir / "route_ids.json"
+
+    @classmethod
+    def _load_route_ids(cls, raw_dir: Path) -> dict[str, str]:
+        try:
+            raw = json.loads(cls._route_map_path(raw_dir).read_text())
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        ids: dict[str, str] = {}
+        seen: set[str] = set()
+        for key, route_id in raw.items():
+            if (
+                isinstance(key, str)
+                and isinstance(route_id, str)
+                and GAME_ID_RE.fullmatch(route_id)
+                and route_id not in seen
+            ):
+                seen.add(route_id)
+                ids[key] = route_id
+        return ids
+
+    def _save_route_ids(self) -> None:
+        try:
+            self._route_map_path(self._raw).write_text(
+                json.dumps(self._route_ids, indent=2, sort_keys=True)
+            )
+        except OSError:
+            log.warning("could not persist route ids")
 
     def _game_key(self, exp_name: str, game_dir: Path) -> str:
         if exp_name == LEGACY_EXPERIMENT:
@@ -480,6 +521,7 @@ class Registry:
                     self._stamps[key] = stamp
                     changed = True
             if changed:
+                self._save_route_ids()
                 self._rebuild_indexes()
         return changed
 
@@ -606,6 +648,16 @@ def _box_cells(
             winner,
             _cell(s.get("winner_kind")),
         ]
+    if kind == "box-duel":
+        behaviors = m.get("nation_behaviors")
+        duel = " vs ".join(behaviors) if isinstance(behaviors, list) else None
+        return [
+            _cell(m.get("seed")),
+            _cell(duel),
+            declared,
+            winner,
+            _cell(m.get("winner_behavior")),
+        ]
     return None
 
 
@@ -622,6 +674,7 @@ BOX_HEADERS: dict[str, list[str]] = {
         "winner",
         "kind",
     ],
+    "box-duel": ["seed", "duel", "declared", "winner", "winner behavior"],
 }
 
 

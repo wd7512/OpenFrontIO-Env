@@ -87,6 +87,7 @@ class EngineWorker:
         tribes: object = 0,
         game_id: object = None,
         policy_path: object = None,
+        nation_behaviors: object = None,
     ) -> dict[str, Any]:
         """Boot the fixture and return the initial snapshot.
 
@@ -105,6 +106,10 @@ class EngineWorker:
         same spawn replays the same world. ``policy_path`` is the path to
         a bundled in-engine TS policy (``None`` for no policy); a
         non-empty string is passed through to the worker as ``policyPath``.
+        ``nation_behaviors`` optionally assigns decision logic per nation in
+        spawn order (``"production"`` or ``"improved-hard"`` per entry, one
+        entry per nation); ``None`` plays every nation on the game
+        ``difficulty``. Same seed + same assignment replays the same duel.
         """
         if isinstance(nations, bool) or not isinstance(nations, int):
             raise EngineError(f"nations must be an integer, got {nations!r}")
@@ -166,6 +171,17 @@ class EngineWorker:
             raise EngineError(
                 f"policy_path must be None or a non-empty string, got {policy_path!r}"
             )
+        if nation_behaviors is None:
+            behaviors: list[str] | None = None
+        elif isinstance(nation_behaviors, (tuple, list)) and all(
+            b in ("production", "improved-hard") for b in nation_behaviors
+        ):
+            behaviors = list(nation_behaviors)
+        else:
+            raise EngineError(
+                "nation_behaviors must be None or a list of "
+                f"'production'/'improved-hard' entries, got {nation_behaviors!r}"
+            )
         return self._request(
             {
                 "cmd": "start",
@@ -178,6 +194,7 @@ class EngineWorker:
                 "tribes": tribes,
                 "gameId": gid,
                 "policyPath": policy,
+                "nationBehaviors": behaviors,
             }
         )
 

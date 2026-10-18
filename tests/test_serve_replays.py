@@ -447,6 +447,38 @@ def test_index_box_tribes_columns(tmp_path: Path) -> None:
     assert summaries["tribe-game"]["winner_kind"] == "tribe"
 
 
+def test_index_box_duel_columns(tmp_path: Path) -> None:
+    mod = _mod()
+    _box_run(
+        tmp_path,
+        "duel-game",
+        {
+            "behavior": "duel",
+            "declared_tick": 9001,
+            "winner_kind": "nation",
+            "seed": "BOX-DUEL-A",
+            "nation_behaviors": ["production", "improved-hard"],
+            "winner_behavior": "improved-hard",
+        },
+        difficulty="hard",
+        winner="Suspicious Ally",
+    )
+    summaries = {p.name: mod.load_summary(p) for p in mod.find_runs(tmp_path)}
+    index = mod.render_index(
+        summaries, "http://localhost:9000", kind="box-duel"
+    ).decode()
+    for header in ("seed", "duel", "declared", "winner", "winner behavior"):
+        assert f"<th>{header}</th>" in index
+    for cell in (
+        "BOX-DUEL-A",
+        "production vs improved-hard",
+        "9001",
+        "Suspicious Ally",
+        "improved-hard",
+    ):
+        assert f"<td>{cell}</td>" in index
+
+
 def test_index_box_cadence_gap_from_suite_best(tmp_path: Path) -> None:
     mod = _mod()
     _box_run(
@@ -494,6 +526,38 @@ def test_refresh_evicts_moved_runs(tmp_path: Path) -> None:
     assert old_id in records
 
 
+def test_route_ids_survive_registry_restart(tmp_path: Path) -> None:
+    mod = _mod()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _run(raw, "a-run")
+    _run(raw, "b-run")
+
+    def fake_convert(run_dir: Path, bundle: Path) -> dict[str, object]:
+        return {"info": {"gameID": "ENGINE01"}, "turns": []}
+
+    first = mod.Registry(
+        raw, Path("bundle.mjs"), "http://localhost:9000", convert=fake_convert
+    )
+    assert first.refresh() is True
+    ids_before = {key: summary["game_id"] for key, summary in first.summaries().items()}
+    assert (raw / "route_ids.json").is_file()
+    # Fresh registry over the same raw dir (server restart): same IDs.
+    second = mod.Registry(
+        raw, Path("bundle.mjs"), "http://localhost:9000", convert=fake_convert
+    )
+    assert second.refresh() is True
+    ids_after = {key: summary["game_id"] for key, summary in second.summaries().items()}
+    assert ids_after == ids_before
+    # A brand-new run takes the next free ID without shifting the old ones.
+    _run(raw, "c-run")
+    assert second.refresh() is True
+    ids_grown = {key: summary["game_id"] for key, summary in second.summaries().items()}
+    assert ids_grown["a-run"] == ids_before["a-run"]
+    assert ids_grown["b-run"] == ids_before["b-run"]
+    assert ids_grown["c-run"] not in set(ids_before.values())
+
+
 def test_game_meta_endpoint_serves_behavior(tmp_path: Path) -> None:
     mod = _mod()
     raw = tmp_path / "raw"
@@ -538,3 +602,24 @@ def test_game_meta_endpoint_serves_behavior(tmp_path: Path) -> None:
             raise AssertionError("/game/NOPE1234/meta should 404")
     finally:
         server.shutdown()
+
+
+def test_game_meta_serves_duel_behaviors() -> None:
+    mod = _mod()
+    summary = {
+        "name": "box-duel-BOX-DUEL-A",
+        "difficulty": "hard",
+        "winner": "Suspicious Ally",
+        "metrics": {
+            "behavior": "duel",
+            "nation_behaviors": ["production", "improved-hard"],
+            "winner_behavior": "improved-hard",
+            "declared_tick": 9001,
+        },
+    }
+    meta = mod.game_meta(summary)
+    assert meta["nationBehaviors"] == ["production", "improved-hard"]
+    assert meta["winner_behavior"] == "improved-hard"
+    # Uniform tapes carry no per-nation assignment (client falls back).
+    plain = mod.game_meta({"name": "x", "metrics": {"behavior": "production"}})
+    assert plain["nationBehaviors"] is None

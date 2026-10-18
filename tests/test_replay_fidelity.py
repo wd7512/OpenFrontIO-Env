@@ -105,5 +105,9 @@ def test_verify_replay_harness_promoted() -> None:
         # Invocation must use vendor tsx + tsconfig (bare resources/*
         # imports fail otherwise); pin the documented command.
         "tsconfig",
+        # Duel tapes verify through the per-nation assignment, not the
+        # uniform behavior (a uniform "duel" string would attach production
+        # to every nation and silently diverge).
+        "nationBehaviors",
     ):
         assert marker in text, marker

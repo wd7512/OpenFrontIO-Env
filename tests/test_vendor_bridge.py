@@ -18,17 +18,25 @@ BRIDGE_MARKERS = {
     "src/client/Main.ts": "lobby.nationBehavior",
     "src/client/JoinLobbyModal.ts": "fetchReplayBehavior",
     # The runner branches custom behavior into nation executions.
-    "src/core/GameRunner.ts": "nationExecutions(this.nationBehavior)",
+    "src/core/GameRunner.ts": "nationBehaviors ?? this.nationBehavior",
     "src/core/execution/ExecutionManager.ts": "nationExecutions(behavior",
     # Dev server must serve engine/ sources from outside the client root.
     "vite.config.ts": '"../../.."',
+    # Duel tapes: per-nation behaviors in spawn order, taking precedence
+    # over the uniform behavior when present.
+    "src/core/Schemas.ts:nationBehaviors": "nationBehaviors: z.array(z.string()).optional(),",
+    "src/client/Main.ts:nationBehaviors": "lobby.nationBehaviors",
+    "src/client/JoinLobbyModal.ts:nationBehaviors": "fetchReplayBehaviors",
+    "src/core/GameRunner.ts:nationBehaviors": "gameStart.nationBehaviors",
+    "src/core/execution/ExecutionManager.ts:nationBehaviors": "behavior?: string | string[]",
 }
 
 
 def test_vendor_replay_bridge_intact() -> None:
     missing = []
     for rel, marker in BRIDGE_MARKERS.items():
-        path = VENDOR / rel
+        # Keys may carry a ":tag" suffix to allow several markers per file.
+        path = VENDOR / rel.split(":")[0]
         if not path.is_file() or marker not in path.read_text():
             missing.append(f"{rel} :: {marker}")
     assert not missing, f"vendor replay bridge damaged: {missing}"

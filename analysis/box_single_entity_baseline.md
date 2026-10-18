@@ -39,7 +39,7 @@ directly servable.
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
-| 1 | Agent, 1-tick decisions, 0.5% whenever >= 36% of max | OF000016 | 7,803 | **7,811** | Agent |
+| 1 | Agent, 1-tick decisions, 0.5% whenever >= 36% of max | OF000034 | 7,803 | **7,811** | Agent |
 | 2 | Agent, 10-tick (1s) decisions, 5% whenever >= 37.5% of max | OF000001 | 7,809 | 7,811 | Agent |
 | 3 | Agent, 20-tick (2s) decisions, 6.5% whenever >= 37.5% of max | OF000002 | 7,809 | 7,811 | Agent |
 | 4 | Agent, 30-tick (3s) decisions, 9.5% whenever >= 38% of max | OF000003 | 7,817 | 7,821 | Agent |
@@ -48,15 +48,15 @@ directly servable.
 | 7 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000006 | 7,859 | 7,861 | Agent |
 | 8 | Agent, 52-tick decisions, 15% whenever >= 38% of max | OF000007 | 7,825 | 7,831 | Agent |
 | 9 | Agent, 60-tick decisions, 18% whenever >= 37% of max | OF000008 | 7,881 | 7,891 | Agent |
-| 10 | 1 nation, Easy (human idle) | OF000012 | — | 15,551 | Non-peaceful Bot |
-| 11 | 1 nation, Hard + 400 tribes (human idle) | OF000017 | — | 7,661 | Train Trader |
-| 12 | 1 nation, Hard (human idle) | OF000013 | — | 9,151 | Non-peaceful Bot |
-| 13 | 1 nation, Impossible (human idle) | OF000014 | — | 7,691 | Non-peaceful Bot |
-| 14 | 1 nation, Improved-Hard A (human idle) | OF000009 | — | 7,841 | Front Manager |
-| 15 | 1 nation, Improved-Hard B (human idle) | OF000010 | — | 7,911 | Suspicious Ally |
-| 16 | 1 nation, Improved-Hard C (human idle) | OF000011 | — | 7,911 | King of the Corner |
-| 17 | 1 nation, Improved-Hard + 400 tribes (human idle) | OF000018 | — | 86,401 | Bosnian Autocracy (tribe) |
-| 18 | 1 nation, Medium (human idle) | OF000015 | — | 11,461 | Non-peaceful Bot |
+| 10 | 1 nation, Easy (human idle) | OF000030 | — | 15,551 | Non-peaceful Bot |
+| 11 | 1 nation, Hard + 400 tribes (human idle) | OF000035 | — | 7,661 | Train Trader |
+| 12 | 1 nation, Hard (human idle) | OF000031 | — | 9,151 | Non-peaceful Bot |
+| 13 | 1 nation, Impossible (human idle) | OF000032 | — | 7,691 | Non-peaceful Bot |
+| 14 | 1 nation, Improved-Hard A (human idle) | OF000027 | — | 7,841 | Front Manager |
+| 15 | 1 nation, Improved-Hard B (human idle) | OF000028 | — | 7,911 | Suspicious Ally |
+| 16 | 1 nation, Improved-Hard C (human idle) | OF000029 | — | 7,911 | King of the Corner |
+| 17 | 1 nation, Improved-Hard + 400 tribes (human idle) | OF000036 | — | 86,401 | Bosnian Autocracy (tribe) |
+| 18 | 1 nation, Medium (human idle) | OF000033 | — | 11,461 | Non-peaceful Bot |
 
 Result: the minimum, within the policy class, is **7,811 ticks (7,803 to
 cross 80%)** with (threshold=0.36, ratio=0.005) at 1-tick cadence — no other
@@ -156,9 +156,9 @@ matters):
 
 | Seed | Declared | Winner (nation name) |
 |---|---|---|
-| BOX-IH-A | 7,841 (OF000009) | Front Manager |
-| BOX-IH-B | 7,911 (OF000010) | Suspicious Ally |
-| BOX-IH-C | 7,911 (OF000011) | King of the Corner |
+| BOX-IH-A | 7,841 (OF000027) | Front Manager |
+| BOX-IH-B | 7,911 (OF000028) | Suspicious Ally |
+| BOX-IH-C | 7,911 (OF000029) | King of the Corner |
 | Hard bot range (4 seeds) | 8,901–11,241 | various bots |
 
 Mean 7,888 vs Hard mean 9,886: **~2,000 ticks (~20%) faster**, beating
@@ -176,12 +176,12 @@ decision logic from world RNG. Every tape verified FAITHFUL headless:
 
 | Seed | Hard | Improved-Hard | Margin | Routes |
 |---|---|---|---|---|
-| BOX-PAIR-A | 10,251 | 7,851 | +2,400 | OF000019 / OF000020 |
-| BOX-PAIR-B | 9,921 | 7,901 | +2,020 | OF000021 / OF000024 |
-| BOX-PAIR-C | 10,271 | 7,911 | +2,360 | OF000022 / OF000025 |
-| BOX-PAIR-D | 8,921 | 7,911 | +1,010 | OF000023 / OF000026 |
-| BOX-PAIR-E | 9,391 | 7,911 | +1,480 | OF000029 / OF000027 |
-| BOX-PAIR-F | 8,761 | 7,921 | +840 | OF000030 / OF000028 |
+| BOX-PAIR-A | 10,251 | 7,851 | +2,400 | OF000015 / OF000021 |
+| BOX-PAIR-B | 9,921 | 7,901 | +2,020 | OF000016 / OF000022 |
+| BOX-PAIR-C | 10,271 | 7,911 | +2,360 | OF000017 / OF000023 |
+| BOX-PAIR-D | 8,921 | 7,911 | +1,010 | OF000018 / OF000024 |
+| BOX-PAIR-E | 9,391 | 7,911 | +1,480 | OF000019 / OF000025 |
+| BOX-PAIR-F | 8,761 | 7,921 | +840 | OF000020 / OF000026 |
 
 Mean margin **+1,685 ticks (~18%)**, minimum margin **+840** — positive on
 all six worlds. Pairing works as designed: each pair crowns the same
@@ -189,6 +189,36 @@ nation (same world RNG, only the brains differ). Improved-Hard is
 consistent (7,851–7,921, 70 spread — fixed 52-tick logic); Hard swings
 8,761–10,271 (per-game redrawn attackRate/ratios). **Verdict: Improved-Hard
 is genuinely better than Hard**, not a seed artifact.
+
+## Duels: Hard vs Improved-Hard head-to-head — production wins 6–0
+
+Same world, two nations with different brains (nation 0 production Hard,
+nation 1 Improved-Hard), idle human third party, sealed arena. Per-nation
+behavior rides the taped roster and the sidecar meta; the replay client
+assigns it by spawn-order index (`box-duels` suite, OF000009–OF000014).
+All six tapes verified FAITHFUL headless through the real client
+pipeline — including the 87k-tick sieges:
+
+| Seed | Declared | Winner | By | Route |
+|---|---|---|---|---|
+| BOX-DUEL-A | 10,051 | King of the Corner | production | OF000009 |
+| BOX-DUEL-B | 87,491 | Evan The Dev | production | OF000010 |
+| BOX-DUEL-C | 84,321 | Punch Merchant | production | OF000011 |
+| BOX-DUEL-D | 9,711 | Factory Builder | production | OF000012 |
+| BOX-DUEL-E | 10,831 | Front Manager | production | OF000013 |
+| BOX-DUEL-F | 67,581 | Cage Liberator | production | OF000014 |
+
+**Improved-Hard wins races and loses fights.** Mechanism (code, not
+speculation): `ImprovedHardExecution` only ever attacks TerraNullius —
+it never attacks players, never retaliates, never contests. Against an
+idle world that schedule is optimal (paired solos: +1,685 mean margin).
+Against an aggressive production opponent it is fatal: Hard disrupts and
+conquers while IH keeps expanding into whatever is left. The 67–87k
+durations on B/C/F are siege dynamics — IH sends 15% tranches and keeps
+85% home, a turtle that is hard to kill and unable to kill. Control:
+re-running BOX-DUEL-A all-production gives a different world (13,571,
+Factory Builder), so the mixed assignment is real, not silently
+uniform. Honest headline: **IH is the better racer; it is not a fighter.**
 
 ## Tribes race: which nation wins faster with 400 tribes?
 
@@ -198,8 +228,8 @@ list, not the name:
 
 | Race | Declared | Winner | Kind |
 |---|---|---|---|
-| Hard + 400 tribes (OF000017) | **7,661** | Train Trader | nation |
-| Improved-Hard + 400 tribes (OF000018) | 86,401 | Bosnian Autocracy | tribe |
+| Hard + 400 tribes (OF000035) | **7,661** | Train Trader | nation |
+| Improved-Hard + 400 tribes (OF000036) | 86,401 | Bosnian Autocracy | tribe |
 
 **Hard wins the tribes race — and it isn't close.** Worse, our nation
 doesn't just lose slowly: it *loses*, to a tribe, at 86,401. Mechanism:
@@ -244,12 +274,14 @@ and loaded terrain grids are shared per module registry
 browser is unaffected (fresh Worker per game), but headless verification
 runs one process per game. Replays are served per experiment
 (`/exp/<name>`) with per-suite columns from each game's `summary.json`.
+Route IDs persist in `<raw>/route_ids.json`, so OF links survive server
+restarts (new games take the next free number, never shifting old ones).
 
 ## Full comparison: every agent cadence vs every nation
 
 All 18 original strategies ranked by declared win tick, with gaps to the human-
 economy best (7,811) and to the Hard bot (9,151). Watch every game at
-`http://localhost:8787` (replays OF000001–OF000030, incl. the paired
+`http://localhost:8787` (replays OF000001–OF000036, incl. the paired and duel
 `box-hard-vs-improved` suite); open any replay in the client renderer via
 its Watch link.
 
