@@ -10,6 +10,9 @@ from __future__ import annotations
 from analysis.analytical_model import (
     FIRST_DECISION_TICK,
     NATION_ECONOMY,
+    OPENING_UNTIL,
+    PHASE1_OPENING,
+    PHASE1_RACE,
     conquest_tiles,
     find_opening_optimum,
     find_optimum,
@@ -159,3 +162,15 @@ def test_opening_subbenchmark_is_separate_from_the_race() -> None:
     assert graft["tiles_at_horizon"] == 5172.0
     assert graft["crossing_tick"] == 7822.0
     assert graft["crossing_tick"] <= ih["crossing_tick"]
+
+
+def test_phase1_maxed_agent_composition() -> None:
+    """The maxed phase-1 agent (analysis/agents.md): the tuned opening
+    composed with the 1-tick race optimum. Pins the model numbers behind
+    analysis/results/opening_race.json (policy ``p1max``)."""
+    maxed = simulate_graft(PHASE1_OPENING, PHASE1_RACE, OPENING_UNTIL)
+    assert (maxed["tiles_at_horizon"], maxed["crossing_tick"]) == (5503.0, 7799.0)
+    # beats both the IH rhythm and the pure 1-tick race optimum on crossing
+    assert maxed["crossing_tick"] < simulate(0.38, 0.15, interval=52)["crossing_tick"]
+    assert maxed["crossing_tick"] < simulate(0.36, 0.005, interval=1)["crossing_tick"]
+    assert maxed["crossing_tick"] < 7800.0

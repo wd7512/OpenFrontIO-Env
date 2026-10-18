@@ -53,6 +53,19 @@ logger = logging.getLogger(__name__)
 DEFAULT_SEEDS = [f"BOX-TRIBE-{c}" for c in "ABCDE"]
 MAX_TICKS = 60000
 ANNEX_SHARE = 0.02  # token poke on enclosed tribes (cluster deletion + flip)
+# Policy -> (max parallel fronts, decision cadence). ``None`` parallelism is
+# budget-limited: open as many 4x fronts as the reserve allows instead of
+# production's fixed cap of 3 (farm-max, the derived edge). Fronts use the
+# farming model's reserve/retain/tranche rules either way.
+POLICY_SPEC: dict[str, tuple[int | None, int]] = {
+    "farm-p4": (FARM_PARALLEL, FARM_CADENCE),
+    "farm-max": (None, FARM_CADENCE),
+    "farm-max-fast": (None, 26),
+    "farm-weak": (FARM_PARALLEL, FARM_CADENCE),
+}
+# Target order: production's density sort vs the model's weakest-first
+# (siege time falls with defender troops, so the cheapest kill first).
+POLICY_SORT = {"farm-weak": "troops"}
 
 
 def _alive_tribes(obs: dict[str, Any]) -> list[dict[str, Any]]:
@@ -91,9 +104,14 @@ def run_episode(seed: str, tribes: int, policy: str) -> dict[str, Any]:
             winner = obs["winner"]
             tick = int(obs["tick"])
             while winner is None and tick < MAX_TICKS:
-                if policy == "farm-p4" and bool(obs["me"]["alive"]):
-                    orders, annex_pokes = _farm_tick(engine, obs, orders, annex_pokes)
-                state = engine.advance(FARM_CADENCE)
+                if policy in POLICY_SPEC and bool(obs["me"]["alive"]):
+                    parallel, _ = POLICY_SPEC[policy]
+                    sort_key = POLICY_SORT.get(policy, "density")
+                    orders, annex_pokes = _farm_tick(
+                        engine, obs, orders, annex_pokes, parallel, sort_key
+                    )
+                cadence = POLICY_SPEC.get(policy, (None, FARM_CADENCE))[1]
+                state = engine.advance(cadence)
                 tick = int(state["tick"])
                 winner = state.get("winner")
                 obs = engine.nation_observe(0)
@@ -124,11 +142,19 @@ def run_episode(seed: str, tribes: int, policy: str) -> dict[str, Any]:
 
 
 def _farm_tick(
-    engine: EngineWorker, obs: dict[str, Any], orders: int, annex_pokes: int
+    engine: EngineWorker,
+    obs: dict[str, Any],
+    orders: int,
+    annex_pokes: int,
+    max_parallel: int | None = FARM_PARALLEL,
+    sort_key: str = "density",
 ) -> tuple[int, int]:
-    """One farm-p4 decision: enclosed tribes get a token poke, then up to
-    FARM_PARALLEL density-ordered fronts take min(4x target, budget),
-    skipping fronts below 2x target (production's exact rules). Returns
+    """One farming decision: enclosed tribes get a token poke, then
+    density-ordered fronts take min(4x target, budget), skipping fronts
+    below 2x target (production's exact rules). ``max_parallel`` caps the
+    number of fronts the way production does (3); ``None`` is the derived
+    farm-max: keep opening fronts while the reserve allows. ``sort_key`` is
+    ``"density"`` (production) or ``"troops"`` (weakest-first). Returns
     updated (orders, annex_pokes)."""
     troops = float(obs["me"]["troops"])
     cap = float(obs["me"]["maxTroops"])
@@ -145,7 +171,7 @@ def _farm_tick(
     # Edge 2: enclosed tribes first — a token poke triggers cluster
     # deletion plus the <100-tile flip at near-zero cost.
     for tribe in _bordering(obs):
-        if fired >= FARM_PARALLEL:
+        if max_parallel is not None and fired >= max_parallel:
             break
         if not bool(tribe["enclosed"]):
             continue
@@ -154,9 +180,11 @@ def _farm_tick(
         annex_pokes += 1
         budget -= troops * ANNEX_SHARE
         fired += 1
-    # Parity floor: density ascending (production's attackBots sort).
-    for tribe in sorted(_bordering(obs), key=_density):
-        if fired >= FARM_PARALLEL:
+    # Parity floor: order by production's attackBots sort (density) or the
+    # model's weakest-first.
+    key = _density if sort_key == "density" else (lambda t: float(t["troops"]))
+    for tribe in sorted(_bordering(obs), key=key):
+        if max_parallel is not None and fired >= max_parallel:
             break
         if bool(tribe["enclosed"]):
             continue  # already poked above
@@ -184,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tribes", type=int, default=20)
     parser.add_argument(
         "--policies",
-        default="expand,production,farm-p4",
+        default="expand,production,farm-p4,farm-max",
         help="comma-separated policies (default: %(default)s)",
     )
     parser.add_argument("--jobs", type=int, default=6)

@@ -1,7 +1,8 @@
 # Phase framework: benchmark first, derive the optimum, compose by trigger
 
 Status: framework adopted; phases 1 (expansion, two scales) and 2 (farming)
-rebuilt under it.
+rebuilt and maxed under it — one optimized agent per phase (`maxed_agents.md`).
+Phase 3 is benchmarked, not yet maxed.
 
 ## Why: the phase that fooled us
 
@@ -88,16 +89,26 @@ Model (5,172 @260 / 7,822) agrees with the game (5,178 / 7,823).
 | brain | t60 | t130 | t260 | t520 | race crossing |
 |---|---|---|---|---|---|
 | IH (race rhythm) | 52 | 493 | 2,400 | 10,972 | 7,825 |
-| **graft (1a∘1b)** | 521 | 1,917 | **5,178** | 11,219 | **7,823** |
-| Hard (nation) | 847 | 1,722 | 5,315 | 16,504 | ~9,151 |
+| graft (1a∘1b) | 521 | 1,917 | 5,178 | 11,219 | 7,823 |
+| **p1max (maxed)** | 511 | 1,547 | **5,409** | 13,322 | **7,798** |
+| Hard (nation) | 846 | 1,722 | 5,315 | 16,504 | ~9,151 |
 
-IH cedes 60 ticks behind its gate; the graft reaches Hard parity by t260
-(5,178 vs 5,315) at **no race cost** (7,823 ≤ 7,825). Hard leads again by
-t520 (16,504 vs 11,219) yet still loses the race by ~1,300 — so an early
-tile lead is *not* a race outcome. The opening's real value can only be
-cashed in a contested game, which is phase 3's benchmark: 1a is now derived
-and pinned, and whether it is worth running is phase 3's question, not
-phase 1's.
+The graft reaches Hard parity by t260 (5,178 vs 5,315) at no race cost
+(7,823 ≤ 7,825). **Maxing** the composition is not the same as the per-scale
+optima: against the *composed* objective the opening segment retunes from
+0.20 / 0.30 / 13 (the tiles@260 argmax) to **0.20 / 0.15 / 21**, paired with
+the 1-tick race optimum (0.36 / 0.005 / 1) — always a policy *family*, never
+one optimum reused across scales. This gives `p1max`, the first brain to clear
+*both* gates at once (opening 5,409 > Hard's 5,315; crossing 7,798 < the pure
+1-tick 7,802 < IH's 7,825). The ungated opening's extra frontier compounds
+into the cap, so composing *beats* the race-only optimum. Agent view:
+`maxed_agents.md`.
+
+Hard leads again by t520 (16,504 vs 13,322) yet still loses the race by
+~1,300 — so an early tile lead is *not* a race outcome. The opening's real
+value can only be cashed in a contested game, which is phase 3's benchmark:
+1a is now derived and pinned, and whether it is worth running is phase 3's
+question, not phase 1's.
 
 ## Phase 2 — Tribe farming
 
@@ -121,6 +132,16 @@ pins every knob; nothing swept. Full derivation: `box_tribe_farming.md`.
 | N=100 ×5 | 5,660 | 6,097 | −7.2% |
 | N=100 holdout ×4 | 5,762 | 6,126 | −5.9% |
 | N=400 ×2 | 7,023 / 7,127 | 7,335 / 7,439 | −4.2% |
+
+**Maxing.** Three further edges were derived from the model and tested at
+N=100 (`results/farm_edges.json`): unbounded parallel fronts is bit-identical
+(budget, not production's cap of 3, binds first); cadence 26 is worse (52 is
+optimal); weakest-first targeting is worse *despite killing more tribes* —
+because the metric is 80% *land*, and density-ascending buys the cheapest
+land per troop, not the most kills. A kill-count proxy would have selected
+the losing policy: metric=gate in action. `farm-p4` is maximal over every
+policy knob; the residual lever is the autopilot body (≤27 ticks, needs an
+engine change) — flagged in `maxed_agents.md`, not taken.
 
 ## The scaffold, both phases
 

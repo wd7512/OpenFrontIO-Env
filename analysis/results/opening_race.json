@@ -1,5 +1,5 @@
 {
- "created": "2026-10-18T20:14:42.542733+00:00",
+ "created": "2026-10-18T23:23:49.998673+00:00",
  "checkpoints": [
   60,
   130,
@@ -11,7 +11,7 @@
    "seed": "BOX-OPEN-A",
    "policy": "ih",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7825,
    "tiles_at": {
     "60": 52,
@@ -25,7 +25,7 @@
    "seed": "BOX-OPEN-A",
    "policy": "graft",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7823,
    "tiles_at": {
     "60": 521,
@@ -34,6 +34,20 @@
     "520": 11219
    },
    "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-A",
+   "policy": "p1max",
+   "winner": "Agent",
+   "agent_won": true,
+   "crossing_tick": 7798,
+   "tiles_at": {
+    "60": 511,
+    "130": 1547,
+    "260": 5409,
+    "520": 13322
+   },
+   "final_tiles": 3357846
   },
   {
    "seed": "BOX-OPEN-A",
@@ -51,7 +65,7 @@
    "seed": "BOX-OPEN-B",
    "policy": "ih",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7825,
    "tiles_at": {
     "60": 52,
@@ -65,7 +79,7 @@
    "seed": "BOX-OPEN-B",
    "policy": "graft",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7823,
    "tiles_at": {
     "60": 521,
@@ -74,6 +88,20 @@
     "520": 11219
    },
    "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-B",
+   "policy": "p1max",
+   "winner": "Agent",
+   "agent_won": true,
+   "crossing_tick": 7798,
+   "tiles_at": {
+    "60": 511,
+    "130": 1547,
+    "260": 5409,
+    "520": 13322
+   },
+   "final_tiles": 3357846
   },
   {
    "seed": "BOX-OPEN-B",
@@ -91,7 +119,7 @@
    "seed": "BOX-OPEN-C",
    "policy": "ih",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7825,
    "tiles_at": {
     "60": 52,
@@ -105,7 +133,7 @@
    "seed": "BOX-OPEN-C",
    "policy": "graft",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7823,
    "tiles_at": {
     "60": 521,
@@ -114,6 +142,20 @@
     "520": 11219
    },
    "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-C",
+   "policy": "p1max",
+   "winner": "Agent",
+   "agent_won": true,
+   "crossing_tick": 7798,
+   "tiles_at": {
+    "60": 511,
+    "130": 1547,
+    "260": 5409,
+    "520": 13322
+   },
+   "final_tiles": 3357846
   },
   {
    "seed": "BOX-OPEN-C",
@@ -131,7 +173,7 @@
    "seed": "BOX-OPEN-D",
    "policy": "ih",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7825,
    "tiles_at": {
     "60": 52,
@@ -145,7 +187,7 @@
    "seed": "BOX-OPEN-D",
    "policy": "graft",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7823,
    "tiles_at": {
     "60": 521,
@@ -154,6 +196,20 @@
     "520": 11219
    },
    "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-D",
+   "policy": "p1max",
+   "winner": "Agent",
+   "agent_won": true,
+   "crossing_tick": 7798,
+   "tiles_at": {
+    "60": 511,
+    "130": 1547,
+    "260": 5409,
+    "520": 13322
+   },
+   "final_tiles": 3357846
   },
   {
    "seed": "BOX-OPEN-D",
@@ -171,7 +227,7 @@
    "seed": "BOX-OPEN-E",
    "policy": "ih",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7825,
    "tiles_at": {
     "60": 52,
@@ -185,7 +241,7 @@
    "seed": "BOX-OPEN-E",
    "policy": "graft",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7823,
    "tiles_at": {
     "60": 521,
@@ -194,6 +250,20 @@
     "520": 11219
    },
    "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-E",
+   "policy": "p1max",
+   "winner": "Agent",
+   "agent_won": true,
+   "crossing_tick": 7798,
+   "tiles_at": {
+    "60": 511,
+    "130": 1547,
+    "260": 5409,
+    "520": 13322
+   },
+   "final_tiles": 3357846
   },
   {
    "seed": "BOX-OPEN-E",
@@ -211,7 +281,7 @@
    "seed": "BOX-OPEN-F",
    "policy": "ih",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7825,
    "tiles_at": {
     "60": 52,
@@ -225,7 +295,7 @@
    "seed": "BOX-OPEN-F",
    "policy": "graft",
    "winner": "Agent",
-   "agent_won": false,
+   "agent_won": true,
    "crossing_tick": 7823,
    "tiles_at": {
     "60": 521,
@@ -234,6 +304,20 @@
     "520": 11219
    },
    "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-F",
+   "policy": "p1max",
+   "winner": "Agent",
+   "agent_won": true,
+   "crossing_tick": 7798,
+   "tiles_at": {
+    "60": 511,
+    "130": 1547,
+    "260": 5409,
+    "520": 13322
+   },
+   "final_tiles": 3357846
   },
   {
    "seed": "BOX-OPEN-F",

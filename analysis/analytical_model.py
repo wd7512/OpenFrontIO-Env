@@ -49,6 +49,15 @@ SPAWN_TROOPS = 25000.0
 # model decide sends on ticks with (tick - FIRST_DECISION_TICK) % interval == 0.
 FIRST_DECISION_TICK = 2
 
+# ---------------------------------------------------------------------------
+# Phase-1 maxed agent (analysis/maxed_agents.md): the derived opening composed
+# with the 1-tick race optimum. Opening = (threshold, ratio, interval) through
+# OPENING_UNTIL; race = the same afterward.
+# ---------------------------------------------------------------------------
+OPENING_UNTIL = 260
+PHASE1_OPENING = (0.20, 0.15, 21)
+PHASE1_RACE = (0.36, 0.005, 1)
+
 # Frontier coefficient: attack budget per tick is 2 * (borderSize + U{0..4}),
 # borderSize ~= BORDER_K * sqrt(tiles). Calibrated from three fixed-attack
 # probes (see docstring / report): measured k = 3.83 / 3.84 / 3.86.

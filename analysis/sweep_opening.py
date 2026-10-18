@@ -44,7 +44,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from openfrontbench.engine import EngineWorker
 from sweep_single_entity import MAP_DIR, SPAWN
-from analytical_model import FIRST_DECISION_TICK, TOTAL_LAND, WIN_SHARE, max_troops
+from analytical_model import (
+    FIRST_DECISION_TICK,
+    OPENING_UNTIL,
+    PHASE1_OPENING,
+    PHASE1_RACE,
+    TOTAL_LAND,
+    WIN_SHARE,
+    max_troops,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,15 +63,23 @@ GRAFT_UNTIL = 260  # tick through which the opening phase is aggressive
 # Opening-phase (threshold, ratio, interval) and the phase-1 race rhythm.
 OPENING_PHASE = (0.20, 0.30, 13)
 RACE_PHASE = (0.38, 0.15, 52)
+# A policy is a piecewise list of (until_tick, threshold, ratio, interval);
+# the last segment's ``until`` is a large sentinel (takes over for good).
+POLICIES: dict[str, list[tuple[int, float, float, int]]] = {
+    "ih": [(MAX_TICKS, *RACE_PHASE)],
+    "graft": [(GRAFT_UNTIL, *OPENING_PHASE), (MAX_TICKS, *RACE_PHASE)],
+    "p1max": [(OPENING_UNTIL, *PHASE1_OPENING), (MAX_TICKS, *PHASE1_RACE)],
+}
 
 
 def _send(tick: int, tiles: float, troops: float, policy: str) -> float | None:
     """Troops to send this tick for a human-agent policy (None = hold)."""
     cap = max_troops(max(tiles, 1))
-    if policy == "ih":
-        th, ratio, interval = RACE_PHASE
-    else:  # graft
-        th, ratio, interval = OPENING_PHASE if tick <= GRAFT_UNTIL else RACE_PHASE
+    th, ratio, interval = POLICIES[policy][-1][1:]
+    for until, sth, sratio, sinterval in POLICIES[policy]:
+        if tick <= until:
+            th, ratio, interval = sth, sratio, sinterval
+            break
     if (tick - FIRST_DECISION_TICK) % interval == 0 and troops >= th * cap:
         return troops * ratio
     return None
@@ -157,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", default=",".join(DEFAULT_SEEDS))
-    parser.add_argument("--policies", default="ih,graft,hard")
+    parser.add_argument("--policies", default="ih,graft,p1max,hard")
     parser.add_argument("--jobs", type=int, default=6)
     parser.add_argument(
         "--out",

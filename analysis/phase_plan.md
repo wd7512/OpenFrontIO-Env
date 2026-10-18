@@ -22,9 +22,9 @@ production Hard nation".
 | # | Phase | Status | Gate on Box |
 |---|---|---|---|
 | 0 | Spawn choice | out of scope (config, not policy) | — |
-| 1a | Expansion — opening | solved — ungated `0.20/0.30/13`→260 (`framework.md`) | own 5,178 @260 vs Hard 5,315; race unregressed |
-| 1b | Expansion — race | solved — Improved-Hard, `52/0.38/0.15` | beats Hard paired 6/6 (+1,685 mean) |
-| 2 | Tribe farming (bots) | solved — farm-p4 (`box_tribe_farming.md`) | beats Hard everywhere (N=20 −12.5%, N=100 −7.2%, N=400 −4.2%) |
+| 1a | Expansion — opening | solved + maxed — ungated opening `0.20/0.15/21`→260 composed with the 1-tick race (`maxed_agents.md`) | opening 5,409 @260 vs Hard 5,315; crossing 7,798 < IH 7,825 |
+| 1b | Expansion — race | solved — Improved-Hard rhythm `52/0.38/0.15`; 1-tick optimum `0.36/0.005/1` composed into 1a | beats Hard paired 6/6 (+1,685 mean) |
+| 2 | Tribe farming (bots) | solved + maxed — farm-p4 (`box_tribe_farming.md`); three derived edges null/negative (`maxed_agents.md`) | beats Hard everywhere (N=20 −12.5%, N=100 −7.2%, N=400 −4.2%) |
 | 3 | Nation fighting | 3a benchmarked (`sweep_duel.py`): IH 0/12, retargeted rhythm 12/12; kill model doesn't transfer | win paired duels vs Hard |
 | 4 | Economy (city/port/factory) | not expressible (needs build orders) | troop-cap curve, first-city tick |
 | 5 | Naval (boats/warships) | not expressible | — |
