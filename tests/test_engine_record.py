@@ -97,11 +97,12 @@ def test_flush_record_writes_file_without_tape_over_pipe(tmp_path, monkeypatch) 
         result = engine.flush_record()
     assert "turns" not in result
     assert result["ticks"] >= 100
-    assert result["gameId"] == "flush-1"
+    # Single identity: the sim seeds from the taped id (client replays only
+    # ever see the label), so flush metadata reports it too.
+    assert result["gameId"] == "dbd370f3"
     tape = json.loads((tmp_path / "record.json").read_text())
     assert len(tape["turns"]) >= 100
-    # Tape label is converter-safe (archived-GameRecord needs 8 alnum
-    # chars) while the engine keeps seeding from the raw id.
+    # Tape label is converter-safe (archived-GameRecord needs 8 alnum chars).
     assert tape["gameId"] == "dbd370f3"
 
 

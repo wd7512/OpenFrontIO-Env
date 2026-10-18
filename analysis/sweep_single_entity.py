@@ -50,6 +50,7 @@ from typing import Any, cast
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from analytical_model import (
     FIRST_DECISION_TICK,
+    NATION_ECONOMY,
     TOTAL_LAND,
     WIN_SHARE,
     find_optimum,
@@ -57,6 +58,8 @@ from analytical_model import (
 )
 
 from openfrontbench.engine import EngineWorker
+from openfrontbench.experiment import write_experiment
+from openfrontbench.run_summary import build_summary, write_summary
 
 from tqdm import tqdm
 
@@ -95,6 +98,83 @@ NATION_TRIBES_RACES = {
     "improved-hard": "BOX-TR-IH",
 }
 
+# Replay-library layout: run name -> experiment dir. Runs are written
+# straight into their suite so re-runs land in place (no moves, no ghost
+# route IDs); unknown names fall back to the raw root (legacy bucket).
+EXPERIMENTS = {
+    "box-cadence-ladder": {
+        "kind": "box-cadence",
+        "notes": (
+            "Box solo cadence ladder: threshold/ratio/interval sweep, "
+            "one run each. Declared = engine 80% tick."
+        ),
+    },
+    "box-solo-baseline": {
+        "kind": "box-solo",
+        "notes": "Reference 1-tick solo policy on The Box (threshold 0.36).",
+    },
+    "box-nation-difficulty": {
+        "kind": "box-nation",
+        "notes": "Production nation opponents by difficulty, human idle.",
+    },
+    "box-improved-hard-solo": {
+        "kind": "box-improved-hard",
+        "notes": (
+            "Custom improved-hard nation behavior (52-tick 15% expansion, "
+            "never attacks players), seeds A/B/C. Client replays reproduce "
+            "it via the archived sidecar meta (nationBehavior)."
+        ),
+    },
+    "box-tribes-race": {
+        "kind": "box-tribes",
+        "notes": (
+            "Nation vs 400 tribes. Client replays reproduce custom behavior "
+            "via the archived sidecar meta (nationBehavior)."
+        ),
+    },
+}
+EXP_OF = {
+    name: "box-cadence-ladder"
+    for name in (
+        "box-agent-10tick",
+        "box-agent-20tick",
+        "box-agent-30tick",
+        "box-agent-40tick",
+        "box-agent-45tick",
+        "box-agent-50tick",
+        "box-agent-52tick",
+        "box-agent-60tick",
+    )
+}
+EXP_OF["box-agent-solo"] = "box-solo-baseline"
+for _difficulty in (*DIFFICULTIES,):
+    EXP_OF[f"box-nation-{_difficulty}-solo"] = "box-nation-difficulty"
+for _difficulty, _seeds in NATION_SEEDS.items():
+    for _seed in _seeds:
+        EXP_OF[f"box-nation-{_difficulty}-{_seed}"] = "box-improved-hard-solo"
+for _difficulty, _seed in NATION_TRIBES_RACES.items():
+    EXP_OF[f"box-nation-{_difficulty}-{_seed}-tribes{TRIBES}"] = "box-tribes-race"
+
+
+def exp_dir(raw: Path, name: str) -> Path:
+    """Game dir for a run: inside its suite, or the raw root (legacy)."""
+    exp = EXP_OF.get(name)
+    return raw / exp / name if exp else raw / name
+
+
+def ensure_experiments(raw: Path) -> None:
+    """Write missing experiment.json manifests (never overwrite)."""
+    for exp, spec in EXPERIMENTS.items():
+        manifest = raw / exp / "experiment.json"
+        if not manifest.is_file():
+            manifest.parent.mkdir(parents=True, exist_ok=True)
+            write_experiment(
+                manifest.parent,
+                name=exp,
+                kind=spec["kind"],
+                notes=spec["notes"],
+            )
+
 
 def git_sha() -> str:
     try:
@@ -122,6 +202,94 @@ def clean_record(outdir: Path) -> None:
     record_path.write_text(json.dumps(record))
 
 
+def _economy_label(difficulty: str) -> str | None:
+    """Compact start/max/regen label for the suite table, e.g. 12500/0.5x/0.9x."""
+    econ = NATION_ECONOMY.get(difficulty)
+    if econ is None:
+        return None
+    start, max_mult, regen_mult = econ
+    return f"{start:.0f}/{max_mult}x/{regen_mult}x"
+
+
+def _winner_kind(record: dict[str, Any], winner: object) -> str | None:
+    """Winner kind from the record's player roster (human/nation/tribe)."""
+    if not isinstance(winner, str):
+        return None
+    players = record.get("players")
+    if not isinstance(players, list):
+        return None
+    for p in players:
+        if isinstance(p, dict) and p.get("name") == winner:
+            kind = p.get("kind")
+            return kind if isinstance(kind, str) else None
+    return None
+
+
+def _write_run_summary(
+    outdir: Path, result: dict[str, object], record: dict[str, Any]
+) -> None:
+    """Write the unified summary.json the replay index reads for its columns."""
+    players = record.get("players")
+    kinds = (
+        {p.get("name"): p.get("kind") for p in players}
+        if isinstance(players, list)
+        else {}
+    )
+    winner = result.get("winner")
+    result["winner_kind"] = _winner_kind(record, winner)
+    metrics: dict[str, Any] = {
+        "strategy": None,
+        "crossing_tick": result.get("crossing_tick"),
+        "declared_tick": result.get("declared_tick"),
+        "winner_kind": kinds.get(winner) if isinstance(winner, str) else None,
+        "behavior": result.get("behavior", "agent-policy"),
+        "tribes": result.get("tribes", 0),
+        "seed": result.get("game_id"),
+        "economy": _economy_label(str(result["difficulty"]))
+        if result.get("difficulty")
+        else None,
+    }
+    if (
+        isinstance(result.get("threshold"), float)
+        and isinstance(result.get("ratio"), float)
+        and isinstance(result.get("interval"), int)
+    ):
+        metrics["strategy"] = (
+            f"{result['threshold']}/{result['ratio']}/{result['interval']}t"
+        )
+    declared_raw = result.get("declared_tick")
+    tick_last = declared_raw if isinstance(declared_raw, int) else None
+    tiles_raw = result.get("tiles")
+    tiles_final = tiles_raw if isinstance(tiles_raw, int) else None
+    summary = build_summary(
+        game=str(result.get("name", outdir.name)),
+        experiment=EXP_OF.get(str(result.get("name", ""))),
+        pipeline="engine-sweep",
+        map="The Box",
+        spawn_id="center-1024-1024",
+        difficulty=str(result["difficulty"]) if result.get("difficulty") else None,
+        config={
+            k: result[k]
+            for k in (
+                "threshold",
+                "ratio",
+                "interval",
+                "difficulty",
+                "behavior",
+                "tribes",
+                "game_id",
+            )
+            if k in result
+        },
+        tick_first=FIRST_DECISION_TICK,
+        tick_last=tick_last,
+        winner=winner if isinstance(winner, str) else None,
+        tiles_final=tiles_final,
+        extra={"metrics": metrics},
+    )
+    write_summary(outdir, summary)
+
+
 def run_agent(
     raw: Path,
     name: str,
@@ -132,7 +300,7 @@ def run_agent(
     spawn: tuple[int, int] | None = SPAWN,
     game_id: str | None = None,
 ) -> dict[str, object]:
-    outdir = raw / name
+    outdir = exp_dir(raw, name)
     outdir.mkdir(parents=True, exist_ok=True)
     os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
     with EngineWorker(map_dir=MAP_DIR) as engine:
@@ -178,6 +346,7 @@ def run_agent(
         "tiles": tiles,
         "winner": winner,
     }
+    _write_run_summary(outdir, result, record)
     logger.info(result)
     return result
 
@@ -196,7 +365,7 @@ def run_nation(
     )
     if tribes:
         tag += f"-tribes{tribes}"
-    outdir = raw / tag
+    outdir = exp_dir(raw, tag)
     outdir.mkdir(parents=True, exist_ok=True)
     os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
     with EngineWorker(map_dir=MAP_DIR) as engine:
@@ -231,6 +400,7 @@ def run_nation(
         "declared_tick": record["ticks"],
         "winner": winner,
     }
+    _write_run_summary(outdir, result, record)
     logger.info(result)
     return result
 
@@ -331,6 +501,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     args.raw.mkdir(parents=True, exist_ok=True)
+    ensure_experiments(args.raw)
     only = set(args.only.split(",")) if args.only else None
 
     # Tasks are (kind, payload) tuples; results are collected in order so
@@ -375,16 +546,40 @@ def main() -> None:
             ):
                 results.append(result)
 
+    # Merge into any existing results file so --only runs update entries in
+    # place instead of clobbering the runs they did not execute.
+    merged: dict[str, dict[str, object]] = {}
+    order: list[str] = []
+    if args.results.is_file():
+        try:
+            previous = json.loads(args.results.read_text())
+        except ValueError:
+            previous = {}
+        for run in previous.get("runs", []):
+            if isinstance(run, dict) and isinstance(run.get("name"), str):
+                merged[run["name"]] = run
+                order.append(run["name"])
+    for run in results:
+        name = run.get("name")
+        if isinstance(name, str):
+            if name not in merged:
+                order.append(name)
+            merged[name] = run
     payload = {
         "created": datetime.now(timezone.utc).isoformat(),
         "git_sha": git_sha(),
         "map": "The Box",
         "win_rule": "tile share > 80% (FFA)",
-        "runs": results,
+        "runs": [merged[name] for name in order],
     }
     args.results.parent.mkdir(parents=True, exist_ok=True)
     args.results.write_text(json.dumps(payload, indent=2))
-    logger.info("wrote %d results to %s", len(results), args.results)
+    logger.info(
+        "wrote %d results to %s (%d new)",
+        len(payload["runs"]),
+        args.results,
+        len(results),
+    )
 
 
 if __name__ == "__main__":

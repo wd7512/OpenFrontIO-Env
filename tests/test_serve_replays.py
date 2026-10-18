@@ -58,10 +58,15 @@ def _run(tmp_path: Path, name: str, game_id: str = "ENGINE01") -> Path:
     return run
 
 
-def _serve(records: dict[str, bytes], index: bytes):
+def _serve(
+    records: dict[str, bytes],
+    index: bytes,
+    metas: dict[str, bytes] | None = None,
+):
     mod = _mod()
     server = ThreadingHTTPServer(
-        ("127.0.0.1", 0), mod.make_handler(lambda: (records, index, {}))
+        ("127.0.0.1", 0),
+        mod.make_handler(lambda: (records, index, {}, metas or {})),
     )
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -127,7 +132,7 @@ def test_registry_picks_up_new_and_growing_runs(tmp_path: Path) -> None:
 
     run_a = _run(raw, "a-run")
     assert registry.refresh() is True
-    records, _exp_index, suites = registry.snapshot()
+    records, _exp_index, suites, _metas = registry.snapshot()
     assert b"1 games" in suites["legacy-runs"]
     id_a = registry.summaries()["a-run"]["game_id"]
     assert json.loads(records[id_a])["info"]["gameID"] == "ENGINE01"
@@ -342,7 +347,7 @@ def test_registry_serves_experiment_suites(tmp_path: Path) -> None:
         raw, Path("bundle.mjs"), "http://localhost:9000", convert=fake_convert
     )
     assert registry.refresh() is True
-    records, exp_index, suites = registry.snapshot()
+    records, exp_index, suites, _metas = registry.snapshot()
     assert b"experiments (1)" in exp_index
     assert b"exp-a" in exp_index
     assert b"1 games" in suites["exp-a"]
@@ -384,3 +389,152 @@ def test_load_summary_prefers_unified_summary(tmp_path: Path) -> None:
     assert summary["policy"] == "abcdef12"
     assert summary["spawn"] == "NW"
     assert summary["score"] == 53274.0
+
+
+def _box_run(
+    tmp_path: Path,
+    name: str,
+    metrics: dict[str, object],
+    difficulty: str | None = None,
+    winner: str | None = "Agent",
+) -> Path:
+    run = tmp_path / name
+    run.mkdir()
+    (run / "record.json").write_text(
+        json.dumps({"gameId": "ENGINE01", "ticks": 8000, "turns": []})
+    )
+    (run / "summary.json").write_text(
+        json.dumps(
+            {
+                "game": name,
+                "pipeline": "engine-sweep",
+                "map": "The Box",
+                "difficulty": difficulty,
+                "tick_first": 2,
+                "tick_last": metrics.get("declared_tick"),
+                "winner": winner,
+                "extra": {"metrics": metrics},
+            }
+        )
+    )
+    return run
+
+
+def test_index_box_tribes_columns(tmp_path: Path) -> None:
+    mod = _mod()
+    _box_run(
+        tmp_path,
+        "tribe-game",
+        {
+            "behavior": "improved-hard",
+            "tribes": 400,
+            "declared_tick": 65321,
+            "winner_kind": "tribe",
+        },
+        difficulty="improved-hard",
+        winner="Dai Viet Domain",
+    )
+    summaries = {p.name: mod.load_summary(p) for p in mod.find_runs(tmp_path)}
+    summaries["tribe-game"]["game_id"] = "OF000017"
+    index = mod.render_index(
+        summaries, "http://localhost:9000", kind="box-tribes"
+    ).decode()
+    for header in ("difficulty", "behavior", "tribes", "declared", "kind"):
+        assert f"<th>{header}</th>" in index
+    for cell in ("improved-hard", "400", "65321", "Dai Viet Domain", "tribe"):
+        assert f"<td>{cell}</td>" in index
+    assert "<th>tool calls</th>" not in index
+    assert summaries["tribe-game"]["winner_kind"] == "tribe"
+
+
+def test_index_box_cadence_gap_from_suite_best(tmp_path: Path) -> None:
+    mod = _mod()
+    _box_run(
+        tmp_path,
+        "best",
+        {"strategy": "0.375/0.05/10t", "crossing_tick": 7809, "declared_tick": 7811},
+    )
+    _box_run(
+        tmp_path,
+        "slow",
+        {"strategy": "0.38/0.095/30t", "crossing_tick": 7817, "declared_tick": 7821},
+    )
+    summaries = {p.name: mod.load_summary(p) for p in mod.find_runs(tmp_path)}
+    index = mod.render_index(
+        summaries, "http://localhost:9000", kind="box-cadence"
+    ).decode()
+    assert "<td>+0</td>" in index
+    assert "<td>+10</td>" in index
+
+
+def test_refresh_evicts_moved_runs(tmp_path: Path) -> None:
+    mod = _mod()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _run(raw, "a-run")
+
+    def fake_convert(run_dir: Path, bundle: Path) -> dict[str, object]:
+        return {"info": {"gameID": "ENGINE01"}, "turns": []}
+
+    registry = mod.Registry(
+        raw, Path("bundle.mjs"), "http://localhost:9000", convert=fake_convert
+    )
+    assert registry.refresh() is True
+    assert list(registry.summaries()) == ["a-run"]
+    old_id = registry.summaries()["a-run"]["game_id"]
+    # Move the run into an experiment suite: the ghost flat entry must go
+    # and the suite entry must reuse the freed route ID.
+    exp = raw / "box-tribes-race"
+    exp.mkdir()
+    (exp / "experiment.json").write_text(json.dumps({"name": "box-tribes-race"}))
+    (raw / "a-run").rename(exp / "a-run")
+    assert registry.refresh() is True
+    assert list(registry.summaries()) == ["box-tribes-race/a-run"]
+    records, _index, _suites, _metas = registry.snapshot()
+    assert old_id in records
+
+
+def test_game_meta_endpoint_serves_behavior(tmp_path: Path) -> None:
+    mod = _mod()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _box_run(
+        tmp_path / "raw",
+        "tribe-game",
+        {
+            "behavior": "improved-hard",
+            "tribes": 400,
+            "declared_tick": 65321,
+            "winner_kind": "tribe",
+        },
+        difficulty="improved-hard",
+        winner="Dai Viet Domain",
+    )
+
+    def fake_convert(run_dir: Path, bundle: Path) -> dict[str, object]:
+        return {"info": {"gameID": "ENGINE01"}, "turns": []}
+
+    registry = mod.Registry(
+        raw, Path("bundle.mjs"), "http://localhost:9000", convert=fake_convert
+    )
+    assert registry.refresh() is True
+    records, index, suites, metas = registry.snapshot()
+    gid = registry.summaries()["tribe-game"]["game_id"]
+    meta = json.loads(metas[gid])
+    assert meta["behavior"] == "improved-hard"
+    assert meta["winner"] == "Dai Viet Domain"
+    assert meta["winner_kind"] == "tribe"
+    assert meta["declared_tick"] == 65321
+    server, port = _serve(records, index, metas)
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/game/{gid}/meta") as res:
+            assert res.status == 200
+            assert json.loads(res.read())["behavior"] == "improved-hard"
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/game/NOPE1234/meta")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("/game/NOPE1234/meta should 404")
+    finally:
+        server.shutdown()

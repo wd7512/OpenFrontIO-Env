@@ -214,6 +214,7 @@ def load_summary(run_dir: Path) -> dict[str, Any]:
         summary["metrics"] = (
             extra_metrics if isinstance(extra_metrics, dict) else dict(config)
         )
+        summary["winner_kind"] = summary["metrics"].get("winner_kind")
         summary["tool_errors"] = unified.get("tool_errors")
     else:
         live: Any = {}
@@ -349,6 +350,27 @@ def stage_records(
     return records, summaries
 
 
+def game_meta(summary: dict[str, Any]) -> dict[str, Any]:
+    """Small replay-hints document for the client, served at /game/<id>/meta.
+
+    ``behavior`` tells the client which nation decision logic reproduced the
+    tape (``improved-hard`` needs the custom execution; anything else replays
+    with the production AI). Best-effort: clients ignore unknown fields and
+    treat a missing meta as production behavior.
+    """
+    metrics = summary.get("metrics")
+    metrics = metrics if isinstance(metrics, dict) else {}
+    return {
+        "game": summary.get("name"),
+        "experiment": summary.get("experiment"),
+        "behavior": metrics.get("behavior", "production"),
+        "difficulty": summary.get("difficulty"),
+        "winner": summary.get("winner"),
+        "winner_kind": summary.get("winner_kind", metrics.get("winner_kind")),
+        "declared_tick": metrics.get("declared_tick", summary.get("tick_last")),
+    }
+
+
 class Registry:
     """Live view over ``raw/``: experiments, each a suite of games.
 
@@ -376,6 +398,7 @@ class Registry:
         self._exp_of: dict[str, str] = {}
         self._records: dict[str, bytes] = {}
         self._summaries: dict[str, dict[str, Any]] = {}
+        self._metas: dict[str, bytes] = {}
         self._exp_index = render_experiments({})
         self._suites: dict[str, bytes] = {}
 
@@ -398,7 +421,25 @@ class Registry:
         """Stage new or changed games; returns True when the view changed."""
         changed = False
         with self._lock:
-            for exp in find_experiments(self._raw):
+            experiments = find_experiments(self._raw)
+            live_keys = {
+                self._game_key(exp.name, game_dir)
+                for exp in experiments
+                for game_dir in exp.game_dirs
+            }
+            for key in list(self._summaries):
+                if key not in live_keys:
+                    # Game dir moved away or deleted: drop the ghost entry
+                    # first, so a moved game reuses its freed route ID below.
+                    route_id = self._route_ids.pop(key, None)
+                    if route_id is not None:
+                        self._records.pop(route_id, None)
+                        self._metas.pop(route_id, None)
+                    self._summaries.pop(key, None)
+                    self._exp_of.pop(key, None)
+                    self._stamps.pop(key, None)
+                    changed = True
+            for exp in experiments:
                 for game_dir in exp.game_dirs:
                     key = self._game_key(exp.name, game_dir)
                     self._exp_of[key] = exp.name
@@ -433,6 +474,9 @@ class Registry:
                     summary = load_summary(game_dir)
                     summary["game_id"] = route_id
                     self._summaries[key] = summary
+                    self._metas[route_id] = json.dumps(game_meta(summary)).encode(
+                        "utf-8"
+                    )
                     self._stamps[key] = stamp
                     changed = True
             if changed:
@@ -448,7 +492,17 @@ class Registry:
         overview: dict[str, dict[str, Any]] = {}
         for exp in find_experiments(self._raw):
             games = by_exp.get(exp.name, {})
-            suites[exp.name] = render_index(games, self._client_base)
+            suites[exp.name] = render_index(
+                games,
+                self._client_base,
+                kind=exp.meta.get("kind")
+                if isinstance(exp.meta.get("kind"), str)
+                else None,
+                notes=exp.meta.get("notes")
+                if isinstance(exp.meta.get("notes"), str)
+                else None,
+                strip_prefix=exp.name + "/",
+            )
             scores = [
                 s.get("score")
                 for s in games.values()
@@ -465,9 +519,14 @@ class Registry:
 
     def snapshot(
         self,
-    ) -> tuple[dict[str, bytes], bytes, dict[str, bytes]]:
+    ) -> tuple[dict[str, bytes], bytes, dict[str, bytes], dict[str, bytes]]:
         with self._lock:
-            return dict(self._records), self._exp_index, dict(self._suites)
+            return (
+                dict(self._records),
+                self._exp_index,
+                dict(self._suites),
+                dict(self._metas),
+            )
 
     def summaries(self) -> dict[str, dict[str, Any]]:
         with self._lock:
@@ -486,10 +545,111 @@ def _fmt_score(value: Any) -> str | None:
     return f"{value:,.0f}"
 
 
-def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> bytes:
+def _gap_cell(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "<td>&mdash;</td>"
+    return f"<td>+{value}</td>"
+
+
+def _box_cells(
+    kind: str, s: dict[str, Any], best_declared: int | None = None
+) -> list[str] | None:
+    """Column cells for Box engine suites; None keeps the generic table."""
+    m = s.get("metrics")
+    m = m if isinstance(m, dict) else {}
+    winner = _cell(s.get("winner"))
+    declared_raw = m.get("declared_tick", s.get("tick_last"))
+    declared = _cell(declared_raw)
+    if kind == "box-cadence":
+        gap = None
+        if (
+            isinstance(declared_raw, int)
+            and isinstance(best_declared, int)
+            and not isinstance(declared_raw, bool)
+        ):
+            gap = declared_raw - best_declared
+        return [
+            _cell(m.get("strategy")),
+            _cell(m.get("crossing_tick")),
+            declared,
+            _gap_cell(gap),
+            winner,
+        ]
+    if kind == "box-solo":
+        return [
+            _cell(m.get("strategy")),
+            _cell(m.get("crossing_tick")),
+            declared,
+            winner,
+        ]
+    if kind == "box-nation":
+        return [
+            _cell(s.get("difficulty")),
+            _cell(m.get("economy")),
+            declared,
+            winner,
+            _cell(s.get("winner_kind")),
+        ]
+    if kind == "box-improved-hard":
+        return [
+            _cell(m.get("seed")),
+            _cell(m.get("behavior")),
+            declared,
+            winner,
+        ]
+    if kind == "box-tribes":
+        return [
+            _cell(s.get("difficulty")),
+            _cell(m.get("behavior")),
+            _cell(m.get("tribes")),
+            declared,
+            winner,
+            _cell(s.get("winner_kind")),
+        ]
+    return None
+
+
+BOX_HEADERS: dict[str, list[str]] = {
+    "box-cadence": ["strategy", "crossing", "declared", "gap", "winner"],
+    "box-solo": ["strategy", "crossing", "declared", "winner"],
+    "box-nation": ["difficulty", "economy", "declared", "winner", "kind"],
+    "box-improved-hard": ["seed", "behavior", "declared", "winner"],
+    "box-tribes": [
+        "difficulty",
+        "behavior",
+        "tribes",
+        "declared",
+        "winner",
+        "kind",
+    ],
+}
+
+
+def render_index(
+    summaries: dict[str, dict[str, Any]],
+    client_base: str,
+    kind: str | None = None,
+    notes: str | None = None,
+    strip_prefix: str | None = None,
+) -> bytes:
     rows = []
-    for name in sorted(summaries):
-        s = summaries[name]
+    box_headers = BOX_HEADERS.get(kind or "")
+    best_declared: int | None = None
+    if (kind or "") == "box-cadence":
+        declared_ticks = [
+            s.get("metrics", {}).get("declared_tick", s.get("tick_last"))
+            for s in summaries.values()
+            if isinstance(s, dict)
+        ]
+        ints = [
+            t for t in declared_ticks if isinstance(t, int) and not isinstance(t, bool)
+        ]
+        best_declared = min(ints) if ints else None
+    for key in sorted(summaries):
+        s = summaries[key]
+        name = key
+        if strip_prefix and name.startswith(strip_prefix):
+            name = name[len(strip_prefix) :]
         game_id = s.get("game_id") or ""
         if game_id:
             link = f"{client_base}/w0/game/{game_id}?spectate"
@@ -501,6 +661,13 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
             # No tape (ran before capture, or convert pending): no link at
             # all, so nothing looks watchable that is not.
             watch = "<td>&mdash;</td>"
+        if box_headers is not None:
+            cells = _box_cells(kind or "", s, best_declared)
+            assert cells is not None
+            rows.append(
+                f"<tr><td>{html.escape(name)}</td>{watch}" + "".join(cells) + "</tr>"
+            )
+            continue
         ticks = (
             f"{s['tick_first']}&ndash;{s['tick_last']}"
             if s.get("tick_first") is not None
@@ -536,6 +703,24 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
             f"{_cell(s.get('cost'))}"
             "</tr>"
         )
+    if box_headers is not None:
+        header = "<th>run</th><th>watch</th>" + "".join(
+            f"<th>{h}</th>" for h in box_headers
+        )
+        title = f"Box suite: {html.escape(kind or '')} ({len(rows)} games)"
+    else:
+        header = (
+            "<th>run</th><th>watch</th><th>model</th><th>policy</th>"
+            "<th>scenario</th><th>spawn</th>"
+            "<th>difficulty</th><th>max decisions</th><th>decisions</th><th>ticks</th>"
+            "<th>winner</th><th>tiles</th><th>troops</th><th>score</th>"
+            "<th>tool calls</th>"
+            "<th>cities</th><th>atk</th><th>atk land</th><th>atk&gt;50</th>"
+            "<th>tool errs</th><th>peak tiles</th>"
+            "<th>wall</th><th>cost</th>"
+        )
+        title = f"OpenFrontBench replays ({len(rows)} games)"
+    notes_html = f'<p class="note">{html.escape(notes)}</p>\n' if notes else ""
     page = (
         "<!doctype html>\n"
         '<html lang="en"><head><meta charset="utf-8">\n'
@@ -544,18 +729,12 @@ def render_index(summaries: dict[str, dict[str, Any]], client_base: str) -> byte
         "table{border-collapse:collapse}td,th{border:1px solid #444;padding:.4em .7em}\n"
         "a{color:#7fd4ff}p.note{color:#aaa}</style>\n"
         "</head><body>\n"
-        f"<h2>OpenFrontBench replays ({len(rows)} games)</h2>\n"
+        f"<h2>{title}</h2>\n"
+        f"{notes_html}"
         '<p class="note">Links open the real client straight into the engine replay. '
         "Client must be running (<code>npm run start:client</code> in "
         "vendor/OpenFrontIO).</p>\n"
-        + "<table><tr><th>run</th><th>watch</th><th>model</th><th>policy</th>"
-        "<th>scenario</th><th>spawn</th>"
-        "<th>difficulty</th><th>max decisions</th><th>decisions</th><th>ticks</th>"
-        "<th>winner</th><th>tiles</th><th>troops</th><th>score</th>"
-        "<th>tool calls</th>"
-        "<th>cities</th><th>atk</th><th>atk land</th><th>atk&gt;50</th>"
-        "<th>tool errs</th><th>peak tiles</th>"
-        "<th>wall</th><th>cost</th></tr>\n"
+        + f"<table><tr>{header}</tr>\n"
         + "".join(rows)
         + "\n</table></body></html>\n"
     )
@@ -598,7 +777,11 @@ def render_experiments(
     return page.encode("utf-8")
 
 
-def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes, dict[str, bytes]]]):
+def make_handler(
+    view: Callable[
+        [], tuple[dict[str, bytes], bytes, dict[str, bytes], dict[str, bytes]]
+    ],
+):
     """Serve experiments, suites and the tape archive from a live view.
 
     The view is called per request, which is how the live ``Registry``
@@ -618,7 +801,7 @@ def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes, dict[str, byt
             self.end_headers()
 
         def do_GET(self):
-            live_records, live_index, live_suites = view()
+            live_records, live_index, live_suites, live_metas = view()
             if self.path == "/" or self.path == "/index.html":
                 self._cors(200, len(live_index), "text/html; charset=utf-8")
                 self.wfile.write(live_index)
@@ -631,6 +814,8 @@ def make_handler(view: Callable[[], tuple[dict[str, bytes], bytes, dict[str, byt
                 ctype = "text/html; charset=utf-8"
             elif len(parts) == 2 and parts[0] == "game":
                 data = live_records.get(parts[1])
+            elif len(parts) == 3 and parts[0] == "game" and parts[2] == "meta":
+                data = live_metas.get(parts[1])
             if data is None:
                 self._cors(404, 0, "text/plain")
                 return

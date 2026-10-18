@@ -19,6 +19,11 @@ import { GameID } from "../vendor/OpenFrontIO/src/core/Schemas";
 // game 7825/7831 center-spawn). No structures, no diplomacy, no boats —
 // pure expansion, like the sweep agent, but wired as a real Nation
 // (bot name, nation spawn, nation economy).
+// Behavior tag shared with the client replay loader: archived replays
+// whose sidecar meta reports this behavior attach ImprovedHardExecution
+// instead of the production NationExecution (see Executor.nationExecutions).
+export const IMPROVED_HARD_BEHAVIOR = "improved-hard";
+
 const DECISION_INTERVAL = 52;
 const THRESHOLD = 0.38;
 const RATIO = 0.15;

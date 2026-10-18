@@ -65,10 +65,11 @@ const DIFFICULTIES: Record<string, Difficulty> = {
 };
 
 // Replay tapes feed the archived-GameRecord converter, whose schema only
-// accepts gameID matching /^[A-Za-z0-9]{8}$/. The raw game id seeds the
-// engine RNG and must stay intact, so tapes carry a derived label instead:
-// raw ids that already fit pass through, anything else maps to FNV-1a hex
-// (mirrored in Python wherever older tapes are backfilled).
+// accepts gameID matching /^[A-Za-z0-9]{8}$/. Single identity: the sim RNG
+// seeds from the taped id (tapeGameId applied at start), because client
+// replays only ever see the taped id. Raw ids that already fit pass
+// through unchanged (ENGINE01); anything else maps to FNV-1a hex (mirrored
+// in Python: tests/test_replay_fidelity.py::_fnv1a32_hex).
 const TAPE_GAME_ID_RE = /^[A-Za-z0-9]{8}$/;
 
 function tapeGameId(raw: string): string {
@@ -351,6 +352,10 @@ class EngineSession {
       }
       gid = gameId;
     }
+    // Single identity: the sim RNG seeds from the taped id, because client
+    // replays only ever see the taped id (schema-constrained). Worlds whose
+    // raw id already fits are unchanged (ENGINE01 passes through).
+    gid = tapeGameId(gid);
     this.gameId = gid;
     // In-engine policy: load the pre-bundled ESM module (the harness
     // bundles + validates the candidate before the eval). Fail-closed:
@@ -455,11 +460,16 @@ class EngineSession {
     // Same required GameConfig fields production fills; no defaults are applied
     // because Config reads the object directly. startingGold is intentionally
     // left unset to match the production schema default (0n).
+    // Resolve the manifest name by enum VALUE ("The Box" -> TheBox): key
+    // lookup misses names with spaces and silently falls back to Asia, which
+    // only changes the tribe-name theme client replays resolve — the sim is
+    // unaffected, but the tape must agree with the replay (see TribeSpawner).
+    const gameMapType =
+      (Object.values(GameMapType) as string[]).includes(manifest.name)
+        ? (manifest.name as GameMapType)
+        : GameMapType.Asia;
     const gameConfig = {
-      gameMap:
-        (GameMapType as unknown as Record<string, GameMapType>)[
-          manifest.name
-        ] ?? GameMapType.Asia,
+      gameMap: gameMapType,
       gameMapSize: compact ? GameMapSize.Compact : GameMapSize.Normal,
       gameMode: GameMode.FFA,
       gameType: GameType.Singleplayer,
@@ -641,8 +651,8 @@ class EngineSession {
       players.push({ id: p.id(), name: p.name(), kind: "tribe" });
     }
     return {
-      // Tape label only: the engine RNG keeps seeding from the raw id, so
-      // worlds are unchanged; the label just has to satisfy the converter.
+      // this.gameId is already the taped id (sim and label share one
+      // identity); tapeGameId here is a no-op guard for older callers.
       gameId: tapeGameId(this.gameId),
       mapDir: this.mapDir,
       ticks: game.ticks(),
