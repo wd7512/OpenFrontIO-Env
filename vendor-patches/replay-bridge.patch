@@ -1,6 +1,25 @@
 --- a/src/core/Schemas.ts
 +++ b/src/core/Schemas.ts
-@@ -827,6 +827,14 @@
+@@ -815,6 +815,18 @@
+   .loose();
+ export type Tribe = z.infer<typeof TribeSchema>;
+ 
++// One harness-injected fight order for an externally-driven nation (RL
++// sandbox). Declared before GameStartInfoSchema, which references it.
++export const ExternalOrderSchema = z.object({
++  tick: zb.uint(),
++  nation: zb.uint(),
++  targetID: ID,
++  // Troops are fractional throughout the sim (attackRatio * troops(),
++  // combat attrition); plain z.number() is ambiguous on the binary wire.
++  troops: zb.float({ min: 0 }),
++});
++export type ExternalOrder = z.infer<typeof ExternalOrderSchema>;
++
+ export const GameStartInfoSchema = z.object({
+   gameID: ID,
+   lobbyCreatedAt: zb.uint(),
+@@ -827,6 +839,20 @@
    // zb.json: TribeSchema is `.loose()`, and a positional binary layout would
    // silently drop the passthrough keys that looseness exists to preserve.
    tribes: z.array(zb.json(TribeSchema)).max(100).optional(),
@@ -12,6 +31,12 @@
 +  // Per-nation behaviors for duel tapes (spawn order); when present it
 +  // takes precedence over the uniform nationBehavior above.
 +  nationBehaviors: z.array(z.string()).optional(),
++  // Taped fight orders for externally-driven nations (RL sandbox). The
++  // worker logs every nation_order injection; replays preload them into
++  // the playback execution, which drains them through the same rule the
++  // live execution uses — this is what makes external tapes replay
++  // bit-for-bit. Rides the record info, never the sidecar meta.
++  externalOrders: z.array(ExternalOrderSchema).optional(),
  });
  
  export const WinnerSchema = z
@@ -131,25 +156,36 @@
    // The record was produced by a different build. replay.<domain>/<gameId>
 --- a/src/core/GameRunner.ts
 +++ b/src/core/GameRunner.ts
-@@ -86,6 +86,8 @@
+@@ -29,7 +29,7 @@
+ import { createNationsForGame } from "./game/NationCreation";
+ import { loadTerrainMap as loadGameMap } from "./game/TerrainMapLoader";
+ import { PseudoRandom } from "./PseudoRandom";
+-import { ClientID, GameStartInfo, Turn } from "./Schemas";
++import { ClientID, ExternalOrder, GameStartInfo, Turn } from "./Schemas";
+ import { simpleHash } from "./Util";
+ 
+ export async function createGameRunner(
+@@ -86,6 +86,9 @@
        gameStart.tribes?.map((t) => t.name),
      ),
      callBack,
 +    gameStart.nationBehavior,
 +    gameStart.nationBehaviors,
++    gameStart.externalOrders,
    );
    gr.init();
    return gr;
-@@ -102,6 +104,8 @@
+@@ -102,6 +105,9 @@
      public game: Game,
      private execManager: Executor,
      private callBack: (gu: GameUpdateViewData | ErrorUpdate) => void,
 +    private nationBehavior?: string,
 +    private nationBehaviors?: string[],
++    private externalOrders?: ExternalOrder[],
    ) {}
  
    init() {
-@@ -109,7 +113,11 @@
+@@ -109,7 +115,12 @@
        this.game.addExecution(new SpawnTimerExecution());
      }
      if (this.game.config().spawnNations()) {
@@ -157,6 +193,7 @@
 +      this.game.addExecution(
 +        ...this.execManager.nationExecutions(
 +          this.nationBehaviors ?? this.nationBehavior,
++          this.externalOrders,
 +        ),
 +      );
      }
@@ -164,7 +201,7 @@
        this.game.addExecution(...this.execManager.spawnPlayers());
 --- a/src/core/execution/ExecutionManager.ts
 +++ b/src/core/execution/ExecutionManager.ts
-@@ -28,6 +28,13 @@
+@@ -28,6 +28,20 @@
  import { TribeSpawner } from "./TribeSpawner";
  import { UpgradeStructureExecution } from "./UpgradeStructureExecution";
  import { PlayerSpawner } from "./utils/PlayerSpawner";
@@ -175,15 +212,25 @@
 +  IMPROVED_HARD_BEHAVIOR,
 +  ImprovedHardExecution,
 +} from "../../../../../engine/improvedHardBehavior";
++// Externally-driven nations (RL sandbox): replays preload the taped fight
++// orders so the playback drains them exactly like the live run did.
++import {
++  EXTERNAL_BEHAVIOR,
++  ExternalExecution,
++  type ExternalOrder,
++} from "../../../../../engine/externalBehavior";
  
  export class Executor {
    // private random = new PseudoRandom(999)
-@@ -148,11 +155,19 @@
+@@ -148,11 +162,25 @@
      return new PlayerSpawner(this.mg, this.gameID).spawnPlayers();
    }
  
 -  nationExecutions(): Execution[] {
-+  nationExecutions(behavior?: string | string[]): Execution[] {
++  nationExecutions(
++    behavior?: string | string[],
++    externalOrders?: ExternalOrder[],
++  ): Execution[] {
      const execs: Execution[] = [];
 -    for (const nation of this.mg.nations()) {
 -      execs.push(new NationExecution(this.gameID, nation));
@@ -195,6 +242,9 @@
 +        : behavior;
 +      if (assigned === IMPROVED_HARD_BEHAVIOR) {
 +        execs.push(new ImprovedHardExecution(this.gameID, nation));
++      } else if (assigned === EXTERNAL_BEHAVIOR) {
++        const mine = (externalOrders ?? []).filter((o) => o.nation === index);
++        execs.push(new ExternalExecution(this.gameID, nation, mine));
 +      } else {
 +        execs.push(new NationExecution(this.gameID, nation));
 +      }
@@ -264,5 +314,64 @@
 +    expect(allIH.every((e) => e instanceof ImprovedHardExecution)).toBe(true);
 +    const allProd = duelExecutor().nationExecutions();
 +    expect(allProd.every((e) => e instanceof NationExecution)).toBe(true);
++  });
++});
+--- /dev/null
++++ b/tests/core/ExternalBehaviors.test.ts
+@@ -0,0 +1,56 @@
++import { ExternalExecution } from "../../../../engine/externalBehavior";
++import { Executor } from "../../src/core/execution/ExecutionManager";
++import { NationExecution } from "../../src/core/execution/NationExecution";
++import {
++  Cell,
++  Game,
++  Nation,
++  PlayerInfo,
++  PlayerType,
++} from "../../src/core/game/Game";
++import { GameID } from "../../src/core/Schemas";
++
++const gameID: GameID = "ext_game_id";
++
++function mkNation(i: number): Nation {
++  return new Nation(
++    new Cell(20 + i * 15, 20 + i * 15),
++    new PlayerInfo(`Nation${i}`, PlayerType.Nation, null, `nation_${i}`),
++  );
++}
++
++function extExecutor(): Executor {
++  // nationExecutions only reads mg.nations() + gameID; a stub game keeps
++  // this test map-free and instant.
++  const mg = { nations: () => [mkNation(0), mkNation(1)] };
++  return new Executor(mg as unknown as Game, gameID, "client_1", []);
++}
++
++describe("External per-nation assignment + order preload", () => {
++  test("external index gets ExternalExecution, production stays production", () => {
++    const execs = extExecutor().nationExecutions(["external", "production"]);
++    expect(execs).toHaveLength(2);
++    expect(execs[0]).toBeInstanceOf(ExternalExecution);
++    expect(execs[1]).toBeInstanceOf(NationExecution);
++  });
++
++  test("taped orders preload per nation index", () => {
++    const execs = extExecutor().nationExecutions(
++      ["external", "external"],
++      [
++        { tick: 10, nation: 1, targetID: "nation_0", troops: 500 },
++        { tick: 5, nation: 0, targetID: "nation_1", troops: 1000 },
++      ],
++    );
++    expect(execs[0]).toBeInstanceOf(ExternalExecution);
++    expect(execs[1]).toBeInstanceOf(ExternalExecution);
++    // Per-index slice: nation 0 sees only its own order.
++    expect((execs[0] as unknown as { queue: unknown[] }).queue).toHaveLength(1);
++    expect((execs[1] as unknown as { queue: unknown[] }).queue).toHaveLength(1);
++  });
++
++  test("no orders means an empty live queue", () => {
++    const execs = extExecutor().nationExecutions(["external", "production"]);
++    expect((execs[0] as unknown as { queue: unknown[] }).queue).toHaveLength(0);
 +  });
 +});

@@ -14,6 +14,10 @@ import { RecomputeRailClusterExecution } from "../vendor/OpenFrontIO/src/core/ex
 import { WinCheckExecution } from "../vendor/OpenFrontIO/src/core/execution/WinCheckExecution";
 import { ImprovedHardExecution } from "./improvedHardBehavior";
 import {
+  EXTERNAL_BEHAVIOR,
+  ExternalExecution,
+} from "./externalBehavior";
+import {
   Difficulty,
   Game,
   GameMapSize,
@@ -265,14 +269,54 @@ interface Snapshot {
   };
 }
 
+// Small read-only observation for one nation (RL sandbox). Mirrors the
+// snapshot's nation fields so obs and tape agree on names and numbers.
+interface NationObs {
+  tick: number;
+  inSpawnPhase: boolean;
+  winner: string | null;
+  me: {
+    name: string;
+    tiles: number;
+    troops: number;
+    maxTroops: number;
+    alive: boolean;
+    incomingTroops: number;
+    outgoingAttacks: number;
+  };
+  others: {
+    name: string;
+    tiles: number;
+    troops: number;
+    alive: boolean;
+    bordersMe: boolean;
+    incomingTroops: number;
+  }[];
+}
+
 class EngineSession {
   private game: Game | null = null;
   private executor: Executor | null = null;
   private nationIDs: string[] = [];
   private tribeIDs: string[] = [];
   // Per-nation decision logic in nationIDs order ("production" /
-  // "improved-hard"); taped into the roster so replays reproduce duels.
+  // "improved-hard" / "external"); taped into the roster so replays
+  // reproduce duels.
   private nationBehaviors: string[] = [];
+  // Live handles of externally-driven nations, parallel to nationIDs (null
+  // for production/improved-hard entries); nation_order enqueues through
+  // these, so injected orders and the autopilot share one drain rule.
+  private externalExecs: (ExternalExecution | null)[] = [];
+  // Every injected fight order, stamped at injection time and taped into
+  // the record: replays preload them into the playback execution, which is
+  // what makes external tapes replay bit-for-bit.
+  private externalOrderLog: {
+    tick: number;
+    nation: number;
+    targetID: string;
+    targetName: string;
+    troops: number;
+  }[] = [];
   // Human player id, drawn from the seeded RNG at boot exactly like
   // GameRunner (humans first, then nations): identical ids and identical
   // downstream RNG stream, so tapes replay bit-for-bit in the real client.
@@ -388,10 +432,11 @@ class EngineSession {
     // code (it maps to Difficulty.Hard above) but swaps the decision logic:
     // derive the behavior from the difficulty string, no side channel.
     const useImprovedHard = difficulty === "improved-hard";
-    // Per-nation decision logic (duels): null plays every nation on the
-    // game difficulty; otherwise one "production"/"improved-hard" entry per
-    // nation, in spawn order, taped into the roster so replays reproduce
-    // the duel instead of running one logic for all nations.
+    // Per-nation decision logic (duels + RL sandbox): null plays every
+    // nation on the game difficulty; otherwise one
+    // "production"/"improved-hard"/"external" entry per nation, in spawn
+    // order, taped into the roster so replays reproduce the game instead
+    // of running one logic for all nations.
     const uniformBehavior = useImprovedHard ? "improved-hard" : "production";
     let behaviorOfNation: string[];
     if (nationBehaviors === null || nationBehaviors === undefined) {
@@ -401,11 +446,11 @@ class EngineSession {
         !Array.isArray(nationBehaviors) ||
         nationBehaviors.length !== nations ||
         !nationBehaviors.every(
-          (b) => b === "production" || b === "improved-hard",
+          (b) => b === "production" || b === "improved-hard" || b === EXTERNAL_BEHAVIOR,
         )
       ) {
         throw new Error(
-          `invalid nationBehaviors: expected ${nations} "production"/"improved-hard" entries, got ${JSON.stringify(nationBehaviors)}`,
+          `invalid nationBehaviors: expected ${nations} "production"/"improved-hard"/"external" entries, got ${JSON.stringify(nationBehaviors)}`,
         );
       }
       behaviorOfNation = [...nationBehaviors];
@@ -554,8 +599,14 @@ class EngineSession {
       nationObjs.forEach((nation, index) => {
         if (behaviorOfNation[index] === "improved-hard") {
           game.addExecution(new ImprovedHardExecution(gid, nation));
+          this.externalExecs.push(null);
+        } else if (behaviorOfNation[index] === EXTERNAL_BEHAVIOR) {
+          const exec = new ExternalExecution(gid, nation);
+          game.addExecution(exec);
+          this.externalExecs.push(exec);
         } else {
           game.addExecution(new NationExecution(gid, nation));
+          this.externalExecs.push(null);
         }
       });
     }
@@ -628,6 +679,13 @@ class EngineSession {
     startedAt: number;
     gameConfig: Record<string, unknown>;
     players: { id: string; name: string; kind: string; behavior?: string }[];
+    externalOrders: {
+      tick: number;
+      nation: number;
+      targetID: string;
+      targetName: string;
+      troops: number;
+    }[];
     turns: { turnNumber: number; intents: StampedIntent[]; hash?: number }[];
     path: string | null;
   } {
@@ -661,6 +719,13 @@ class EngineSession {
     startedAt: number;
     gameConfig: Record<string, unknown>;
     players: { id: string; name: string; kind: string; behavior?: string }[];
+    externalOrders: {
+      tick: number;
+      nation: number;
+      targetID: string;
+      targetName: string;
+      troops: number;
+    }[];
     turns: { turnNumber: number; intents: StampedIntent[]; hash?: number }[];
   } {
     const game = this.requireGame();
@@ -689,6 +754,9 @@ class EngineSession {
       startedAt: this.recordStartedAt,
       gameConfig: this.recordConfig,
       players,
+      // Injected fight orders in injection order; replays preload them into
+      // the playback execution (see ExternalExecution).
+      externalOrders: [...this.externalOrderLog],
       turns: this.turns,
     };
   }
@@ -871,6 +939,142 @@ class EngineSession {
       troops,
     } as StampedIntent;
     this.submit(attackIntent);
+  }
+
+  nationOrder(nation: unknown, target: unknown, troops: unknown): Snapshot {
+    // RL sandbox: inject one fight order into an externally-driven nation.
+    // The order is queued (NOT executed immediately) and taped into the
+    // record; the execution drains it on a later tick through the same rule
+    // replays use, so live and replay agree by construction. Fail-closed:
+    // non-external nations, self-targets, non-nation targets and dead
+    // owners are rejected before anything is queued or taped.
+    const game = this.requireGame();
+    if (
+      typeof nation !== "number" ||
+      !Number.isInteger(nation) ||
+      nation < 0 ||
+      nation >= this.nationIDs.length
+    ) {
+      throw new Error(
+        `invalid nation: expected an integer in [0, ${this.nationIDs.length}), got ${JSON.stringify(nation)}`,
+      );
+    }
+    if (this.nationBehaviors[nation] !== EXTERNAL_BEHAVIOR) {
+      throw new Error(
+        `invalid nation: nation ${nation} is ${this.nationBehaviors[nation] ?? "production"}, not external`,
+      );
+    }
+    const owner = game.player(this.nationIDs[nation]);
+    if (!owner.isAlive()) {
+      throw new Error(`invalid nation: nation ${nation} is not alive`);
+    }
+    // v0 scope is nation-vs-nation fighting (the autopilot owns expansion);
+    // "nation-N" reuses the 1-based harness label convention.
+    let targetID: string;
+    let targetName: string;
+    if (typeof target === "string" && /^nation-\d+$/.test(target)) {
+      const index = Number.parseInt(target.slice("nation-".length), 10) - 1;
+      if (index < 0 || index >= this.nationIDs.length) {
+        throw new Error(
+          `invalid order target: no such nation ${JSON.stringify(target)}`,
+        );
+      }
+      if (index === nation) {
+        throw new Error("invalid order target: nation cannot attack itself");
+      }
+      targetID = this.nationIDs[index];
+      targetName = game.hasPlayer(targetID)
+        ? game.player(targetID).name()
+        : target;
+    } else {
+      throw new Error(
+        `invalid order target: expected "nation-N", got ${JSON.stringify(target)}`,
+      );
+    }
+    // Production troops contract (AttackIntentSchema float >= 0);
+    // AttackExecution clamps to owner troops, so oversize orders are legal.
+    if (
+      typeof troops !== "number" ||
+      !Number.isFinite(troops) ||
+      troops < 0
+    ) {
+      throw new Error(
+        `invalid order troops: expected a non-negative number, got ${JSON.stringify(troops)}`,
+      );
+    }
+    const tick = game.ticks();
+    const exec = this.externalExecs[nation];
+    if (exec === null || exec === undefined) {
+      throw new Error(`invalid nation: nation ${nation} has no live handle`);
+    }
+    exec.enqueue({ tick, nation, targetID, troops });
+    this.externalOrderLog.push({
+      tick,
+      nation,
+      targetID,
+      targetName,
+      troops,
+    });
+    return this.snapshot("ok");
+  }
+
+  nationObserve(nation: unknown): NationObs {
+    // RL sandbox: small read-only observation for one nation (any behavior;
+    // observing is side-effect free). Mirrors the snapshot's nation fields
+    // so obs and tape agree on names and numbers.
+    const game = this.requireGame();
+    if (
+      typeof nation !== "number" ||
+      !Number.isInteger(nation) ||
+      nation < 0 ||
+      nation >= this.nationIDs.length
+    ) {
+      throw new Error(
+        `invalid nation: expected an integer in [0, ${this.nationIDs.length}), got ${JSON.stringify(nation)}`,
+      );
+    }
+    const me = game.player(this.nationIDs[nation]);
+    const winner = game.getWinner();
+    return {
+      tick: game.ticks(),
+      inSpawnPhase: game.inSpawnPhase(),
+      winner:
+        winner === null
+          ? null
+          : typeof winner === "string"
+            ? winner
+            : typeof (winner as { name?: unknown }).name === "function"
+              ? (winner as { name: () => string }).name()
+              : null,
+      me: {
+        name: me.name(),
+        tiles: me.numTilesOwned(),
+        troops: me.troops(),
+        maxTroops: game.config().maxTroops(me),
+        alive: me.isAlive(),
+        incomingTroops: me
+          .incomingAttacks()
+          .filter((attack) => !attack.retreating())
+          .reduce((sum, attack) => sum + attack.troops(), 0),
+        outgoingAttacks: me.outgoingAttacks().length,
+      },
+      others: this.nationIDs
+        .filter((_, index) => index !== nation)
+        .map((id) => {
+          const other = game.player(id);
+          return {
+            name: other.name(),
+            tiles: other.numTilesOwned(),
+            troops: other.troops(),
+            alive: other.isAlive(),
+            bordersMe: me.sharesBorderWith(other),
+            incomingTroops: other
+              .incomingAttacks()
+              .filter((attack) => !attack.retreating())
+              .reduce((sum, attack) => sum + attack.troops(), 0),
+          };
+        }),
+    };
   }
 
   cancelAttack(attackID: unknown): Snapshot {
@@ -1664,6 +1868,7 @@ interface Request {
   policyPath?: string | null;
   nationBehaviors?: string[] | null;
   ticks?: number;
+  nation?: unknown;
   target?: unknown;
   troops?: unknown;
   attackID?: unknown;
@@ -1733,6 +1938,24 @@ async function handle(raw: string): Promise<boolean> {
           id,
           ok: true,
           result: session.attack(request.target, request.troops),
+        });
+        return true;
+      case "nation_order":
+        writeResponse({
+          id,
+          ok: true,
+          result: session.nationOrder(
+            request.nation,
+            request.target,
+            request.troops,
+          ),
+        });
+        return true;
+      case "nation_observe":
+        writeResponse({
+          id,
+          ok: true,
+          result: session.nationObserve(request.nation),
         });
         return true;
       case "cancel_attack":

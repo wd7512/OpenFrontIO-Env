@@ -19,7 +19,7 @@ BRIDGE_MARKERS = {
     "src/client/JoinLobbyModal.ts": "fetchReplayBehavior",
     # The runner branches custom behavior into nation executions.
     "src/core/GameRunner.ts": "nationBehaviors ?? this.nationBehavior",
-    "src/core/execution/ExecutionManager.ts": "nationExecutions(behavior",
+    "src/core/execution/ExecutionManager.ts": "nationExecutions(",
     # Dev server must serve engine/ sources from outside the client root.
     "vite.config.ts": '"../../.."',
     # Duel tapes: per-nation behaviors in spawn order, taking precedence
@@ -29,6 +29,11 @@ BRIDGE_MARKERS = {
     "src/client/JoinLobbyModal.ts:nationBehaviors": "fetchReplayBehaviors",
     "src/core/GameRunner.ts:nationBehaviors": "gameStart.nationBehaviors",
     "src/core/execution/ExecutionManager.ts:nationBehaviors": "behavior?: string | string[]",
+    # External nations (RL sandbox): taped fight orders ride the record
+    # info into the playback execution (same drain rule live and replay).
+    "src/core/Schemas.ts:externalOrders": "externalOrders: z.array(ExternalOrderSchema).optional(),",
+    "src/core/GameRunner.ts:externalOrders": "gameStart.externalOrders",
+    "src/core/execution/ExecutionManager.ts:externalOrders": "EXTERNAL_BEHAVIOR",
 }
 
 

@@ -107,9 +107,11 @@ class EngineWorker:
         a bundled in-engine TS policy (``None`` for no policy); a
         non-empty string is passed through to the worker as ``policyPath``.
         ``nation_behaviors`` optionally assigns decision logic per nation in
-        spawn order (``"production"`` or ``"improved-hard"`` per entry, one
-        entry per nation); ``None`` plays every nation on the game
-        ``difficulty``. Same seed + same assignment replays the same duel.
+        spawn order (``"production"``, ``"improved-hard"`` or ``"external"``
+        per entry, one entry per nation); ``None`` plays every nation on the
+        game ``difficulty``. Same seed + same assignment replays the same duel.
+        ``"external"`` nations run the IH expansion autopilot and accept
+        harness fight orders via :meth:`nation_order` (RL sandbox).
         """
         if isinstance(nations, bool) or not isinstance(nations, int):
             raise EngineError(f"nations must be an integer, got {nations!r}")
@@ -174,13 +176,13 @@ class EngineWorker:
         if nation_behaviors is None:
             behaviors: list[str] | None = None
         elif isinstance(nation_behaviors, (tuple, list)) and all(
-            b in ("production", "improved-hard") for b in nation_behaviors
+            b in ("production", "improved-hard", "external") for b in nation_behaviors
         ):
             behaviors = list(nation_behaviors)
         else:
             raise EngineError(
                 "nation_behaviors must be None or a list of "
-                f"'production'/'improved-hard' entries, got {nation_behaviors!r}"
+                f"'production'/'improved-hard'/'external' entries, got {nation_behaviors!r}"
             )
         return self._request(
             {
@@ -221,6 +223,37 @@ class EngineWorker:
         worker-side against live game state.
         """
         return self._request({"cmd": "attack", "target": target, "troops": troops})
+
+    def nation_order(
+        self, nation: object, target: object, troops: object
+    ) -> dict[str, Any]:
+        """Queue one fight order for an externally-driven nation.
+
+        ``nation`` is the 0-based nation index (must be ``"external"``);
+        ``target`` is a ``"nation-N"`` 1-based label (self-targets rejected);
+        ``troops`` follows the production float contract (non-negative,
+        clamped to owner troops at execution). The order is drained by the
+        execution on a later tick and taped into the record, so replays
+        reproduce it bit-for-bit. Validated worker-side against live state.
+        """
+        return self._request(
+            {
+                "cmd": "nation_order",
+                "nation": nation,
+                "target": target,
+                "troops": troops,
+            }
+        )
+
+    def nation_observe(self, nation: object) -> dict[str, Any]:
+        """Return a small read-only observation for one nation.
+
+        ``nation`` is the 0-based nation index (any behavior). Result has
+        tick/inSpawnPhase/winner, a ``me`` block (name/tiles/troops/
+        maxTroops/alive/incomingTroops/outgoingAttacks) and an ``others``
+        list (one entry per other nation). No game mutation.
+        """
+        return self._request({"cmd": "nation_observe", "nation": nation})
 
     def cancel_attack(self, attack_id: object) -> dict[str, Any]:
         """Retreat an outgoing attack by its id (production cancel_attack

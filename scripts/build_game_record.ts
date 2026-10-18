@@ -78,6 +78,12 @@ function main(): void {
       duration: Math.max(0, Math.floor((end - start) / 1000)),
       num_turns: tape.turns?.length ?? 0,
       lobbyFillTime: 0,
+      // Taped fight orders for externally-driven nations (RL sandbox);
+      // replays preload them into the playback execution. Absent on
+      // human/bot tapes (undefined, not []).
+      ...(tape.externalOrders !== undefined
+        ? { externalOrders: tape.externalOrders }
+        : {}),
     },
     version: "v0.0.2",
     // Locally built shells report DEV; the replay shell accepts DEV records
