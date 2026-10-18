@@ -17,7 +17,7 @@ production Hard nation".
 |---|---|---|---|
 | 0 | Spawn choice | out of scope (config, not policy) | — |
 | 1 | Expansion (neutral land) | solved — Improved-Hard, `52/38%/15%` | beats Hard paired 6/6 (+1,685 mean) |
-| 2 | Tribe farming (bots) | scoped below — next | beat Hard's race time, no rival nations |
+| 2 | Tribe farming (bots) | solved — farm-p4 (`box_tribe_farming.md`) | beats Hard everywhere (N=20 −12.5%, N=100 −7.2%, N=400 −4.2%) |
 | 3 | Nation fighting | probe done (scripted raid/cycle 6/6) | win paired duels vs Hard |
 | 4 | Economy (city/port/factory) | not expressible (needs build orders) | troop-cap curve, first-city tick |
 | 5 | Naval (boats/warships) | not expressible | — |
