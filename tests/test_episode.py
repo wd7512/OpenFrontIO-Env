@@ -342,16 +342,48 @@ def test_end_decision_rejects_non_integer_payloads_over_real_transport() -> None
     asyncio.run(scenario())
 
 
-def _own_worker_pids() -> set[str]:
-    """Engine worker pids in this process's descendant tree.
+def _read_proc_tree(
+    proc_root: Path = Path("/proc"),
+) -> tuple[dict[str, set[str]], set[str], int] | None:
+    """Scan /proc directly: {ppid: {pids}}, worker pids, entries read.
 
-    ``pgrep`` is machine-global, so under ``pytest -n auto`` other test
-    workers' engine processes pollute any global assertion. Parentage
-    distinguishes ours: the MCP server is our child, the engine worker its
-    child (nothing here daemonizes).
+    Returns None when /proc is unavailable (non-Linux). Command lines come
+    from cmdline bytes and parentage from stat, so no ``ps`` formatting or
+    column-truncation quirks can hide the worker.
+
+    ``proc_root`` is injectable so unit tests can scan a fixture tree.
     """
+    if not proc_root.is_dir():
+        return None
+    children: dict[str, set[str]] = {}
+    workers: set[str] = set()
+    entries = 0
+    for pid_dir in proc_root.iterdir():
+        if not pid_dir.name.isdigit():
+            continue
+        try:
+            raw = (pid_dir / "cmdline").read_bytes().split(b"\0")
+            stat = (pid_dir / "stat").read_text()
+        except (OSError, ValueError):
+            continue
+        entries += 1
+        try:
+            ppid = stat.split(")")[-1].split()[1]
+        except IndexError:
+            continue
+        if not ppid.isdigit():
+            continue
+        children.setdefault(ppid, set()).add(pid_dir.name)
+        cmd = " ".join(part.decode(errors="replace") for part in raw if part)
+        if "dist/worker.mjs" in cmd:
+            workers.add(pid_dir.name)
+    return children, workers, entries
+
+
+def _read_ps_tree() -> tuple[dict[str, set[str]], set[str], int] | None:
+    """Same shape as _read_proc_tree via ``ps`` (fallback for non-Linux)."""
     if shutil.which("ps") is None:
-        return set()
+        return None
     try:
         out = subprocess.run(
             ["ps", "-eo", "pid,ppid,command"],
@@ -360,25 +392,55 @@ def _own_worker_pids() -> set[str]:
             timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
-        return set()
+        return None
     children: dict[str, set[str]] = {}
     workers: set[str] = set()
+    lines = 0
     for line in out.stdout.splitlines():
         parts = line.split(None, 2)
         if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
             continue
+        lines += 1
         pid, ppid, cmd = parts
         children.setdefault(ppid, set()).add(pid)
         if "dist/worker.mjs" in cmd:
             workers.add(pid)
+    return children, workers, lines
+
+
+def _descendants(children: dict[str, set[str]], root: str) -> set[str]:
     own: set[str] = set()
-    stack = [str(os.getpid())]
+    stack = [root]
     while stack:
         for child in children.get(stack.pop(), ()):
             if child not in own:
                 own.add(child)
                 stack.append(child)
-    return own & workers
+    return own
+
+
+def _own_worker_pids() -> tuple[set[str], str]:
+    """Engine worker pids in this process's descendant tree, plus a debug
+    summary for the assertion message.
+
+    ``pgrep`` is machine-global, so under ``pytest -n auto`` other test
+    workers' engine processes pollute any global assertion. Parentage
+    distinguishes ours: the MCP server is our child, the engine worker its
+    child (nothing here daemonizes).
+    """
+    scanned = _read_proc_tree() or _read_ps_tree()
+    if scanned is None:
+        return set(), "no process backend (/proc missing, ps missing)"
+    children, workers, total = scanned
+    backend = "proc" if Path("/proc").is_dir() else "ps"
+    own = _descendants(children, str(os.getpid()))
+    debug = (
+        f"backend={backend} entries={total} own_pid={os.getpid()} "
+        f"descendants={len(own)} "
+        f"global_worker_matches={sorted(workers)} "
+        f"own_tree_workers={sorted(own & workers)}"
+    )
+    return own & workers, debug
 
 
 def _pid_alive(pid: str) -> bool:
@@ -395,6 +457,33 @@ def _pid_alive(pid: str) -> bool:
         return True
     else:
         return True
+
+
+def _write_fake_proc(proc_root: Path, pid: str, ppid: str, argv: str) -> None:
+    """One fixture /proc entry: null-separated cmdline, minimal stat."""
+    entry = proc_root / pid
+    entry.mkdir(parents=True, exist_ok=True)
+    (entry / "cmdline").write_bytes("\0".join(argv.split(" ")).encode() + b"\0")
+    (entry / "stat").write_text(
+        f"{pid} (proc) S {ppid} 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0"
+    )
+
+
+def test_proc_tree_scan_finds_worker_in_own_tree(tmp_path: Path) -> None:
+    """The /proc scanner resolves parentage and the worker cmdline mark,
+    including comm names with spaces/parens (stat tail-parse)."""
+    proc = tmp_path / "proc"
+    _write_fake_proc(proc, "100", "0", "python -m pytest")
+    _write_fake_proc(proc, "200", "100", "python -m openfrontbench")
+    _write_fake_proc(proc, "300", "200", "node /repo/engine/dist/worker.mjs")
+    _write_fake_proc(proc, "301", "200", "node (my helper) server")
+    scanned = _read_proc_tree(proc)
+    assert scanned is not None
+    children, workers, total = scanned
+    assert total == 4
+    assert workers == {"300"}
+    assert _descendants(children, "100") == {"200", "300", "301"}
+    assert _descendants(children, "999") == set()
 
 
 def _wait_until(predicate: Any, timeout: float = 5.0) -> None:
@@ -419,8 +508,10 @@ def test_clean_lifespan_close_and_fresh_run_is_repeatable() -> None:
             # these pids (checked by pid, so reparented leaks still count).
             # Scoped this way, engine workers booted by concurrently running
             # pytest-xdist workers cannot pollute the assertion.
-            first_workers = _own_worker_pids()
-            assert first_workers, "no engine worker booted for the session"
+            first_workers, first_debug = _own_worker_pids()
+            assert first_workers, (
+                "no engine worker booted for the session\n" + first_debug
+            )
         _wait_until(lambda: not any(_pid_alive(p) for p in first_workers))
 
         # Second session calls close_game explicitly and must be identical.
@@ -429,8 +520,10 @@ def test_clean_lifespan_close_and_fresh_run_is_repeatable() -> None:
             is_err, text = await _call(session, "end_decision", {"decision": 1})
             assert is_err is False
             second_tick = json.loads(text)["tick"]
-            second_workers = _own_worker_pids()
-            assert second_workers, "no engine worker booted for the session"
+            second_workers, second_debug = _own_worker_pids()
+            assert second_workers, (
+                "no engine worker booted for the session\n" + second_debug
+            )
             is_err, close_text = await _call(session, "close_game", {})
             assert is_err is False
             assert json.loads(close_text)["status"] == "closed"
