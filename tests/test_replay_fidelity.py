@@ -97,5 +97,13 @@ def test_verify_replay_harness_promoted() -> None:
     harness = REPO_ROOT / "scripts" / "verify_replay.ts"
     assert harness.is_file(), "replay harness lost (was /tmp-only)"
     text = harness.read_text()
-    for marker in ("createGameRunner", "FAITHFUL", "DIVERGED", "nationBehavior"):
+    for marker in (
+        "createGameRunner",
+        "FAITHFUL",
+        "DIVERGED",
+        "nationBehavior",
+        # Invocation must use vendor tsx + tsconfig (bare resources/*
+        # imports fail otherwise); pin the documented command.
+        "tsconfig",
+    ):
         assert marker in text, marker

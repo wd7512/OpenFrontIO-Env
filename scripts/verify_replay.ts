@@ -6,7 +6,12 @@
  * each game replays in a fresh process — exactly like the browser, which
  * constructs a new Worker per game.
  *
- * Usage: tsx scripts/verify_replay.ts OF000018 [--archive http://127.0.0.1:8787]
+ * Usage (from repo root; vendor tsx + tsconfig resolve the bare
+ * `resources/*` imports inside vendor code — engine tsx without it fails
+ * with MODULE_NOT_FOUND for resources/tribeNameThemes.json):
+ *   ./vendor/OpenFrontIO/node_modules/.bin/tsx \
+ *     --tsconfig vendor/OpenFrontIO/tsconfig.json \
+ *     scripts/verify_replay.ts OF000018 [--archive http://127.0.0.1:8787]
  */
 import path from "path";
 import { fileURLToPath } from "url";

@@ -87,9 +87,21 @@ AGENTS = {
     "box-agent-60tick": (0.37, 0.18, 60),
 }
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
-# Seeded runs of the improved-hard nation difficulty (Hard economy, custom
-# threshold-ratio behavior wired in engine/improvedHardBehavior.ts).
-NATION_SEEDS = {"improved-hard": ("BOX-IH-A", "BOX-IH-B", "BOX-IH-C")}
+# Paired Hard vs Improved-Hard seeds: the same game_id runs under both
+# difficulties (sealed arena: 1 nation, 0 tribes, human idle, fixed spawn),
+# so the per-seed margin isolates decision logic from world RNG.
+PAIRED_SEEDS = (
+    "BOX-PAIR-A",
+    "BOX-PAIR-B",
+    "BOX-PAIR-C",
+    "BOX-PAIR-D",
+    "BOX-PAIR-E",
+    "BOX-PAIR-F",
+)
+NATION_SEEDS = {
+    "improved-hard": ("BOX-IH-A", "BOX-IH-B", "BOX-IH-C", *PAIRED_SEEDS),
+    "hard": PAIRED_SEEDS,
+}
 # Tribe races on the same map: production tribe count (400, the solo
 # default), human idle, one nation each — hard vs improved-hard.
 TRIBES = 400
@@ -132,6 +144,14 @@ EXPERIMENTS = {
             "via the archived sidecar meta (nationBehavior)."
         ),
     },
+    "box-hard-vs-improved": {
+        "kind": "box-paired",
+        "notes": (
+            "Paired Hard vs Improved-Hard nation runs: same game_id under "
+            "both difficulties, sealed arena (1 nation, 0 tribes, human "
+            "idle). Margin = hard tick minus improved-hard tick."
+        ),
+    },
 }
 EXP_OF = {
     name: "box-cadence-ladder"
@@ -151,7 +171,13 @@ for _difficulty in (*DIFFICULTIES,):
     EXP_OF[f"box-nation-{_difficulty}-solo"] = "box-nation-difficulty"
 for _difficulty, _seeds in NATION_SEEDS.items():
     for _seed in _seeds:
-        EXP_OF[f"box-nation-{_difficulty}-{_seed}"] = "box-improved-hard-solo"
+        # Paired seeds share a suite so per-seed margins read across one table.
+        _exp = (
+            "box-hard-vs-improved"
+            if _seed in PAIRED_SEEDS
+            else "box-improved-hard-solo"
+        )
+        EXP_OF[f"box-nation-{_difficulty}-{_seed}"] = _exp
 for _difficulty, _seed in NATION_TRIBES_RACES.items():
     EXP_OF[f"box-nation-{_difficulty}-{_seed}-tribes{TRIBES}"] = "box-tribes-race"
 
