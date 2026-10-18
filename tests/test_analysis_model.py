@@ -11,11 +11,14 @@ from analysis.analytical_model import (
     FIRST_DECISION_TICK,
     NATION_ECONOMY,
     conquest_tiles,
+    find_opening_optimum,
     find_optimum,
     max_troops,
     optimal_threshold_theory,
     regen,
     simulate,
+    simulate_graft,
+    simulate_opening,
     tile_budget_cost,
 )
 
@@ -130,3 +133,29 @@ def test_optimizer_improves_and_is_deterministic() -> None:
     assert first["crossing_tick"] <= 7810  # beats the old grid best (7817)
     assert 0.0 < first["threshold"] < 0.95
     assert 0.001 <= first["ratio"] <= 1.0
+
+
+def test_opening_subbenchmark_is_separate_from_the_race() -> None:
+    """The opening has its own optimum; the phase-1 race rhythm is not it.
+
+    Pins analysis/sweep_opening.py: the race rhythm holds still for ~60
+    ticks behind its 0.38*cap gate (52 tiles at tick 60), so it loses the
+    opening to a Hard-style burst; but a one-shot burst starves the regen
+    base and loses *both* (fewer opening tiles and a slower race). The
+    composed graft (aggressive until 260, then the rhythm) reaches opening
+    parity at no race cost — the phase-1a result.
+    """
+    ih = simulate_opening(0.38, 0.15, interval=52, burst_ratio=0.0, horizon=260)
+    assert (ih["tiles_at_horizon"], ih["crossing_tick"]) == (2408.0, 7824.0)
+    burst = simulate_opening(0.38, 0.15, interval=52, burst_ratio=0.85, horizon=260)
+    # burst: worse opening AND worse race than the rhythm alone
+    assert burst["tiles_at_horizon"] < ih["tiles_at_horizon"]
+    assert burst["crossing_tick"] > ih["crossing_tick"]
+    opt = find_opening_optimum(interval=52, horizon=260)
+    assert opt["burst_ratio"] == 0.19
+    assert opt["tiles_at_horizon"] == 2766.0
+    graft = simulate_graft()
+    # composed: more than doubles opening tiles, no race regression
+    assert graft["tiles_at_horizon"] == 5172.0
+    assert graft["crossing_tick"] == 7822.0
+    assert graft["crossing_tick"] <= ih["crossing_tick"]

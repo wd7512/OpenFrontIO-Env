@@ -7,11 +7,13 @@ that arrive in order: **expand → farm tribes → fight nations → economy →
 naval → late game → diplomacy**. Each phase gets solved analytically the
 way phase 1 was solved — derive from engine math, pin the config, confirm
 on paired seeds — and each phase's bar is production Hard. No RL, no grid
-sweeps. Details: `analysis/phase_plan.md`.
+sweeps. Details: `analysis/framework.md` (benchmark-first methodology) and
+`analysis/phase_plan.md` (the roadmap).
 
 | # | Phase | Status |
 |---|---|---|
-| 1 | Expansion (neutral land) | solved — Improved-Hard `52/38%/15%`, +1,685 paired, duels 6-0 |
+| 1a | Expansion — opening | solved — ungated `0.20/0.30/13`→260, Hard parity @260, race unregressed |
+| 1b | Expansion — race | solved — Improved-Hard `52/38%/15%`, +1,685 paired, duels 6-0 |
 | 2 | Tribe farming (bots) | solved — farm-p4, beats production everywhere (this doc + `box_tribe_farming.md`) |
 | 3 | Nation fighting | probe done (scripted cycle 6/6); not yet derived |
 | 4–7 | Economy / naval / WMD / diplomacy | not expressible (need build/boat/alliance order surface) |
@@ -96,16 +98,25 @@ regressing the previous one. Hard is a different shape at every stage:
 
 | Stage | IH (expansion agent) | farm-p4 | Hard |
 |---|---|---|---|
-| Opening (~260 ticks, same seed/spawn) | 2,400 tiles (gated rhythm) | same as IH (0 orders pre-contact) | **5,746 tiles** (Tick-1 burst at 80–90%) — wins the opening |
-| Sustained expansion (tribeless race) | **7,959**, beats Hard (phase-1 paired 6/6, +1,685) | identical to IH (verified) | 9,155 — loses the long game |
+| Opening (~260 ticks, same seed/spawn) | 2,400 tiles (gated rhythm) | same as IH (0 orders pre-contact) | 5,315 tiles (mean) — wins the opening |
+| Sustained expansion (tribeless race) | **7,825**, beats Hard (phase-1 paired 6/6, +1,685) | identical to IH (verified) | ~9,151 — loses the long game |
 | Farming (tribes present) | 0 wins everywhere, dies (N=400: dead at 86,401) | **beats Hard everywhere**; same kills, faster races | parity kills, slower races |
 
-Read across: Hard wins the opening, loses the race, ties the kills.
-IH wins the race, dies to contact. farm-p4 keeps IH's race, adds
-contact, and the contact costs nothing when there is nothing to fight
-(0 orders, identical tape). The open question is no longer "which
-agent" — it is which *phase* the next map demands, and phases 3+ are
-still Hard's territory (nation fighting, then economy).
+Read across: Hard wins the opening, loses the race, ties the kills. IH wins
+the race, dies to contact. farm-p4 keeps IH's race, adds contact, and the
+contact costs nothing when there is nothing to fight (0 orders, identical
+tape). The open question is no longer "which agent" — it is which *phase*
+the next map demands, and phases 3+ are still Hard's territory (nation
+fighting, then economy).
+
+The opening deficit is now **fixed and derived** (phase 1a,
+`framework.md`): IH's 0.38·cap gate cannot fire until tick ~60, so a
+composed policy — ungated `0.20/0.30` at 13-tick cadence until tick 260,
+then the race rhythm — reaches Hard parity at tick 260 (5,178 vs 5,315)
+with **no race cost** (7,823 vs 7,825). This was invisible under phase 1's
+single race metric, which is why the methodology is now benchmark-first
+(one benchmark per scale, metric = gate). Whether the opening edge is worth
+running is a contested-game question, and belongs to phase 3.
 
 ## What's next
 

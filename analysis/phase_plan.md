@@ -1,6 +1,12 @@
 # Phase plan: solve OpenFront one phase at a time
 
-Status: ladder agreed, phase 1 solved, phase 2 scoped (not started).
+Status: framework adopted (`framework.md`); phases 1 (two scales) and 2
+solved; phase 3 scoped.
+
+The methodology is now **benchmark-first**: each phase is
+⟨Benchmarks, Optima, Trigger⟩ with nested arenas and metric = gate
+(see `analysis/framework.md`). This table is the roadmap; `framework.md`
+is the source of truth for phases 1–2.
 
 ## Objective
 
@@ -16,7 +22,8 @@ production Hard nation".
 | # | Phase | Status | Gate on Box |
 |---|---|---|---|
 | 0 | Spawn choice | out of scope (config, not policy) | — |
-| 1 | Expansion (neutral land) | solved — Improved-Hard, `52/38%/15%` | beats Hard paired 6/6 (+1,685 mean) |
+| 1a | Expansion — opening | solved — ungated `0.20/0.30/13`→260 (`framework.md`) | own 5,178 @260 vs Hard 5,315; race unregressed |
+| 1b | Expansion — race | solved — Improved-Hard, `52/0.38/0.15` | beats Hard paired 6/6 (+1,685 mean) |
 | 2 | Tribe farming (bots) | solved — farm-p4 (`box_tribe_farming.md`) | beats Hard everywhere (N=20 −12.5%, N=100 −7.2%, N=400 −4.2%) |
 | 3 | Nation fighting | probe done (scripted raid/cycle 6/6) | win paired duels vs Hard |
 | 4 | Economy (city/port/factory) | not expressible (needs build orders) | troop-cap curve, first-city tick |
@@ -36,7 +43,7 @@ Prior writeups: `box_single_entity_baseline.md` (phase 1 proof),
 `probe_fight.py` + `results/probe_fight.json` (phase 3 probe),
 `rl_idea.md` (parked RL thread — superseded by this ladder).
 
-## Phase 2: tribe farming (next)
+## Phase 2: tribe farming (solved — see `box_tribe_farming.md`)
 
 **Arena.** Pure race, no rival nations, human idle on the Box: 1 external
 nation vs N tribes. Scale up in stages — analytical model first, then

@@ -201,6 +201,155 @@ def simulate(
 
 
 # ---------------------------------------------------------------------------
+# Opening sub-benchmark: does a Hard-style Tick-1 burst help the race?
+# ---------------------------------------------------------------------------
+def simulate_opening(
+    threshold: float,
+    ratio: float,
+    interval: int = 52,
+    burst_ratio: float = 0.0,
+    horizon: int = 260,
+    max_ticks: int = 200000,
+    max_mult: float = 1.0,
+    regen_mult: float = 1.0,
+    start_troops: float = SPAWN_TROOPS,
+) -> dict[str, float]:
+    """Same dynamics as ``simulate`` plus a one-shot opening burst.
+
+    On the first decision tick a burst policy sends ``burst_ratio * troops``
+    (Hard's Tick-1 80-90% throw) *instead of* the rhythm send, then resumes
+    the gated rhythm on its normal schedule. Reports both the 80% crossing
+    tick and tiles owned at ``horizon`` so the opening metric and the race
+    metric can be read side by side. A burst parks troops in the front,
+    where they earn no regen (governing eq. 6), so this settles whether the
+    early land is free or borrowed from the race.
+    """
+    tiles = float(SPAWN_TILES)
+    troops = float(start_troops)
+    attack = 0.0
+    pending = 0.0
+    target = WIN_SHARE * TOTAL_LAND
+    tiles_at_horizon = float("nan")
+    for tick in range(FIRST_DECISION_TICK, max_ticks + 1):
+        attack += pending
+        pending = 0.0
+        cap = max_troops(tiles, max_mult)
+        if tick == FIRST_DECISION_TICK and burst_ratio > 0:
+            send = min(troops, burst_ratio * troops)
+            troops -= send
+            pending = send
+        elif (tick - FIRST_DECISION_TICK) % interval == 0 and troops >= (
+            threshold * cap
+        ):
+            send = min(troops, ratio * troops)
+            troops -= send
+            pending = send
+        gained, attack = conquest_tiles(attack, budget(tiles))
+        if attack < 1:
+            attack = 0.0
+        tiles += gained
+        troops += regen(troops, tiles, max_mult, regen_mult)
+        if tick == horizon:
+            tiles_at_horizon = tiles
+        if tiles > target:
+            return {
+                "crossing_tick": float(tick),
+                "tiles_at_horizon": tiles_at_horizon,
+                "tiles": tiles,
+                "troops": troops,
+            }
+    return {
+        "crossing_tick": float("inf"),
+        "tiles_at_horizon": tiles_at_horizon,
+        "tiles": tiles,
+        "troops": troops,
+    }
+
+
+def find_opening_optimum(interval: int = 52, horizon: int = 260) -> dict[str, float]:
+    """argmax over burst_ratio of tiles at ``horizon`` (the opening metric).
+
+    Sweeps burst_ratio on a grid (the objective is monotone-ish and cheap);
+    the race crossing tick is reported alongside to show the trade.
+    """
+    best = (0.0, 0.0, 0.0)  # burst, tiles, crossing
+    for i in range(0, 101):
+        burst = i / 100.0
+        out = simulate_opening(
+            0.38, 0.15, interval=interval, burst_ratio=burst, horizon=horizon
+        )
+        if out["tiles_at_horizon"] > best[1]:
+            best = (burst, out["tiles_at_horizon"], out["crossing_tick"])
+    return {
+        "burst_ratio": best[0],
+        "tiles_at_horizon": best[1],
+        "crossing_tick": best[2],
+    }
+
+
+def simulate_graft(
+    opening: tuple[float, float, int] = (0.20, 0.30, 13),
+    race: tuple[float, float, int] = (0.38, 0.15, 52),
+    until: int = 260,
+    horizon: int = 260,
+    max_ticks: int = 200000,
+    max_mult: float = 1.0,
+    regen_mult: float = 1.0,
+    start_troops: float = SPAWN_TROOPS,
+) -> dict[str, float]:
+    """Composed phase-1 policy: an aggressive opening, then the phase-1 race
+    rhythm. ``opening`` = (threshold, ratio, interval) used through tick
+    ``until``; ``race`` = the same for later ticks. Reports tiles at
+    ``horizon`` (opening metric) and the 80% crossing tick (race metric).
+
+    This is the phase-1a optimum composed onto phase 1b: the ungated
+    short-cadence opening reaches production-Hard parity where the race
+    rhythm cedes 60 ticks to its gate, and the reversion keeps the race
+    crossing at the phase-1 optimum (model: 5,172 tiles @260 / 7,822).
+    """
+    o_th, o_ratio, o_int = opening
+    r_th, r_ratio, r_int = race
+    tiles = float(SPAWN_TILES)
+    troops = float(start_troops)
+    attack = 0.0
+    pending = 0.0
+    target = WIN_SHARE * TOTAL_LAND
+    tiles_at_horizon = float("nan")
+    for tick in range(FIRST_DECISION_TICK, max_ticks + 1):
+        attack += pending
+        pending = 0.0
+        cap = max_troops(tiles, max_mult)
+        if tick <= until:
+            th, ratio, interval = o_th, o_ratio, o_int
+        else:
+            th, ratio, interval = r_th, r_ratio, r_int
+        if (tick - FIRST_DECISION_TICK) % interval == 0 and troops >= (th * cap):
+            send = min(troops, ratio * troops)
+            troops -= send
+            pending = send
+        gained, attack = conquest_tiles(attack, budget(tiles))
+        if attack < 1:
+            attack = 0.0
+        tiles += gained
+        troops += regen(troops, tiles, max_mult, regen_mult)
+        if tick == horizon:
+            tiles_at_horizon = tiles
+        if tiles > target:
+            return {
+                "crossing_tick": float(tick),
+                "tiles_at_horizon": tiles_at_horizon,
+                "tiles": tiles,
+                "troops": troops,
+            }
+    return {
+        "crossing_tick": float("inf"),
+        "tiles_at_horizon": tiles_at_horizon,
+        "tiles": tiles,
+        "troops": troops,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Analytic optimum for the threshold: argmax of the regen rate
 # ---------------------------------------------------------------------------
 def optimal_threshold_theory(cap: float) -> float:

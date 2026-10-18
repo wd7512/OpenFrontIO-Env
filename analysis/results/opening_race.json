@@ -1,0 +1,251 @@
+{
+ "created": "2026-10-18T20:14:42.542733+00:00",
+ "checkpoints": [
+  60,
+  130,
+  260,
+  520
+ ],
+ "episodes": [
+  {
+   "seed": "BOX-OPEN-A",
+   "policy": "ih",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7825,
+   "tiles_at": {
+    "60": 52,
+    "130": 493,
+    "260": 2400,
+    "520": 10972
+   },
+   "final_tiles": 3355952
+  },
+  {
+   "seed": "BOX-OPEN-A",
+   "policy": "graft",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7823,
+   "tiles_at": {
+    "60": 521,
+    "130": 1917,
+    "260": 5178,
+    "520": 11219
+   },
+   "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-A",
+   "policy": "hard",
+   "winner": "Front Manager",
+   "tiles_at": {
+    "60": 834,
+    "130": 1181,
+    "260": 5444,
+    "520": 17644
+   },
+   "final_tiles": 3368639
+  },
+  {
+   "seed": "BOX-OPEN-B",
+   "policy": "ih",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7825,
+   "tiles_at": {
+    "60": 52,
+    "130": 493,
+    "260": 2400,
+    "520": 10972
+   },
+   "final_tiles": 3355952
+  },
+  {
+   "seed": "BOX-OPEN-B",
+   "policy": "graft",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7823,
+   "tiles_at": {
+    "60": 521,
+    "130": 1917,
+    "260": 5178,
+    "520": 11219
+   },
+   "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-B",
+   "policy": "hard",
+   "winner": "Middle Defender",
+   "tiles_at": {
+    "60": 834,
+    "130": 1707,
+    "260": 4815,
+    "520": 15772
+   },
+   "final_tiles": 3363092
+  },
+  {
+   "seed": "BOX-OPEN-C",
+   "policy": "ih",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7825,
+   "tiles_at": {
+    "60": 52,
+    "130": 493,
+    "260": 2400,
+    "520": 10972
+   },
+   "final_tiles": 3355952
+  },
+  {
+   "seed": "BOX-OPEN-C",
+   "policy": "graft",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7823,
+   "tiles_at": {
+    "60": 521,
+    "130": 1917,
+    "260": 5178,
+    "520": 11219
+   },
+   "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-C",
+   "policy": "hard",
+   "winner": "Nuke Thrower",
+   "tiles_at": {
+    "60": 834,
+    "130": 1566,
+    "260": 4932,
+    "520": 16707
+   },
+   "final_tiles": 3357052
+  },
+  {
+   "seed": "BOX-OPEN-D",
+   "policy": "ih",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7825,
+   "tiles_at": {
+    "60": 52,
+    "130": 493,
+    "260": 2400,
+    "520": 10972
+   },
+   "final_tiles": 3355952
+  },
+  {
+   "seed": "BOX-OPEN-D",
+   "policy": "graft",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7823,
+   "tiles_at": {
+    "60": 521,
+    "130": 1917,
+    "260": 5178,
+    "520": 11219
+   },
+   "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-D",
+   "policy": "hard",
+   "winner": "Middle Defender",
+   "tiles_at": {
+    "60": 834,
+    "130": 1714,
+    "260": 5802,
+    "520": 15401
+   },
+   "final_tiles": 3368515
+  },
+  {
+   "seed": "BOX-OPEN-E",
+   "policy": "ih",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7825,
+   "tiles_at": {
+    "60": 52,
+    "130": 493,
+    "260": 2400,
+    "520": 10972
+   },
+   "final_tiles": 3355952
+  },
+  {
+   "seed": "BOX-OPEN-E",
+   "policy": "graft",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7823,
+   "tiles_at": {
+    "60": 521,
+    "130": 1917,
+    "260": 5178,
+    "520": 11219
+   },
+   "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-E",
+   "policy": "hard",
+   "winner": "Box Fighter",
+   "tiles_at": {
+    "60": 910,
+    "130": 2210,
+    "260": 5693,
+    "520": 16900
+   },
+   "final_tiles": 3358708
+  },
+  {
+   "seed": "BOX-OPEN-F",
+   "policy": "ih",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7825,
+   "tiles_at": {
+    "60": 52,
+    "130": 493,
+    "260": 2400,
+    "520": 10972
+   },
+   "final_tiles": 3355952
+  },
+  {
+   "seed": "BOX-OPEN-F",
+   "policy": "graft",
+   "winner": "Agent",
+   "agent_won": false,
+   "crossing_tick": 7823,
+   "tiles_at": {
+    "60": 521,
+    "130": 1917,
+    "260": 5178,
+    "520": 11219
+   },
+   "final_tiles": 3360634
+  },
+  {
+   "seed": "BOX-OPEN-F",
+   "policy": "hard",
+   "winner": "Box Fighter",
+   "tiles_at": {
+    "60": 834,
+    "130": 1954,
+    "260": 5204,
+    "520": 16600
+   },
+   "final_tiles": 3360254
+  }
+ ]
+}
