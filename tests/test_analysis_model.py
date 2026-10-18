@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from analysis.analytical_model import (
     FIRST_DECISION_TICK,
+    NATION_ECONOMY,
     conquest_tiles,
     find_optimum,
     max_troops,
@@ -67,10 +68,48 @@ def test_simulate_pinned_crossings() -> None:
         ((0.0, 0.12, 50), 7858),
         ((0.37, 0.15, 50), 7858),
         ((0.40, 0.10, 1), 7817),
+        # nation-cadence optima (Hard attackRate = U{45..60})
+        ((0.38, 0.15, 45), 7846),
+        ((0.38, 0.15, 52), 7824),
+        ((0.37, 0.18, 60), 7880),
     ]
     for (threshold, ratio, interval), expected in cases:
         got = simulate(threshold, ratio, interval=interval)["crossing_tick"]
         assert got == expected, (threshold, ratio, interval, got)
+
+
+def test_nation_economy_matches_hard_and_decomposes() -> None:
+    # hard == human economy: scaling params default to identity
+    assert NATION_ECONOMY["hard"] == (25000.0, 1.0, 1.0)
+    base = simulate(0.36, 0.005, interval=1)["crossing_tick"]
+    hard = simulate(0.36, 0.005, interval=1, max_mult=1.0, start_troops=25000.0)
+    assert hard["crossing_tick"] == base
+    # optimal-play crossings per economy, pinned at the full-precision
+    # 8-start optima logged in verify_results.json (milliseconds each).
+    # The residual vs the observed nation declared ticks
+    # (easy 15551, medium 11461, hard 9151, impossible 7691) is the behavior gap.
+    optima = {
+        "easy": (0.3923187255859375, 0.009194641113281235, 13214),
+        "medium": (0.38263789415359495, 0.049872417449951176, 9729),
+        "hard": (0.36435546875, 0.013359374999999991, 7802),
+        "impossible": (0.34831542968749996, 0.005058593749999984, 6556),
+    }
+    for name, (start, mm, rm) in NATION_ECONOMY.items():
+        th, ra, expected = optima[name]
+        got = simulate(
+            th, ra, interval=1, max_mult=mm, regen_mult=rm, start_troops=start
+        )["crossing_tick"]
+        assert got == expected, (name, got)
+    # optimizer plumbing under a non-human economy: 2 starts land within
+    # the same +-6 tick band the game verification tolerates.
+    opt = find_optimum(
+        1,
+        starts=((0.4, 0.10), (0.42, 0.05)),
+        max_mult=1.25,
+        regen_mult=1.05,
+        start_troops=31250.0,
+    )
+    assert opt["crossing_tick"] <= 6556 + 6
 
 
 def test_simulate_far_field_and_death_spiral() -> None:

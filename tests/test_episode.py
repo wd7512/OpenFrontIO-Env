@@ -342,19 +342,59 @@ def test_end_decision_rejects_non_integer_payloads_over_real_transport() -> None
     asyncio.run(scenario())
 
 
-def _worker_pids() -> set[str]:
-    if shutil.which("pgrep") is None:
+def _own_worker_pids() -> set[str]:
+    """Engine worker pids in this process's descendant tree.
+
+    ``pgrep`` is machine-global, so under ``pytest -n auto`` other test
+    workers' engine processes pollute any global assertion. Parentage
+    distinguishes ours: the MCP server is our child, the engine worker its
+    child (nothing here daemonizes).
+    """
+    if shutil.which("ps") is None:
         return set()
     try:
         out = subprocess.run(
-            ["pgrep", "-f", "dist/worker.mjs"],
+            ["ps", "-eo", "pid,ppid,command"],
             capture_output=True,
             text=True,
             timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
         return set()
-    return {line.strip() for line in out.stdout.splitlines() if line.strip().isdigit()}
+    children: dict[str, set[str]] = {}
+    workers: set[str] = set()
+    for line in out.stdout.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        pid, ppid, cmd = parts
+        children.setdefault(ppid, set()).add(pid)
+        if "dist/worker.mjs" in cmd:
+            workers.add(pid)
+    own: set[str] = set()
+    stack = [str(os.getpid())]
+    while stack:
+        for child in children.get(stack.pop(), ()):
+            if child not in own:
+                own.add(child)
+                stack.append(child)
+    return own & workers
+
+
+def _pid_alive(pid: str) -> bool:
+    """True if the pid still exists (zombie or running).
+
+    Checked by pid, not by tree membership, so a leaked worker that got
+    reparented to init after our server exited still counts as alive.
+    """
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except (PermissionError, ValueError):
+        return True
+    else:
+        return True
 
 
 def _wait_until(predicate: Any, timeout: float = 5.0) -> None:
@@ -367,8 +407,6 @@ def _wait_until(predicate: Any, timeout: float = 5.0) -> None:
 
 
 def test_clean_lifespan_close_and_fresh_run_is_repeatable() -> None:
-    baseline = _worker_pids()
-
     async def lifespans() -> tuple[int, int]:
         # First session never calls close_game: the lifespan teardown must reap
         # the engine worker on its own.
@@ -377,7 +415,13 @@ def test_clean_lifespan_close_and_fresh_run_is_repeatable() -> None:
             is_err, text = await _call(session, "end_decision", {"decision": 1})
             assert is_err is False
             first_tick = json.loads(text)["tick"]
-        _wait_until(lambda: not (_worker_pids() - baseline))
+            # Workers in our own process tree: teardown must reap exactly
+            # these pids (checked by pid, so reparented leaks still count).
+            # Scoped this way, engine workers booted by concurrently running
+            # pytest-xdist workers cannot pollute the assertion.
+            first_workers = _own_worker_pids()
+            assert first_workers, "no engine worker booted for the session"
+        _wait_until(lambda: not any(_pid_alive(p) for p in first_workers))
 
         # Second session calls close_game explicitly and must be identical.
         async with _client() as session:
@@ -385,10 +429,12 @@ def test_clean_lifespan_close_and_fresh_run_is_repeatable() -> None:
             is_err, text = await _call(session, "end_decision", {"decision": 1})
             assert is_err is False
             second_tick = json.loads(text)["tick"]
+            second_workers = _own_worker_pids()
+            assert second_workers, "no engine worker booted for the session"
             is_err, close_text = await _call(session, "close_game", {})
             assert is_err is False
             assert json.loads(close_text)["status"] == "closed"
-        _wait_until(lambda: not (_worker_pids() - baseline))
+        _wait_until(lambda: not any(_pid_alive(p) for p in second_workers))
         return first_tick, second_tick
 
     tick1, tick2 = asyncio.run(lifespans())

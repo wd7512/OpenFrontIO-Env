@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T00:13:28.573171+00:00",
-  "git_sha": "9a0dc816cce70d60b1441405175266efcf80f18e",
+  "created": "2026-10-18T00:53:44.345188+00:00",
+  "git_sha": "2712217e89da355e836ca9469a0dc4d01a6e27ef",
   "map": "The Box",
   "win_rule": "tile share > 80% (FFA)",
   "runs": [
@@ -87,6 +87,36 @@
       "difficulty": "impossible",
       "declared_tick": 7691,
       "winner": "Non-peaceful Bot"
+    },
+    {
+      "name": "box-agent-45tick",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 45,
+      "crossing_tick": 7847,
+      "declared_tick": 7851,
+      "tiles": 3369476,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-52tick",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 52,
+      "crossing_tick": 7825,
+      "declared_tick": 7831,
+      "tiles": 3355952,
+      "winner": "Agent"
+    },
+    {
+      "name": "box-agent-60tick",
+      "threshold": 0.37,
+      "ratio": 0.18,
+      "interval": 60,
+      "crossing_tick": 7881,
+      "declared_tick": 7891,
+      "tiles": 3383955,
+      "winner": "Agent"
     }
   ]
 }

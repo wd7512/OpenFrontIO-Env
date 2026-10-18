@@ -1,6 +1,6 @@
 {
-  "created": "2026-10-18T00:16:38.859380+00:00",
-  "git_sha": "9a0dc816cce70d60b1441405175266efcf80f18e",
+  "created": "2026-10-18T00:53:30.889156+00:00",
+  "git_sha": "2712217e89da355e836ca9469a0dc4d01a6e27ef",
   "tolerance": 6,
   "worst_gap": 5.0,
   "grid_3x3": [
@@ -129,6 +129,46 @@
       "gap": 2.0
     },
     {
+      "label": "spike-10tick-rounded",
+      "threshold": 0.3699,
+      "ratio": 0.0682,
+      "interval": 10,
+      "model_crossing": 7808.0,
+      "game_crossing": 7809,
+      "game_declared": 7811,
+      "gap": 1.0
+    },
+    {
+      "label": "nation-cadence-45",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 45,
+      "model_crossing": 7846.0,
+      "game_crossing": 7847,
+      "game_declared": 7851,
+      "gap": 1.0
+    },
+    {
+      "label": "nation-cadence-52",
+      "threshold": 0.38,
+      "ratio": 0.15,
+      "interval": 52,
+      "model_crossing": 7824.0,
+      "game_crossing": 7825,
+      "game_declared": 7831,
+      "gap": 1.0
+    },
+    {
+      "label": "nation-cadence-60",
+      "threshold": 0.37,
+      "ratio": 0.18,
+      "interval": 60,
+      "model_crossing": 7880.0,
+      "game_crossing": 7881,
+      "game_declared": 7891,
+      "gap": 1.0
+    },
+    {
       "label": "far-low-threshold",
       "threshold": 0.2,
       "ratio": 0.01,
@@ -155,16 +195,36 @@
       "ratio": 0.1,
       "interval": 1,
       "model_crossing": Infinity
+    }
+  ],
+  "economy_decomposition": [
+    {
+      "economy": "easy",
+      "opt_threshold": 0.3923187255859375,
+      "opt_ratio": 0.009194641113281235,
+      "opt_crossing": 13214.0,
+      "human_policy_crossing": 13257.0
     },
     {
-      "label": "spike-10tick-rounded",
-      "threshold": 0.3699,
-      "ratio": 0.0682,
-      "interval": 10,
-      "model_crossing": 7808.0,
-      "game_crossing": 7809,
-      "game_declared": 7811,
-      "gap": 1.0
+      "economy": "medium",
+      "opt_threshold": 0.38263789415359495,
+      "opt_ratio": 0.049872417449951176,
+      "opt_crossing": 9729.0,
+      "human_policy_crossing": 9739.0
+    },
+    {
+      "economy": "hard",
+      "opt_threshold": 0.36435546875,
+      "opt_ratio": 0.013359374999999991,
+      "opt_crossing": 7802.0,
+      "human_policy_crossing": 7802.0
+    },
+    {
+      "economy": "impossible",
+      "opt_threshold": 0.34831542968749996,
+      "opt_ratio": 0.005058593749999984,
+      "opt_crossing": 6556.0,
+      "human_policy_crossing": 6559.0
     }
   ]
 }

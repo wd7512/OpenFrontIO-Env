@@ -39,6 +39,8 @@ from analytical_model import FIRST_DECISION_TICK, TOTAL_LAND, WIN_SHARE, max_tro
 
 from openfrontbench.engine import EngineWorker
 
+from tqdm import tqdm
+
 logger = logging.getLogger(__name__)
 
 MAP_DIR = (
@@ -49,7 +51,8 @@ MAX_TICKS = 300000
 
 # (threshold, ratio, interval) per agent variant. 1/10/20/30/40-tick use
 # gated optima; 50-tick uses the robust ungated optimum (gating is
-# phase-fragile at 5s cadence).
+# phase-fragile at 5s cadence). 45/52/60-tick bracket the Hard nation
+# decision cadence (attackRate = U{45..60}, mean ~52) with rounded optima.
 AGENTS = {
     "box-agent-solo": (0.36, 0.005, 1),
     "box-agent-10tick": (0.375, 0.05, 10),
@@ -57,6 +60,9 @@ AGENTS = {
     "box-agent-30tick": (0.38, 0.095, 30),
     "box-agent-40tick": (0.37, 0.115, 40),
     "box-agent-50tick": (0.0, 0.12, 50),
+    "box-agent-45tick": (0.38, 0.15, 45),
+    "box-agent-52tick": (0.38, 0.15, 52),
+    "box-agent-60tick": (0.37, 0.18, 60),
 }
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 
@@ -88,7 +94,12 @@ def clean_record(outdir: Path) -> None:
 
 
 def run_agent(
-    raw: Path, name: str, threshold: float, ratio: float, interval: int
+    raw: Path,
+    name: str,
+    threshold: float,
+    ratio: float,
+    interval: int,
+    progress: bool = False,
 ) -> dict[str, object]:
     outdir = raw / name
     outdir.mkdir(parents=True, exist_ok=True)
@@ -99,22 +110,27 @@ def run_agent(
         tiles = state["human"]["tiles"]
         winner = None
         crossed = None
-        while winner is None and tick < MAX_TICKS:
-            troops = state["human"]["troops"]
-            cap = max_troops(max(tiles, 1))
-            if (
-                tick - FIRST_DECISION_TICK
-            ) % interval == 0 and troops >= threshold * cap:
-                try:
-                    engine.attack(target="expand", troops=troops * ratio)
-                except Exception:
-                    pass
-            state = engine.advance(1)
-            tick = state["tick"]
-            tiles = state["human"]["tiles"]
-            if crossed is None and tiles > WIN_SHARE * TOTAL_LAND:
-                crossed = tick
-            winner = state.get("winner")
+        with tqdm(
+            desc=name, unit="tick", disable=not progress, leave=False, miniters=50
+        ) as bar:
+            while winner is None and tick < MAX_TICKS:
+                troops = state["human"]["troops"]
+                cap = max_troops(max(tiles, 1))
+                if (
+                    tick - FIRST_DECISION_TICK
+                ) % interval == 0 and troops >= threshold * cap:
+                    try:
+                        engine.attack(target="expand", troops=troops * ratio)
+                    except Exception:
+                        pass
+                state = engine.advance(1)
+                tick = state["tick"]
+                tiles = state["human"]["tiles"]
+                bar.update(tick - bar.n)
+                bar.set_postfix_str(f"tick={tick} tiles={tiles}")
+                if crossed is None and tiles > WIN_SHARE * TOTAL_LAND:
+                    crossed = tick
+                winner = state.get("winner")
         record = engine.save_record()
     clean_record(outdir)
     result = {
@@ -131,8 +147,11 @@ def run_agent(
     return result
 
 
-def run_nation(raw: Path, difficulty: str) -> dict[str, object]:
-    outdir = raw / f"box-nation-{difficulty}-solo"
+def run_nation(
+    raw: Path, difficulty: str, game_id: str | None = None, progress: bool = False
+) -> dict[str, object]:
+    tag = f"box-nation-{difficulty}-solo" + (f"-{game_id}" if game_id else "")
+    outdir = raw / tag
     outdir.mkdir(parents=True, exist_ok=True)
     os.environ["OPENFRONT_RECORD_DIR"] = str(outdir)
     with EngineWorker(map_dir=MAP_DIR) as engine:
@@ -142,19 +161,26 @@ def run_nation(raw: Path, difficulty: str) -> dict[str, object]:
             tribes=0,
             spawn=SPAWN,
             map_size="full",
+            game_id=game_id,
         )
         tick = state["tick"]
         winner = None
-        while winner is None and tick < MAX_TICKS:
-            # human idle: no orders, the nation plays alone
-            state = engine.advance(1)
-            tick = state["tick"]
-            winner = state.get("winner")
+        with tqdm(
+            desc=tag, unit="tick", disable=not progress, leave=False, miniters=50
+        ) as bar:
+            while winner is None and tick < MAX_TICKS:
+                # human idle: no orders, the nation plays alone
+                state = engine.advance(1)
+                tick = state["tick"]
+                bar.update(tick - bar.n)
+                bar.set_postfix_str(f"tick={tick}")
+                winner = state.get("winner")
         record = engine.save_record()
     clean_record(outdir)
     result = {
-        "name": f"box-nation-{difficulty}-solo",
+        "name": tag,
         "difficulty": difficulty,
+        "game_id": game_id,
         "declared_tick": record["ticks"],
         "winner": winner,
     }
@@ -176,18 +202,37 @@ def main() -> None:
         default=None,
         help="comma-separated run names to execute (default: all)",
     )
+    parser.add_argument(
+        "--progress",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="show tqdm progress bars (per-run tick bars on stderr)",
+    )
     args = parser.parse_args()
     args.raw.mkdir(parents=True, exist_ok=True)
     only = set(args.only.split(",")) if args.only else None
 
     results: list[dict[str, object]] = []
-    for name, (threshold, ratio, interval) in AGENTS.items():
-        if only is None or name in only:
-            results.append(run_agent(args.raw, name, threshold, ratio, interval))
-    for difficulty in DIFFICULTIES:
-        run_name = f"box-nation-{difficulty}-solo"
-        if only is None or run_name in only:
-            results.append(run_nation(args.raw, difficulty))
+    agent_runs = [
+        (name, params)
+        for name, params in AGENTS.items()
+        if only is None or name in only
+    ]
+    nation_runs = [
+        d for d in DIFFICULTIES if only is None or f"box-nation-{d}-solo" in only
+    ]
+    for name, (threshold, ratio, interval) in tqdm(
+        agent_runs, desc="agents", unit="run", disable=not args.progress
+    ):
+        results.append(
+            run_agent(
+                args.raw, name, threshold, ratio, interval, progress=args.progress
+            )
+        )
+    for difficulty in tqdm(
+        nation_runs, desc="nations", unit="run", disable=not args.progress
+    ):
+        results.append(run_nation(args.raw, difficulty, progress=args.progress))
 
     payload = {
         "created": datetime.now(timezone.utc).isoformat(),

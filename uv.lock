@@ -1340,6 +1340,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "tqdm" },
     { name = "ty" },
 ]
 
@@ -1355,6 +1356,7 @@ dev = [
     { name = "pytest", specifier = ">=8.4.0,<10" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.14.10,<0.15" },
+    { name = "tqdm", specifier = ">=4.60" },
     { name = "ty", specifier = ">=0.0.42,<0.1" },
 ]
 

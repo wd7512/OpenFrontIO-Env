@@ -8,10 +8,10 @@ FFA rule: tile share > 80% of land
 - Engine: pinned `vendor/OpenFrontIO` (`577819ba`), `engine/dist/worker.mjs`.
 - Spawn: human at (1024, 1024) (52 tiles, 25,000 troops); seeded RNG,
   deterministic — reruns reproduce tick-exactly (the full sweep was rerun
-  and reproduced all 10 results to the tick).
+  and reproduced all results to the tick).
 - Scope of the minimality claim: **within the threshold-ratio policy class**
   (send `ratio * troops` when `troops >= threshold * max`) at decision
-  cadences 1–50 ticks. The 4 nation runs are reference points, not policies.
+  cadences 1–60 ticks. The 4 nation runs are reference points, not policies.
 
 ## Reproduce
 
@@ -24,25 +24,29 @@ uv run python scripts/serve_replays.py --raw /tmp/replay_raw  # index at :8787
 `sweep_single_entity.py` writes `analysis/results/sweep_results.json`
 (crossing/declared ticks, winners, git SHA); `verify_optimum.py` writes
 `analysis/results/verify_results.json` (3x3 grid, exploratory points,
-model-vs-game gaps, optimizer output per cadence) and exits non-zero if any
-gap exceeds 6 ticks. Every number in the tables below comes from those two
-files. Records are cleaned in place (turn hashes stripped, map stamped),
-so the raw directory is directly servable.
+nation-cadence points, per-economy optima, model-vs-game gaps, optimizer
+output per cadence) and exits non-zero if any gap exceeds 6 ticks. Every
+number in the tables below comes from those two files. Records are cleaned
+in place (turn hashes stripped, map stamped), so the raw directory is
+directly servable.
 
-## The 10 strategies
+## The 13 strategies
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
-| 1 | Agent, 1-tick decisions, 0.5% whenever >= 36% of max | OF000006 | 7,803 | **7,811** | Agent |
+| 1 | Agent, 1-tick decisions, 0.5% whenever >= 36% of max | OF000009 | 7,803 | **7,811** | Agent |
 | 2 | Agent, 10-tick (1s) decisions, 5% whenever >= 37.5% of max | OF000001 | 7,809 | 7,811 | Agent |
 | 3 | Agent, 20-tick (2s) decisions, 6.5% whenever >= 37.5% of max | OF000002 | 7,809 | 7,811 | Agent |
 | 4 | Agent, 30-tick (3s) decisions, 9.5% whenever >= 38% of max | OF000003 | 7,817 | 7,821 | Agent |
 | 5 | Agent, 40-tick (4s) decisions, 11.5% whenever >= 37% of max | OF000004 | 7,819 | 7,821 | Agent |
-| 6 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000005 | 7,859 | 7,861 | Agent |
-| 7 | 1 nation, Easy (human idle) | OF000007 | — | 15,551 | Non-peaceful Bot |
-| 8 | 1 nation, Medium (human idle) | OF000010 | — | 11,461 | Non-peaceful Bot |
-| 9 | 1 nation, Hard (human idle) | OF000008 | — | 9,151 | Non-peaceful Bot |
-| 10 | 1 nation, Impossible (human idle) | OF000009 | — | 7,691 | Non-peaceful Bot |
+| 6 | Agent, 45-tick decisions, 15% whenever >= 38% of max | OF000005 | 7,847 | 7,851 | Agent |
+| 7 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000006 | 7,859 | 7,861 | Agent |
+| 8 | Agent, 52-tick decisions, 15% whenever >= 38% of max | OF000007 | 7,825 | 7,831 | Agent |
+| 9 | Agent, 60-tick decisions, 18% whenever >= 37% of max | OF000008 | 7,881 | 7,891 | Agent |
+| 10 | 1 nation, Easy (human idle) | OF000010 | — | 15,551 | Non-peaceful Bot |
+| 11 | 1 nation, Medium (human idle) | OF000013 | — | 11,461 | Non-peaceful Bot |
+| 12 | 1 nation, Hard (human idle) | OF000011 | — | 9,151 | Non-peaceful Bot |
+| 13 | 1 nation, Impossible (human idle) | OF000012 | — | 7,691 | Non-peaceful Bot |
 
 Result: the minimum, within the policy class, is **7,811 ticks (7,803 to
 cross 80%)** with (threshold=0.36, ratio=0.005) at 1-tick cadence — no other
@@ -50,8 +54,9 @@ cadence crosses earlier, and the 1s/2s cadences only tie it at declaration
 through win-check quantization (see ladder). Hard is the nation most
 comparable to the agent (identical economy: 25,000 start, 1.0x max, 1.0x
 regen — `Config.ts:856-943`); it takes 9,151 ticks because the built-in
-nation AI builds structures and paces its attacks instead of expanding
-every tick. (Impossible wins faster than any agent policy at 7,691 ticks
+nation AI gates its attacks behind high reserve/trigger ratios and decides
+only every ~52 ticks instead of expanding every tick (see Nation
+comparison). (Impossible wins faster than any agent policy at 7,691 ticks
 via its 1.25x/1.05x economy bonuses — the 7,811 minimum is over policies
 with the human economy, not over all single entities.)
 
@@ -64,7 +69,10 @@ with the human economy, not over all single entities.)
 | 20 ticks (2s) | (0.375, 0.065), gated | 7,808 | 7,809 | 7,811 |
 | 30 ticks (3s) | (0.38, 0.095), gated | 7,815 | 7,817 | 7,821 |
 | 40 ticks (4s) | (0.37, 0.115), gated | 7,818 | 7,819 | 7,821 |
+| 45 ticks (4.5s) | (0.38, 0.15), gated | 7,846 | 7,847 | 7,851 |
 | 50 ticks (5s) | (0.0, 0.12), ungated | 7,858 | 7,859 | 7,861 |
+| 52 ticks (~5.2s) | (0.38, 0.15), gated | 7,824 | 7,825 | 7,831 |
+| 60 ticks (6s) | (0.37, 0.18), gated | 7,880 | 7,881 | 7,891 |
 
 Model and game share one send schedule: the engine starts at tick 2 and
 `run_agent` sends when `(tick - 2) % interval == 0`; `simulate` uses the
@@ -84,6 +92,58 @@ continuous optima are knife-edge phase artifacts at coarse cadences (see
 (0, 0.05) was also measured at 2s: 7,829/7,831, confirming the gated
 optimum (7,809/7,811) is genuinely better there.
 
+## Nation comparison: cadence-aligned and economy-decomposed
+
+The Hard nation bot makes expansion/attack decisions every
+`attackRate = U{45..60}` ticks (mean ~52, random phase per game;
+`NationExecution.ts:74-88`, decision block `:199-209`). The 45/52/60-tick
+ladder rows bracket that cadence with optimal threshold-ratio play:
+
+| Our cadence | Model | Game declared | vs Hard bot (9,151) |
+|---|---|---|---|
+| 45 ticks | 7,846 | 7,851 (OF000005) | −1,300 |
+| 52 ticks | 7,824 | 7,831 (OF000007) | −1,320 |
+| 60 ticks | 7,880 | 7,891 (OF000008) | −1,260 |
+
+Model-vs-game gap is 1 tick at all three points. **Cadence is not the gap**:
+at the bot's own decision cadence, optimal threshold-ratio play still wins
+by ~1,300 ticks. The gap is policy shape. Per-game randomized Hard
+parameters (`NationExecution.ts:57-59`) and gates
+(`AiAttackBehavior.ts:239-248, 951-1009`):
+
+- attack only above reserve 0.30–0.39 of max (hard gate), full commitment
+  only above trigger 0.50–0.59 (else 10% bypass chance);
+- sends ~60–70% of current troops when full (vs our 0.5–18% tranches
+  through a 0.36–0.38 gate);
+- Hard-only `troopSendCap` withholds 75% of the strongest neighbor's
+  troops (`:903-949`); `isAttackTooWeak` 20% filter (`:878-889`); boats
+  send only `troops/5`; max 3 parallel attacks.
+
+The bot sends large, rare tranches through high gates with caps; we send
+small, frequent tranches through a low gate with no caps.
+
+Single-draw nation times are noisy: Hard redraws attackRate/ratios per
+`game_id`, measuring 9,151 (ENGINE01), 10,301 / 8,901 / 11,241 across three
+seeds (mean 9,886, range ±~1,100). The gap to our 52-tick 7,831 holds on
+every draw (minimum margin 1,070 ticks).
+
+Economy decomposition (model-only — the human player cannot take nation
+bonuses in-game; `NATION_ECONOMY` in `analytical_model.py`, optima logged
+in `verify_results.json`). Per-economy 1-tick optimal play vs observed bot:
+
+| Economy (start, max, regen) | Optimal-play crossing | Nation bot declared | Behavior gap |
+|---|---|---|---|
+| Easy (12,500, 0.5x, 0.9x) | 13,214 | 15,551 | ~2,337 |
+| Medium (18,750, 0.75x, 0.95x) | 9,729 | 11,461 | ~1,732 |
+| Hard (25,000, 1.0x, 1.0x) | 7,802 | 9,151 | ~1,349 |
+| Impossible (31,250, 1.25x, 1.05x) | 6,556 | 7,691 | ~1,135 |
+
+(Declared-vs-crossing win-check lag is <= 10 ticks; every gap dwarfs it.)
+Optimal threshold is stable at 0.35–0.39 across all four economies, and the
+human-economy policy transfers within 3–43 ticks — so the gaps are bot
+behavior, not economy. Impossible's sub-7,811 time is purely its economy:
+optimal play with those bonuses crosses at 6,556.
+
 ## The 5s variant: why ungated
 
 Same policy class with decisions every 50 ticks (`interval=50` in
@@ -100,7 +160,7 @@ Same policy class with decisions every 50 ticks (`interval=50` in
    actually-measured point.
 2. **The robust 5s policy gates nothing (threshold=0, send every cycle).**
    Model optimum at threshold=0 is ratio=0.12 -> 7,858; game measures
-   **7,859/7,861** (OF000005) — agreement to 1 tick. U-shaped in ratio
+   **7,859/7,861** (OF000006) — agreement to 1 tick. U-shaped in ratio
    (starvation below, reserve crash above), interior optimum, no gating
    misses possible.
 

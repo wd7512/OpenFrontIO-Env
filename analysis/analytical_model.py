@@ -47,15 +47,33 @@ BORDER_K = 3.845
 # ---------------------------------------------------------------------------
 # Exact engine equations
 # ---------------------------------------------------------------------------
-def max_troops(tiles: float) -> float:
-    """Config.maxTroops, human branch (no cities built in these runs)."""
-    return 2 * (tiles**0.6 * 1000 + 50000)
+# Nation economies (Config.ts startManpower / maxTroops / troopIncreaseRate,
+# Nation branch): (start_troops, max_mult, regen_mult). Human = Hard.
+NATION_ECONOMY = {
+    "easy": (12500.0, 0.5, 0.9),
+    "medium": (18750.0, 0.75, 0.95),
+    "hard": (25000.0, 1.0, 1.0),
+    "impossible": (31250.0, 1.25, 1.05),
+}
 
 
-def regen(troops: float, tiles: float) -> float:
-    """Config.troopIncreaseRate, human branch."""
-    cap = max_troops(tiles)
-    return (10 + troops**0.73 / 4) * (1 - troops / cap)
+def max_troops(tiles: float, max_mult: float = 1.0) -> float:
+    """Config.maxTroops (no cities built in these runs).
+
+    Human branch at max_mult=1.0; nation economies scale the cap
+    (0.5/0.75/1.0/1.25 for easy/medium/hard/impossible).
+    """
+    return 2 * (tiles**0.6 * 1000 + 50000) * max_mult
+
+
+def regen(
+    troops: float, tiles: float, max_mult: float = 1.0, regen_mult: float = 1.0
+) -> float:
+    """Config.troopIncreaseRate. regen_mult is the nation difficulty factor
+    (0.9/0.95/1.0/1.05); the cap inside the (1 - troops/cap) term already
+    carries max_mult, matching the engine order (cap first, then factor)."""
+    cap = max_troops(tiles, max_mult)
+    return (10 + troops**0.73 / 4) * (1 - troops / cap) * regen_mult
 
 
 def tile_budget_cost(attack_troops: float) -> float:
@@ -125,12 +143,20 @@ def conquest_tiles(attack_troops: float, tick_budget: float) -> tuple[int, float
 # Policy simulator: 1-tick (threshold, ratio) expansion, no units
 # ---------------------------------------------------------------------------
 def simulate(
-    threshold: float, ratio: float, max_ticks: int = 200000, interval: int = 1
+    threshold: float,
+    ratio: float,
+    max_ticks: int = 200000,
+    interval: int = 1,
+    max_mult: float = 1.0,
+    regen_mult: float = 1.0,
+    start_troops: float = SPAWN_TROOPS,
 ) -> dict[str, float]:
     """Run the mean-field model. Returns crossing tick of the 80% win line.
 
     ``interval`` is the decision cadence in ticks (1 = every tick,
     50 = every 5s); the attack itself still conquers every tick.
+    ``max_mult``/``regen_mult``/``start_troops`` select the economy
+    (defaults = human; see NATION_ECONOMY for nation values).
 
     The loop mirrors the game sweep exactly: the engine starts at tick 2
     with a fresh spawn, and ``sweep_single_entity.run_agent`` sends when
@@ -138,14 +164,14 @@ def simulate(
     first send decided at tick 2 for every cadence.
     """
     tiles = float(SPAWN_TILES)
-    troops = float(SPAWN_TROOPS)
+    troops = float(start_troops)
     attack = 0.0
     pending = 0.0  # ordered troops join the attack next tick (intent delay)
     target = WIN_SHARE * TOTAL_LAND
     for tick in range(FIRST_DECISION_TICK, max_ticks + 1):
         attack += pending
         pending = 0.0
-        cap = max_troops(tiles)
+        cap = max_troops(tiles, max_mult)
         if (tick - FIRST_DECISION_TICK) % interval == 0 and troops >= threshold * cap:
             send = min(troops, ratio * troops)
             troops -= send
@@ -154,7 +180,7 @@ def simulate(
         if attack < 1:
             attack = 0.0
         tiles += gained
-        troops += regen(troops, tiles)
+        troops += regen(troops, tiles, max_mult, regen_mult)
         if tiles > target:
             return {"crossing_tick": float(tick), "tiles": tiles, "troops": troops}
     return {"crossing_tick": float("inf"), "tiles": tiles, "troops": troops}
@@ -249,7 +275,11 @@ DEFAULT_STARTS = (
 
 
 def find_optimum(
-    interval: int = 1, starts: tuple[tuple[float, float], ...] | None = None
+    interval: int = 1,
+    starts: tuple[tuple[float, float], ...] | None = None,
+    max_mult: float = 1.0,
+    regen_mult: float = 1.0,
+    start_troops: float = SPAWN_TROOPS,
 ) -> dict[str, float]:
     """Global optimum of crossing_tick over (threshold, ratio) in the model."""
 
@@ -263,7 +293,17 @@ def find_optimum(
         )
         thc = min(0.95, max(0.0, th))
         rac = min(1.0, max(0.001, ra))
-        return simulate(thc, rac, interval=interval)["crossing_tick"] + 1e9 * penalty
+        return (
+            simulate(
+                thc,
+                rac,
+                interval=interval,
+                max_mult=max_mult,
+                regen_mult=regen_mult,
+                start_troops=start_troops,
+            )["crossing_tick"]
+            + 1e9 * penalty
+        )
 
     best = (0.0, 0.0, float("inf"))
     for start in DEFAULT_STARTS if starts is None else starts:
