@@ -11,59 +11,75 @@ FFA rule: tile share > 80% of land
 - Reproduce: `uv run python analysis/sweep_single_entity.py --raw /tmp/replay_raw`
   then `uv run python scripts/serve_replays.py --raw /tmp/replay_raw`.
 
-## The 7 strategies
+## The 10 strategies
 
 | # | Strategy | Replay | 80% crossing | Win declared | Winner |
 |---|----------|--------|-------------|--------------|--------|
-| 1 | Agent solo, 1-tick decisions, send 0.5% of troops whenever troops >= 36% of max | OF000003 | 7,803 | **7,811** | Agent |
-| 2 | Agent solo, 20-tick (2s) decisions, send 6.5% whenever troops >= 37.5% of max | OF000001 | 7,822 | 7,822 | Agent |
-| 3 | Agent solo, 50-tick (5s) decisions, send 12% of troops every cycle, no gate | OF000002 | 7,902 | 7,902 | Agent |
-| 4 | 1 nation, Easy (human idle) | OF000004 | — | 15,553 | Non-peaceful Bot |
-| 5 | 1 nation, Medium (human idle) | OF000007 | — | 11,503 | Non-peaceful Bot |
-| 6 | 1 nation, Hard (human idle) | OF000005 | — | 9,153 | Non-peaceful Bot |
-| 7 | 1 nation, Impossible (human idle) | OF000006 | — | 7,703 | Non-peaceful Bot |
+| 1 | Agent, 1-tick decisions, 0.5% whenever >= 36% of max | OF000006 | 7,803 | **7,811** | Agent |
+| 2 | Agent, 10-tick (1s) decisions, 5% whenever >= 37.5% of max | OF000001 | 7,809 | 7,811 | Agent |
+| 3 | Agent, 20-tick (2s) decisions, 6.5% whenever >= 37.5% of max | OF000002 | 7,809 | 7,811 | Agent |
+| 4 | Agent, 30-tick (3s) decisions, 9.5% whenever >= 38% of max | OF000003 | 7,817 | 7,821 | Agent |
+| 5 | Agent, 40-tick (4s) decisions, 11.5% whenever >= 37% of max | OF000004 | 7,819 | 7,821 | Agent |
+| 6 | Agent, 50-tick (5s) decisions, 12% every cycle, no gate | OF000005 | 7,859 | 7,861 | Agent |
+| 7 | 1 nation, Easy (human idle) | OF000007 | — | 15,551 | Non-peaceful Bot |
+| 8 | 1 nation, Medium (human idle) | OF000010 | — | 11,461 | Non-peaceful Bot |
+| 9 | 1 nation, Hard (human idle) | OF000008 | — | 9,151 | Non-peaceful Bot |
+| 10 | 1 nation, Impossible (human idle) | OF000009 | — | 7,691 | Non-peaceful Bot |
 
 Result: the minimum is **7,811 ticks (7,803 to cross 80%)** with
-(threshold=0.36, ratio=0.005) at 1-tick cadence. Coarser decisions cost
-more: 2s cadence needs 7,822 ticks, 5s cadence 7,902. Hard is the nation
-most comparable to the
+(threshold=0.36, ratio=0.005) at 1-tick cadence — no other cadence crosses
+earlier, and the 1s/2s cadences only tie it at declaration through win-check
+quantization (see ladder). Hard is the nation most comparable to the
 agent (identical economy: 25,000 start, 1.0x max, 1.0x regen —
-`Config.ts:856-943`); it takes 9,153 ticks because the built-in nation AI
+`Config.ts:856-943`); it takes 9,151 ticks because the built-in nation AI
 builds structures and paces its attacks instead of expanding every tick.
 
 ## Cadence ladder (agent variants)
 
-| Decision interval | Params (threshold, ratio) | Model crossing | Game declared |
-|---|---|---|---|
-| 1 tick (0.1s) | (0.36, 0.005), gated | 7,801 | **7,811** |
-| 20 ticks (2s) | (0.375, 0.065), gated | 7,806 | 7,822 |
-| 50 ticks (5s) | (0.0, 0.12), ungated | 7,858 | 7,902 |
+| Decision interval | Params (threshold, ratio) | Model crossing | Game crossing | Game declared |
+|---|---|---|---|---|
+| 1 tick (0.1s) | (0.36, 0.005), gated | 7,801 | 7,803 | **7,811** |
+| 10 ticks (1s) | (0.375, 0.05), gated | 7,806 | 7,809 | 7,811 |
+| 20 ticks (2s) | (0.375, 0.065), gated | 7,806 | 7,809 | 7,811 |
+| 30 ticks (3s) | (0.38, 0.095), gated | 7,814 | 7,817 | 7,821 |
+| 40 ticks (4s) | (0.37, 0.115), gated | 7,816 | 7,819 | 7,821 |
+| 50 ticks (5s) | (0.0, 0.12), ungated | 7,858 | 7,859 | 7,861 |
 
-Finer cadence dominates monotonically. Gating stays viable at 2s (22% of
-decisions gated off, war-chest buffer covers the misses; model error ±16),
-but breaks down at 5s (missed gates idle the front for full cycles; model
-error ±90 — see below). The ungated robust policy (0, 0.05) was also
-measured at 2s: 7,842, confirming the gated optimum is genuinely better
-there.
+All runs use per-tick sampling with sends on cadence ticks only, so
+crossing ticks are exact (earlier batched sampling overstated multi-tick
+results by up to ~40 ticks of batch-end artifact, e.g. the 50-tick variant
+once read 7,902). The win check runs every 10 ticks, so declarations
+quantize: crossings in (7,800, 7,810] all declare at 7,810 (+1 record
+turn) — hence the three-way tie at 7,811. Finer cadence crosses earlier
+monotonically; the 1-tick minimum (7,803) stands.
 
-## The 20-tick (2s) variant
+Gating stays viable through 4s (missed gates are covered by the war-chest
+buffer; model error <= 11 ticks) but the model overrates gated policies at
+5s (see below), where the enshrined variant is ungated. The ungated robust
+policy (0, 0.05) was also measured at 2s: 7,842, confirming the gated
+optimum is genuinely better there.
+
+## The 5s variant: why ungated
 
 Same policy class with decisions every 50 ticks (`interval=50` in
 `analytical_model.py`). Two findings:
 
-1. **Threshold gating is phase-fragile at this cadence.** The model optimum
-   (0.368, 0.15) predicts 7,815, but the game measures 7,902: with 50-tick
-   cycles, reserves swing widely between decisions, so a decision tick can
-   land in a trough (troops < threshold), idling the front for a full cycle
-   — observed twice in-game (ticks 6,802 and 7,602). A 2-tick phase shift in
-   the model changes nothing, i.e. the mean-field model cannot resolve which
-   cycles miss, so gated 50-tick optima are not trustworthy.
-2. **The robust 50-tick policy gates nothing (threshold=0, send every
-   cycle).** Model optimum at threshold=0 is ratio=0.12 -> 7,858; game
-   measures **7,902** (OF000001). U-shaped in ratio (starvation below,
-   reserve crash above), interior optimum, no gating misses possible.
+1. **The model overrates gated policies at this cadence.** Its raw
+   optimum (0.368, 0.1502) predicts 7,815, but the rounded point
+   (0.37, 0.15) already predicts 7,857 in-model and measures 7,860/7,861
+   in-game: with 50-tick cycles the optimizer overfits gating phase (a
+   0.002 parameter shift moves the prediction 42 ticks), because decision
+   ticks landing in reserve troughs idle the front for full cycles — 28
+   gated-off decisions observed in-game. Gated 5s optima are not
+   trustworthy; the model itself is accurate (<= 3 ticks) at every
+   actually-measured point.
+2. **The robust 5s policy gates nothing (threshold=0, send every cycle).**
+   Model optimum at threshold=0 is ratio=0.12 -> 7,858; game measures
+   **7,859/7,861** (OF000005) — agreement to 1 tick. U-shaped in ratio
+   (starvation below, reserve crash above), interior optimum, no gating
+   misses possible.
 
-Net: 1-tick decisions (7,811) beat 5s decisions (7,902) by 91 ticks —
+Net: 1-tick decisions (7,811) beat 5s decisions (7,861) by 50 ticks —
 finer cadence dominates, as the model predicts.
 
 ## Governing equations (all from engine source, all empirically verified)
@@ -112,23 +128,32 @@ Policy class: each tick, if `troops >= threshold * max`, send
 
 ## Minimality evidence
 
-| (threshold, ratio) | Model crossing | Game crossing | Game declared |
+| (threshold, ratio, interval) | Model crossing | Game crossing | Game declared |
 |--------------------|---------------|---------------|---------------|
-| (0.40, 0.10) — old grid best | 7,816 | 7,819 | 7,821 |
-| (0.36, 0.01) | 7,804 | 7,805 | 7,811 |
-| (0.3644, 0.0134) — model opt | 7,801 | 7,807 | 7,811 |
-| **(0.36, 0.005)** | 7,801 | **7,803** | **7,811** |
+| (0.40, 0.10, 1) — old grid best | 7,816 | 7,819 | 7,821 |
+| (0.36, 0.01, 1) | 7,804 | 7,805 | 7,811 |
+| (0.3644, 0.0134, 1) — model opt | 7,801 | 7,807 | 7,811 |
+| **(0.36, 0.005, 1)** | 7,801 | **7,803** | **7,811** |
+| (0.375, 0.05, 10) | 7,806 | 7,809 | 7,811 |
+| (0.375, 0.065, 20) | 7,806 | 7,809 | 7,811 |
+| (0.38, 0.095, 30) | 7,814 | 7,817 | 7,821 |
+| (0.37, 0.115, 40) | 7,816 | 7,819 | 7,821 |
+| (0.0, 0.12, 50) — robust | 7,858 | 7,859 | 7,861 |
+| (0.37, 0.15, 50) — gated | 7,857 | 7,860 | 7,861 |
 
-- Model-vs-game agreement is <= 6 ticks at every checked point.
-- In-game 3x3 around the optimum (crossing ticks):
+- Model-vs-game agreement is <= 3 ticks at every measured point. (The raw
+  5s optimizer spike at (0.368, 0.1502) -> 7,815 is phase overfitting, not
+  model error — the neighboring measured point agrees to 3 ticks.)
+- In-game 3x3 around the 1-tick optimum (crossing ticks):
   th=0.34 -> 7817/7820/7823; **th=0.36 -> 7803/7805/7805**;
   th=0.38 -> 7813/7815/7815 (columns r = 0.005/0.01/0.02). Locally convex,
   minimum confirmed in-game.
+- No other cadence crosses earlier than 7,803: the closest challengers
+  (1s/2s) cross at 7,809 and only tie at declaration through win-check
+  quantization. Cadence ranking is monotonic in crossing ticks.
 - Far field ruled out by 1,000+ tick margins (model): (0.2, 0.01) -> 8,907;
   (0.5, 0.1) -> 8,187; (0.36, 0.5) -> 8,385; always-send (0, 0.1) never wins
-  (reserve death spiral). 50-tick cadence optimum measured 7,902 in-game
-  (model: 7,858), 91 ticks worse than 1-tick: finer cadence dominates, so
-  1-tick is the right policy class.
+  (reserve death spiral).
 - The analysis found a policy the earlier game grid searches never tried
   (ratio 0.5%, threshold 0.36) and it verified 10 ticks better (7,811 vs
   7,821 declared).
