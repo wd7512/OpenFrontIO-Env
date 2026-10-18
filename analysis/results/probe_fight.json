@@ -1,0 +1,221 @@
+{
+ "created": "2026-10-18T16:32:41.931192+00:00",
+ "episodes": [
+  {
+   "seed": "BOX-PROBE-A",
+   "policy": "expand",
+   "winner": "Box Fighter",
+   "agent_won": false,
+   "ticks": 11547,
+   "orders": 0,
+   "total_reward": -4274.4
+  },
+  {
+   "seed": "BOX-PROBE-A",
+   "policy": "raid",
+   "winner": "Evan The Dev",
+   "agent_won": true,
+   "ticks": 9363,
+   "orders": 180,
+   "total_reward": 8383.3
+  },
+  {
+   "seed": "BOX-PROBE-A",
+   "policy": "commit",
+   "winner": "Box Fighter",
+   "agent_won": false,
+   "ticks": 9935,
+   "orders": 191,
+   "total_reward": -5000.1
+  },
+  {
+   "seed": "BOX-PROBE-A",
+   "policy": "cycle",
+   "winner": "Evan The Dev",
+   "agent_won": true,
+   "ticks": 8479,
+   "orders": 81,
+   "total_reward": 8390.1
+  },
+  {
+   "seed": "BOX-PROBE-B",
+   "policy": "expand",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 102027,
+   "orders": 0,
+   "total_reward": 7722.7
+  },
+  {
+   "seed": "BOX-PROBE-B",
+   "policy": "raid",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 8479,
+   "orders": 163,
+   "total_reward": 8407.2
+  },
+  {
+   "seed": "BOX-PROBE-B",
+   "policy": "commit",
+   "winner": "Fullsender",
+   "agent_won": false,
+   "ticks": 11755,
+   "orders": 226,
+   "total_reward": -4408.0
+  },
+  {
+   "seed": "BOX-PROBE-B",
+   "policy": "cycle",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 7595,
+   "orders": 73,
+   "total_reward": 8392.1
+  },
+  {
+   "seed": "BOX-PROBE-C",
+   "policy": "expand",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 102027,
+   "orders": 0,
+   "total_reward": 7862.0
+  },
+  {
+   "seed": "BOX-PROBE-C",
+   "policy": "raid",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 9051,
+   "orders": 174,
+   "total_reward": 8385.4
+  },
+  {
+   "seed": "BOX-PROBE-C",
+   "policy": "commit",
+   "winner": "King of the Corner",
+   "agent_won": false,
+   "ticks": 14511,
+   "orders": 279,
+   "total_reward": -4304.6
+  },
+  {
+   "seed": "BOX-PROBE-C",
+   "policy": "cycle",
+   "winner": "Non-peaceful Bot",
+   "agent_won": true,
+   "ticks": 8115,
+   "orders": 78,
+   "total_reward": 8397.9
+  },
+  {
+   "seed": "BOX-PROBE-D",
+   "policy": "expand",
+   "winner": "Cage Liberator",
+   "agent_won": false,
+   "ticks": 10299,
+   "orders": 0,
+   "total_reward": -4316.0
+  },
+  {
+   "seed": "BOX-PROBE-D",
+   "policy": "raid",
+   "winner": "Punch Merchant",
+   "agent_won": true,
+   "ticks": 9207,
+   "orders": 177,
+   "total_reward": 8366.2
+  },
+  {
+   "seed": "BOX-PROBE-D",
+   "policy": "commit",
+   "winner": "Cage Liberator",
+   "agent_won": false,
+   "ticks": 9571,
+   "orders": 184,
+   "total_reward": -4410.5
+  },
+  {
+   "seed": "BOX-PROBE-D",
+   "policy": "cycle",
+   "winner": "Punch Merchant",
+   "agent_won": true,
+   "ticks": 8375,
+   "orders": 80,
+   "total_reward": 8364.5
+  },
+  {
+   "seed": "BOX-PROBE-E",
+   "policy": "expand",
+   "winner": "Non-peaceful Bot",
+   "agent_won": false,
+   "ticks": 47427,
+   "orders": 0,
+   "total_reward": -4322.3
+  },
+  {
+   "seed": "BOX-PROBE-E",
+   "policy": "raid",
+   "winner": "King of the Corner",
+   "agent_won": true,
+   "ticks": 9051,
+   "orders": 174,
+   "total_reward": 8385.9
+  },
+  {
+   "seed": "BOX-PROBE-E",
+   "policy": "commit",
+   "winner": "Non-peaceful Bot",
+   "agent_won": false,
+   "ticks": 10351,
+   "orders": 199,
+   "total_reward": -5000.1
+  },
+  {
+   "seed": "BOX-PROBE-E",
+   "policy": "cycle",
+   "winner": "King of the Corner",
+   "agent_won": true,
+   "ticks": 8167,
+   "orders": 78,
+   "total_reward": 8405.0
+  },
+  {
+   "seed": "BOX-PROBE-F",
+   "policy": "expand",
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 10715,
+   "orders": 0,
+   "total_reward": -4197.0
+  },
+  {
+   "seed": "BOX-PROBE-F",
+   "policy": "raid",
+   "winner": "Punch Merchant",
+   "agent_won": true,
+   "ticks": 9363,
+   "orders": 180,
+   "total_reward": 8392.3
+  },
+  {
+   "seed": "BOX-PROBE-F",
+   "policy": "commit",
+   "winner": "Front Manager",
+   "agent_won": false,
+   "ticks": 11079,
+   "orders": 213,
+   "total_reward": -4705.2
+  },
+  {
+   "seed": "BOX-PROBE-F",
+   "policy": "cycle",
+   "winner": "Punch Merchant",
+   "agent_won": true,
+   "ticks": 8531,
+   "orders": 82,
+   "total_reward": 8377.0
+  }
+ ]
+}
